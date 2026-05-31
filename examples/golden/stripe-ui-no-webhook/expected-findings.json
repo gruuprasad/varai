@@ -4,12 +4,14 @@
     {
       "requirementId": "R1",
       "status": "partial",
-      "evidenceIncludes": ["component:CheckoutButton", "code_hint:payment"]
+      "evidenceIncludes": ["component:CheckoutButton", "code_hint:payment"],
+      "missingLinksIncludes": ["stripe_integration"]
     },
     {
       "requirementId": "R2",
       "status": "partial",
-      "evidenceIncludes": ["component:CheckoutButton", "code_hint:payment"]
+      "evidenceIncludes": ["component:CheckoutButton", "code_hint:payment"],
+      "missingLinksIncludes": ["webhook_handler"]
     }
   ]
 }

@@ -110,11 +110,21 @@ async function fileShapeFacts(repoPath, files) {
     }
 
     if (isNextApiRoute(file)) {
+      const routeName = routeNameFor(file);
+
       facts.push({
         kind: "api_route",
-        name: routeNameFor(file),
+        name: routeName,
         evidence: [{ file }]
       });
+
+      if (/webhook/i.test(routeName) || /webhook/i.test(file)) {
+        facts.push({
+          kind: "webhook_route",
+          name: routeName,
+          evidence: [{ file }]
+        });
+      }
     }
 
     if (file.startsWith("components/") || file.includes("/components/")) {
@@ -168,11 +178,15 @@ async function prismaFacts(repoPath, files) {
   const contents = await readFile(path.join(repoPath, schemaFile), "utf8");
   const models = [...contents.matchAll(/^model\s+([A-Za-z0-9_]+)\s+\{/gm)];
 
-  return models.map((match) => ({
-    kind: "db_model",
-    name: match[1],
-    evidence: [{ file: schemaFile }]
-  }));
+  return models.map((match) => {
+    const name = match[1];
+
+    return {
+      kind: "db_model",
+      name,
+      evidence: [{ file: schemaFile }]
+    };
+  });
 }
 
 async function envFacts(repoPath, files) {

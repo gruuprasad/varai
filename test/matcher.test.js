@@ -21,7 +21,7 @@ test("matchIntentToScan stays unverified when no evidence exists", () => {
   assert.equal(findings[0].evidence.length, 0);
 });
 
-test("matchIntentToScan marks related evidence as partial", () => {
+test("matchIntentToScan marks related evidence as partial with missing links", () => {
   const findings = matchIntentToScan(
     {
       requirements: [
@@ -45,6 +45,71 @@ test("matchIntentToScan marks related evidence as partial", () => {
 
   assert.equal(findings[0].status, "partial");
   assert.equal(findings[0].evidence[0].name, "NotificationBell");
+  assert.ok(findings[0].missingLinks.some((link) => link.id === "notification_persistence"));
+});
+
+test("matchIntentToScan marks webhook requirements partial when handler is missing", () => {
+  const findings = matchIntentToScan(
+    {
+      requirements: [
+        {
+          id: "R1",
+          text: "A successful subscription should only activate after a Stripe webhook confirms payment.",
+          keywords: ["successful", "subscription", "stripe", "webhook", "payment"]
+        }
+      ]
+    },
+    {
+      facts: [
+        {
+          kind: "component",
+          name: "CheckoutButton",
+          evidence: [{ file: "components/CheckoutButton.tsx" }]
+        },
+        {
+          kind: "package",
+          name: "stripe",
+          tags: ["payment"],
+          evidence: [{ file: "package.json" }]
+        }
+      ]
+    }
+  );
+
+  assert.equal(findings[0].status, "partial");
+  assert.ok(findings[0].missingLinks.some((link) => link.id === "webhook_handler"));
+});
+
+test("matchIntentToScan marks complete payment loop as satisfied", () => {
+  const findings = matchIntentToScan(
+    {
+      requirements: [
+        {
+          id: "R1",
+          text: "Add Stripe billing for paid workspaces.",
+          keywords: ["add", "stripe", "billing", "paid", "workspaces"]
+        }
+      ]
+    },
+    {
+      facts: [
+        {
+          kind: "component",
+          name: "CheckoutButton",
+          evidence: [{ file: "components/CheckoutButton.tsx" }]
+        },
+        {
+          kind: "package",
+          name: "stripe",
+          tags: ["payment"],
+          evidence: [{ file: "package.json" }]
+        }
+      ]
+    }
+  );
+
+  assert.equal(findings[0].status, "satisfied");
+  assert.equal(findings[0].missingLinks.length, 0);
 });
 
 test("matchIntentToScan requires capability evidence for capability-specific requirements", () => {

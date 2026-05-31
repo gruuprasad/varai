@@ -29,6 +29,14 @@ export function renderMarkdownReport({ generatedAt, repoPath, intentPath, intent
     lines.push(finding.summary);
     lines.push("");
 
+    if (finding.missingLinks?.length > 0) {
+      lines.push("Missing links:");
+      for (const link of finding.missingLinks) {
+        lines.push(`- ${link.label}`);
+      }
+      lines.push("");
+    }
+
     if (finding.evidence.length > 0) {
       lines.push("Evidence:");
       for (const fact of finding.evidence) {
@@ -65,7 +73,7 @@ export function renderMarkdownReport({ generatedAt, repoPath, intentPath, intent
   lines.push("");
   lines.push("## Notes");
   lines.push("");
-  lines.push("- Varai v0 is conservative: related evidence is marked partial, not satisfied.");
+  lines.push("- Varai marks requirements partial when related evidence exists but required capability links are missing.");
   lines.push("- A future LLM matcher should only use extracted evidence and should say unverifiable when evidence is weak.");
 
   return `${lines.join("\n")}\n`;
