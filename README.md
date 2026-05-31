@@ -21,6 +21,13 @@ The package is not published yet. Run it from the repo:
 
 ```bash
 node ./bin/varai.js audit --intent ./examples/golden/todo-partial/intent.md --repo ./examples/golden/todo-partial/app --out ./.varai/report.md
+node ./bin/varai.js audit --intent ./examples/golden/todo-partial/intent-messy.md --repo ./examples/golden/todo-partial/app
+```
+
+Paste intent at audit time:
+
+```bash
+cat ./brief.md | node ./bin/varai.js audit --intent - --repo .
 ```
 
 When published, the intended shape is:

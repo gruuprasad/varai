@@ -9,11 +9,12 @@ function usage() {
   return `Varai
 
 Usage:
-  varai audit --intent <file> [--repo <dir>] [--out <file>]
+  varai audit --intent <file|-> [--repo <dir>] [--out <file>]
   varai help
 
 Examples:
   varai audit --intent ./intent.md
+  varai audit --intent - --repo .
   varai audit --repo ./my-app --intent ./brief.md --out ./varai-report.md
 `;
 }

@@ -122,13 +122,13 @@ export const CAPABILITIES = [
   },
   {
     name: "notifications",
-    terms: ["notification", "notifications", "notify", "inbox", "bell"],
+    terms: ["notif", "inbox", "bell"],
     resolveProfile(text) {
       const lower = text.toLowerCase();
-      if (/mark.*read|read notification/.test(lower)) {
+      if (/mark.*read|read notif/.test(lower)) {
         return { name: "mark_read", required: ["notification_ui", "notification_persistence", "notification_api"] };
       }
-      if (/notification|notify|bell|inbox/.test(lower)) {
+      if (/notif|bell|inbox/.test(lower)) {
         return { name: "receive_notifications", required: ["notification_ui", "notification_persistence"] };
       }
       return null;
@@ -139,10 +139,10 @@ export const CAPABILITIES = [
     terms: ["auth", "login", "logout", "signup", "sign-in", "sign-up", "session"],
     resolveProfile(text) {
       const lower = text.toLowerCase();
-      if (/sign up|signup|log in|login|auth/.test(lower) && /task/.test(lower)) {
+      if (/sign\s*up|signup|log\s*in|login|auth/.test(lower) && /task/.test(lower)) {
         return { name: "auth_and_tasks", required: ["auth_ui", "auth_integration", "task_surface"] };
       }
-      if (/sign up|signup|log in|login|auth/.test(lower)) {
+      if (/sign\s*up|signup|log\s*in|login|auth/.test(lower)) {
         return { name: "auth", required: ["auth_ui", "auth_integration"] };
       }
       return null;
@@ -182,6 +182,8 @@ CHECKS.admin_api = {
 };
 
 export function evaluateCapabilityRequirement(requirement, facts) {
+  const candidates = [];
+
   for (const capability of CAPABILITIES) {
     const lower = requirement.text.toLowerCase();
     if (!capability.terms.some((term) => lower.includes(term))) {
@@ -193,62 +195,99 @@ export function evaluateCapabilityRequirement(requirement, facts) {
       continue;
     }
 
-    const matchedChecks = [];
-    const missingLinks = [];
-    const evidence = [];
+    candidates.push({
+      capability,
+      profile,
+      score: scoreCapabilityMatch(capability, profile, requirement.text)
+    });
+  }
 
-    for (const checkId of profile.required) {
-      const check = CHECKS[checkId];
-      const matchingFacts = facts.filter((fact) => check.match(fact));
+  if (candidates.length === 0) {
+    return null;
+  }
 
-      if (matchingFacts.length > 0) {
-        matchedChecks.push(checkId);
-        evidence.push(...matchingFacts);
-      } else {
-        missingLinks.push({ id: checkId, label: check.label });
-      }
+  candidates.sort((left, right) => right.score - left.score);
+  const { capability, profile } = candidates[0];
+
+  const matchedChecks = [];
+  const missingLinks = [];
+  const evidence = [];
+
+  for (const checkId of profile.required) {
+    const check = CHECKS[checkId];
+    const matchingFacts = facts.filter((fact) => check.match(fact));
+
+    if (matchingFacts.length > 0) {
+      matchedChecks.push(checkId);
+      evidence.push(...matchingFacts);
+    } else {
+      missingLinks.push({ id: checkId, label: check.label });
     }
+  }
 
-    if (matchedChecks.length === 0) {
-      return {
-        requirementId: requirement.id,
-        status: "unverified",
-        summary: "No direct local evidence found for this requirement.",
-        evidence: [],
-        missingLinks: profile.required.map((checkId) => ({
-          id: checkId,
-          label: CHECKS[checkId].label
-        })),
-        hintedCapabilities: [capability.name],
-        profile: profile.name
-      };
-    }
-
-    if (missingLinks.length > 0) {
-      const missingLabels = missingLinks.map((link) => link.label).join(", ");
-      return {
-        requirementId: requirement.id,
-        status: "partial",
-        summary: `Related evidence exists, but these links are missing: ${missingLabels}.`,
-        evidence: uniqueFacts(evidence).slice(0, 8),
-        missingLinks,
-        hintedCapabilities: [capability.name],
-        profile: profile.name
-      };
-    }
-
+  if (matchedChecks.length === 0) {
     return {
       requirementId: requirement.id,
-      status: "satisfied",
-      summary: "Required capability links are evidenced locally.",
-      evidence: uniqueFacts(evidence).slice(0, 8),
-      missingLinks: [],
+      status: "unverified",
+      summary: "No direct local evidence found for this requirement.",
+      evidence: [],
+      missingLinks: profile.required.map((checkId) => ({
+        id: checkId,
+        label: CHECKS[checkId].label
+      })),
       hintedCapabilities: [capability.name],
       profile: profile.name
     };
   }
 
-  return null;
+  if (missingLinks.length > 0) {
+    const missingLabels = missingLinks.map((link) => link.label).join(", ");
+    return {
+      requirementId: requirement.id,
+      status: "partial",
+      summary: `Related evidence exists, but these links are missing: ${missingLabels}.`,
+      evidence: uniqueFacts(evidence).slice(0, 8),
+      missingLinks,
+      hintedCapabilities: [capability.name],
+      profile: profile.name
+    };
+  }
+
+  return {
+    requirementId: requirement.id,
+    status: "satisfied",
+    summary: "Required capability links are evidenced locally.",
+    evidence: uniqueFacts(evidence).slice(0, 8),
+    missingLinks: [],
+    hintedCapabilities: [capability.name],
+    profile: profile.name
+  };
+}
+
+function scoreCapabilityMatch(capability, profile, text) {
+  const lower = text.toLowerCase();
+  let score = 0;
+
+  for (const term of capability.terms) {
+    if (lower.includes(term)) {
+      score += Math.min(term.length, 12);
+    }
+  }
+
+  if (profile.name === "webhook_confirmation") score += 12;
+  if (profile.name === "mark_read") score += 12;
+  if (profile.name === "admin_access") score += 8;
+  if (profile.name === "auth_and_tasks") score += 4;
+
+  if (capability.name === "admin" && /admin/.test(lower) && /approve/.test(lower)) {
+    score += 20;
+  }
+
+  if (capability.name === "authentication" && /admin|approve|permission|rbac/.test(lower)) {
+    score -= 15;
+  }
+
+  return score;
 }
 
 function uniqueFacts(facts) {

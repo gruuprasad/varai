@@ -138,3 +138,10 @@ Varai began as a broader idea: a **structural lens** that renders AI-built softw
 ADR 0001 narrowed that to a buildable wedge: a local, evidence-backed intent-coverage report. Varai v1 is the verification loop of the original vision without the domain lens.
 
 The lens remains the long-term destination. Intent coverage with deterministic check packs is the vehicle that ships today and stays honest without an LLM. Anything that moves Varai toward domain-shaped legibility is in-direction; anything that asks the tool to invent confidence is out.
+
+## 12. Planned Work
+
+- ~~Matcher hardening: conservative keyword fallback (#2), capability collision scoring (#3)~~ **done**
+- ~~Semantic intent extraction Tier A~~ **done** — see [plan-intent-extraction.md](plan-intent-extraction.md)
+- Stdin intent (`--intent -`) — **done**
+- Optional LLM intent extraction Tier B — not started
