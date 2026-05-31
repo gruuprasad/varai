@@ -1,0 +1,5 @@
+node_modules/
+.varai/
+.DS_Store
+dist/
+coverage/
