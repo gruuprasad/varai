@@ -53,7 +53,7 @@ This is a seed repo. The current CLI performs a dependency-free scan for common 
 
 It intentionally marks related evidence as `partial` when required capability links are missing, and `satisfied` when the full loop is evidenced. The next step is an evidence-constrained LLM matcher that can compare intent against extracted facts without inventing confidence.
 
-See [docs/sample-report.md](docs/sample-report.md) for the current output shape.
+See [docs/spec.md](docs/spec.md) for what Varai does and does not do, and [docs/sample-report.md](docs/sample-report.md) for the current output shape.
 
 Development is example-driven. See [docs/development.md](docs/development.md) for the workflow and definition of done.
 

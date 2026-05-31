@@ -1,5 +1,7 @@
 # Architecture
 
+For the canonical scope and contract, see [spec.md](spec.md). This document describes the pipeline shape.
+
 Varai should be built as a small local pipeline.
 
 ```text
@@ -52,17 +54,14 @@ Future scanners:
 
 ### Evidence-Constrained Matcher
 
-Compares requirements to extracted facts.
+Compares requirements to extracted facts in two layers (see spec section 6):
 
-The matcher may use an LLM, but it should only use the provided evidence. When the evidence is weak, it must return `unverified`, not invent certainty.
+1. Capability profiles — for known failure modes, check that all required evidence links are present. Names the missing links when they are not.
+2. Keyword fallback — conservative overlap for everything else; never emits `satisfied`.
 
-Statuses:
+A later LLM layer is allowed only on top of this deterministic path, and only using provided evidence. When evidence is weak, the matcher must return `unverified`, not invent certainty.
 
-- `satisfied`
-- `partial`
-- `missing`
-- `extra`
-- `unverified`
+Statuses emitted today: `satisfied`, `partial`, `unverified`. Reserved for later: `missing`, `extra`.
 
 ### Reporters
 
