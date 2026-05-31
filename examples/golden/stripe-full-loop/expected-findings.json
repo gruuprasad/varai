@@ -1,0 +1,15 @@
+{
+  "scenario": "stripe-full-loop",
+  "findings": [
+    {
+      "requirementId": "R1",
+      "status": "satisfied",
+      "evidenceIncludes": ["component:CheckoutButton", "package:stripe"]
+    },
+    {
+      "requirementId": "R2",
+      "status": "satisfied",
+      "evidenceIncludes": ["webhook_route:/api/stripe/webhook", "component:CheckoutButton"]
+    }
+  ]
+}

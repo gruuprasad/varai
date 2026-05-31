@@ -45,6 +45,13 @@ test("golden scenarios produce expected findings", async (t) => {
             `${scenarioName} ${expectedFinding.requirementId} missing evidence ${evidenceKey}`
           );
         }
+
+        for (const missingLinkId of expectedFinding.missingLinksIncludes ?? []) {
+          assert.ok(
+            actual.missingLinks?.some((link) => link.id === missingLinkId),
+            `${scenarioName} ${expectedFinding.requirementId} missing link ${missingLinkId}`
+          );
+        }
       }
     });
   }

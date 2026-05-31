@@ -43,14 +43,15 @@ npx varai audit --intent ./intent.md --repo .
 Varai is developed against tiny audit scenarios under `examples/golden/`:
 
 - `todo-partial`: task/auth evidence exists, but notifications, admin approval, and Stripe are unverified
-- `stripe-ui-no-webhook`: payment UI exists, but backend payment completion is not proved
-- `notifications-ui-no-backend`: notification UI exists, but persistence/delivery is not proved
+- `stripe-ui-no-webhook`: payment UI exists, but Stripe integration and webhook handler are missing
+- `stripe-full-loop`: checkout UI, Stripe package, checkout API, and webhook handler are all evidenced
+- `notifications-ui-no-backend`: notification UI exists, but persistence and API routes are missing
 
 ## Current Status
 
 This is a seed repo. The current CLI performs a dependency-free scan for common Next.js app surfaces: pages, API routes, packages, Prisma models, Supabase migrations, env vars, and simple code hints.
 
-It intentionally marks related evidence as `partial`, not `satisfied`. The next step is an evidence-constrained matcher that can compare intent against extracted facts without inventing confidence.
+It intentionally marks related evidence as `partial` when required capability links are missing, and `satisfied` when the full loop is evidenced. The next step is an evidence-constrained LLM matcher that can compare intent against extracted facts without inventing confidence.
 
 See [docs/sample-report.md](docs/sample-report.md) for the current output shape.
 

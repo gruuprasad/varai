@@ -1,29 +1,4 @@
-const CAPABILITY_HINTS = [
-  {
-    name: "authentication",
-    terms: ["auth", "login", "logout", "signup", "sign-in", "clerk", "supabase", "next-auth"]
-  },
-  {
-    name: "payments",
-    terms: ["stripe", "checkout", "payment", "billing", "subscription", "invoice", "webhook"]
-  },
-  {
-    name: "email",
-    terms: ["email", "mail", "resend", "postmark", "sendgrid", "nodemailer"]
-  },
-  {
-    name: "notifications",
-    terms: ["notification", "notifications", "notify", "inbox", "bell"]
-  },
-  {
-    name: "admin",
-    terms: ["admin", "role", "roles", "permission", "permissions", "rbac"]
-  },
-  {
-    name: "uploads",
-    terms: ["upload", "uploads", "file", "files", "storage", "s3", "bucket"]
-  }
-];
+import { evaluateCapabilityRequirement } from "./capabilities.js";
 
 export function matchIntentToScan(intent, scan) {
   const searchableFacts = scan.facts.map((fact) => ({
@@ -41,42 +16,39 @@ export function matchIntentToScan(intent, scan) {
   }));
 
   return intent.requirements.map((requirement) => {
-    const keywordVariants = expandKeywords(requirement.keywords);
-    const broadMatches = searchableFacts
-      .filter(({ text }) => keywordVariants.some((keyword) => text.includes(keyword)))
-      .slice(0, 8)
-      .map(({ fact }) => fact);
-
-    const hintedCapabilityConfigs = CAPABILITY_HINTS
-      .filter((hint) => hint.terms.some((term) => requirement.text.toLowerCase().includes(term)));
-    const hintedCapabilities = hintedCapabilityConfigs.map((hint) => hint.name);
-    const capabilityTerms = hintedCapabilityConfigs.flatMap((hint) => hint.terms);
-    const capabilityMatches = searchableFacts
-      .filter(({ text }) => capabilityTerms.some((term) => text.includes(term)))
-      .map(({ fact }) => fact);
-
-    const hasMatchingEvidence = hintedCapabilities.length > 0
-      ? capabilityMatches.length > 0
-      : broadMatches.length > 0;
-
-    if (!hasMatchingEvidence) {
-      return {
-        requirementId: requirement.id,
-        status: "unverified",
-        summary: "No direct local evidence found for this requirement.",
-        evidence: [],
-        hintedCapabilities
-      };
+    const capabilityFinding = evaluateCapabilityRequirement(requirement, scan.facts);
+    if (capabilityFinding) {
+      return capabilityFinding;
     }
 
+    return matchByKeywords(requirement, searchableFacts);
+  });
+}
+
+function matchByKeywords(requirement, searchableFacts) {
+  const keywordVariants = expandKeywords(requirement.keywords);
+  const broadMatches = searchableFacts
+    .filter(({ text }) => keywordVariants.some((keyword) => text.includes(keyword)))
+    .slice(0, 8)
+    .map(({ fact }) => fact);
+
+  if (broadMatches.length === 0) {
     return {
       requirementId: requirement.id,
-      status: "partial",
-      summary: "Some related evidence exists, but Varai v0 cannot yet prove full implementation.",
-      evidence: uniqueFacts([...capabilityMatches, ...broadMatches]).slice(0, 8),
-      hintedCapabilities
+      status: "unverified",
+      summary: "No direct local evidence found for this requirement.",
+      evidence: [],
+      missingLinks: []
     };
-  });
+  }
+
+  return {
+    requirementId: requirement.id,
+    status: "partial",
+    summary: "Some related evidence exists, but Varai cannot yet prove full implementation.",
+    evidence: uniqueFacts(broadMatches).slice(0, 8),
+    missingLinks: []
+  };
 }
 
 function expandKeywords(keywords) {
