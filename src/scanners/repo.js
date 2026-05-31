@@ -212,7 +212,7 @@ async function maybeAddTextHints(repoPath, files, facts) {
     { tag: "auth", pattern: /\b(auth|login|logout|signup|session|clerk|next-auth)\b/i },
     { tag: "payment", pattern: /\b(stripe|checkout|subscription|billing|webhook)\b/i },
     { tag: "email", pattern: /\b(resend|postmark|sendgrid|nodemailer|sendMail)\b/i },
-    { tag: "notification", pattern: /\b(notification|notify|bell|inbox)\b/i },
+    { tag: "notification", pattern: /notifications?|notify|bell|inbox/i },
     { tag: "permission", pattern: /\b(admin|role|permission|rbac)\b/i }
   ];
 

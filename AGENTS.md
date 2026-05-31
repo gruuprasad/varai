@@ -2,11 +2,11 @@
 
 ## Project Structure & Module Organization
 
-Varai is a dependency-free Node CLI. `bin/varai.js` parses commands and delegates to `src/index.js`. Core pipeline modules live under `src/`: `intent.js` extracts rough requirements, `scanners/repo.js` gathers local evidence, `matcher.js` compares requirements to evidence conservatively, and `reporters/markdown.js` renders the report. Product direction and architectural decisions live in `docs/`; `examples/intent.md` is the smoke-test input.
+Varai is a dependency-free Node CLI. `bin/varai.js` parses commands and delegates to `src/index.js`. Core pipeline modules live under `src/`: `intent.js` extracts rough requirements, `scanners/repo.js` gathers local evidence, `matcher.js` compares requirements to evidence conservatively, and `reporters/markdown.js` renders the report. Product direction and architectural decisions live in `docs/`; golden audit scenarios live under `examples/golden/`.
 
 ## Build, Test, and Development Commands
 
-- `node ./bin/varai.js audit --intent ./examples/intent.md --repo . --out ./.varai/report.md` runs the CLI locally.
+- `node ./bin/varai.js audit --intent ./examples/golden/todo-partial/intent.md --repo ./examples/golden/todo-partial/app --out ./.varai/report.md` runs the CLI locally.
 - `npm run audit:example` runs the same example through the package script.
 - `npm test` runs Node's built-in test runner. Add tests under `test/` using `node:test`.
 
@@ -16,7 +16,7 @@ Use ECMAScript modules and Node built-ins unless a dependency is clearly justifi
 
 ## Testing Guidelines
 
-There are no tests yet. When adding behavior, prefer small unit tests for extraction, scanning, matching, and report rendering. Keep fixtures minimal and local to the test that needs them.
+Golden scenario tests live in `test/golden.test.js` and compare `examples/golden/*/expected-findings.json` to actual audit output. When adding behavior, prefer a small golden scenario first, then focused unit tests for extraction, scanning, matching, or report rendering.
 
 ## Project Principles
 

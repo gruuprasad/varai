@@ -1,6 +1,6 @@
 # Sample Varai Build State Report
 
-This sample is generated from `examples/intent.md` against `examples/next-task-app`.
+This sample is generated from `examples/golden/todo-partial/intent.md` against `examples/golden/todo-partial/app`.
 
 ## Summary
 

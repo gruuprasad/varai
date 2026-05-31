@@ -1,0 +1,22 @@
+{
+  "scenario": "todo-partial",
+  "findings": [
+    {
+      "requirementId": "R1",
+      "status": "partial",
+      "evidenceIncludes": ["api_route:/api/tasks", "page:/tasks", "db_model:User", "db_model:Task"]
+    },
+    {
+      "requirementId": "R2",
+      "status": "unverified"
+    },
+    {
+      "requirementId": "R3",
+      "status": "unverified"
+    },
+    {
+      "requirementId": "R4",
+      "status": "unverified"
+    }
+  ]
+}

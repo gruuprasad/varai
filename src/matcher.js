@@ -55,7 +55,11 @@ export function matchIntentToScan(intent, scan) {
       .filter(({ text }) => capabilityTerms.some((term) => text.includes(term)))
       .map(({ fact }) => fact);
 
-    if (broadMatches.length === 0 || (hintedCapabilities.length > 0 && capabilityMatches.length === 0)) {
+    const hasMatchingEvidence = hintedCapabilities.length > 0
+      ? capabilityMatches.length > 0
+      : broadMatches.length > 0;
+
+    if (!hasMatchingEvidence) {
       return {
         requirementId: requirement.id,
         status: "unverified",

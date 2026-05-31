@@ -1,0 +1,15 @@
+{
+  "scenario": "stripe-ui-no-webhook",
+  "findings": [
+    {
+      "requirementId": "R1",
+      "status": "partial",
+      "evidenceIncludes": ["component:CheckoutButton", "code_hint:payment"]
+    },
+    {
+      "requirementId": "R2",
+      "status": "partial",
+      "evidenceIncludes": ["component:CheckoutButton", "code_hint:payment"]
+    }
+  ]
+}

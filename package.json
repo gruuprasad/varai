@@ -8,7 +8,7 @@
     "varai": "./bin/varai.js"
   },
   "scripts": {
-    "audit:example": "node ./bin/varai.js audit --repo ./examples/next-task-app --intent ./examples/intent.md --out ./.varai/example-report.md",
+    "audit:example": "node ./bin/varai.js audit --repo ./examples/golden/todo-partial/app --intent ./examples/golden/todo-partial/intent.md --out ./.varai/example-report.md",
     "test": "node --test"
   },
   "engines": {

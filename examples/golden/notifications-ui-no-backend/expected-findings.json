@@ -1,0 +1,15 @@
+{
+  "scenario": "notifications-ui-no-backend",
+  "findings": [
+    {
+      "requirementId": "R1",
+      "status": "partial",
+      "evidenceIncludes": ["component:NotificationBell", "code_hint:notification"]
+    },
+    {
+      "requirementId": "R2",
+      "status": "partial",
+      "evidenceIncludes": ["component:NotificationBell", "code_hint:notification"]
+    }
+  ]
+}
