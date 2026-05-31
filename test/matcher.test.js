@@ -141,3 +141,53 @@ test("matchIntentToScan requires capability evidence for capability-specific req
 
   assert.equal(findings[0].status, "unverified");
 });
+
+test("matchIntentToScan avoids false partial when notified requirement only matches task facts", () => {
+  const findings = matchIntentToScan(
+    {
+      requirements: [
+        {
+          id: "R1",
+          text: "get notified when someone assigns them a task",
+          keywords: ["notified", "assign", "task"]
+        }
+      ]
+    },
+    {
+      facts: [
+        {
+          kind: "page",
+          name: "/tasks",
+          evidence: [{ file: "app/tasks/page.tsx" }]
+        },
+        {
+          kind: "db_model",
+          name: "Task",
+          evidence: [{ file: "prisma/schema.prisma" }]
+        }
+      ]
+    }
+  );
+
+  assert.equal(findings[0].status, "unverified");
+  assert.equal(findings[0].profile, "receive_notifications");
+});
+
+test("matchIntentToScan prefers admin profile over auth for approval requirements", () => {
+  const findings = matchIntentToScan(
+    {
+      requirements: [
+        {
+          id: "R1",
+          text: "there should be an admin who approves new signups before they can do anything",
+          keywords: ["admin", "approves", "signups"]
+        }
+      ]
+    },
+    { facts: [] }
+  );
+
+  assert.equal(findings[0].status, "unverified");
+  assert.equal(findings[0].profile, "admin_access");
+  assert.equal(findings[0].hintedCapabilities[0], "admin");
+});

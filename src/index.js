@@ -1,7 +1,8 @@
 import path from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
+import { stdin } from "node:process";
 
-import { readIntent } from "./intent.js";
+import { intentFromText, readIntent } from "./intent.js";
 import { matchIntentToScan } from "./matcher.js";
 import { scanRepo } from "./scanners/repo.js";
 import { renderMarkdownReport } from "./reporters/markdown.js";
@@ -10,13 +11,15 @@ export async function runAudit(options = {}) {
   const repoPath = path.resolve(options.repo ?? ".");
 
   if (!options.intent) {
-    throw new Error("Missing required --intent <file>");
+    throw new Error("Missing required --intent <file|-");
   }
 
-  const intentPath = path.resolve(options.intent);
+  const intent = options.intent === "-"
+    ? intentFromText(await readStdin(), "-")
+    : await readIntent(path.resolve(options.intent));
+  const intentPath = options.intent === "-" ? "-" : path.resolve(options.intent);
   const outputPath = path.resolve(options.out ?? path.join(repoPath, ".varai", "report.md"));
 
-  const intent = await readIntent(intentPath);
   const scan = await scanRepo(repoPath);
   const findings = matchIntentToScan(intent, scan);
   const report = renderMarkdownReport({
@@ -39,4 +42,14 @@ export async function runAudit(options = {}) {
     scan,
     findings
   };
+}
+
+async function readStdin() {
+  const chunks = [];
+
+  for await (const chunk of stdin) {
+    chunks.push(chunk);
+  }
+
+  return Buffer.concat(chunks).toString("utf8");
 }
