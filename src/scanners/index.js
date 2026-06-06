@@ -1,7 +1,6 @@
 import path from "node:path";
 import { readdir } from "node:fs/promises";
 import { detectStacks } from "./stack-detect.js";
-import { extract as extractNextjs } from "./extractors/nextjs.js";
 import { extract as extractFastapi } from "./extractors/fastapi.js";
 import { extract as extractSqlalchemy } from "./extractors/sqlalchemy.js";
 import { extract as extractReactVite } from "./extractors/react-vite.js";
@@ -18,7 +17,6 @@ const TEXT_FILE_EXTENSIONS = new Set([
 ]);
 
 const EXTRACTOR_MAP = [
-  ["nextjs",        extractNextjs],
   ["fastapi",       extractFastapi],
   ["sqlalchemy",    extractSqlalchemy],
   ["react-vite",    extractReactVite],
@@ -29,8 +27,6 @@ export async function scanRepo(repoPath, options = {}) {
   const include = options.include ?? [];
   const files = await walk(repoPath, include);
   const stacks = await detectStacks(repoPath);
-
-  if (stacks.size === 0) stacks.add("nextjs");
 
   const allFacts = [];
   for (const [stack, extractFn] of EXTRACTOR_MAP) {

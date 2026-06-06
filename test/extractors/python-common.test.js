@@ -19,7 +19,7 @@ alembic = "^1.12.0"
   assert.ok(packages.some((p) => p.name === "sqlalchemy"));
   assert.ok(packages.some((p) => p.name === "alembic"));
   assert.ok(!packages.some((p) => p.name === "python"), "python itself must be skipped");
-  assert.equal(packages[0].layer, "heuristic");
+  assert.equal(packages[0].layer, "ast");
   assert.equal(packages[0].evidence[0].file, "pyproject.toml");
 });
 
@@ -35,6 +35,7 @@ dependencies = [
   const packages = facts.filter((f) => f.kind === "package");
   assert.ok(packages.some((p) => p.name === "fastapi"));
   assert.ok(packages.some((p) => p.name === "httpx"));
+  assert.equal(packages[0].layer, "ast");
 });
 
 test("extracts env vars from os.environ and os.getenv in Python files", async () => {
@@ -49,7 +50,7 @@ DEBUG = os.environ.get("DEBUG", "false")
   assert.ok(envVars.some((e) => e.name === "DATABASE_URL"));
   assert.ok(envVars.some((e) => e.name === "JWT_SECRET"));
   assert.ok(envVars.some((e) => e.name === "DEBUG"));
-  assert.equal(envVars[0].layer, "heuristic");
+  assert.equal(envVars[0].layer, "ast");
 });
 
 test("deduplicates env vars seen in multiple files", async () => {

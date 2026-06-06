@@ -18,7 +18,7 @@ async function ensureInit() {
   }
 }
 
-async function loadLanguage(lang) {
+export async function loadLanguage(lang) {
   if (!langCache.has(lang)) {
     await ensureInit();
     const wasmPath = path.join(WASM_DIR, `tree-sitter-${lang}.wasm`);

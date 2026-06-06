@@ -1,8 +1,8 @@
 import path from "node:path";
 import { readFile, stat } from "node:fs/promises";
+import Parser from "web-tree-sitter";
 import { dedupeFacts } from "../utils.js";
-
-const ENV_RE = /os\.(?:environ\[["']|environ\.get\s*\(\s*["']|getenv\s*\(\s*["'])([A-Z][A-Z0-9_]*)["']/g;
+import { queryCaptures, loadLanguage } from "../treesitter.js";
 
 export async function extract(repoPath, files) {
   const facts = [];
@@ -22,22 +22,44 @@ async function fromPyproject(repoPath, file) {
   catch { return []; }
 
   const facts = [];
+  try {
+    const Lang = await loadLanguage("toml");
+    const parser = new Parser();
+    parser.setLanguage(Lang);
+    const tree = parser.parse(content);
 
-  const poetrySection = content.match(/\[tool\.poetry\.dependencies\]([\s\S]*?)(?=\[|$)/);
-  if (poetrySection) {
-    for (const m of poetrySection[1].matchAll(/^([a-z][a-z0-9_-]*)\s*=/gim)) {
-      const name = m[1].toLowerCase();
-      if (name === "python") continue;
-      facts.push({ kind: "package", name, evidence: [{ file }], layer: "heuristic" });
-    }
-  }
+    for (const tableNode of tree.rootNode.namedChildren) {
+      if (tableNode.type !== "table") continue;
+      const header = tableKey(tableNode);
+      if (!header) continue;
 
-  const projectSection = content.match(/\[project\][\s\S]*?dependencies\s*=\s*\[([\s\S]*?)\]/i);
-  if (projectSection) {
-    for (const m of projectSection[1].matchAll(/["']([a-z][a-z0-9_-]*)[>=<![ \]"']/gim)) {
-      facts.push({ kind: "package", name: m[1].toLowerCase(), evidence: [{ file }], layer: "heuristic" });
+      if (header === "tool.poetry.dependencies") {
+        for (const pairNode of tableNode.namedChildren) {
+          if (pairNode.type !== "pair") continue;
+          const name = pairName(pairNode);
+          if (!name || name === "python") continue;
+          facts.push({ kind: "package", name: name.toLowerCase(), evidence: [{ file }], layer: "ast" });
+        }
+      } else if (header === "project") {
+        for (const pairNode of tableNode.namedChildren) {
+          if (pairNode.type !== "pair") continue;
+          const pk = pairName(pairNode);
+          if (pk !== "dependencies") continue;
+          for (const child of pairNode.namedChildren) {
+            if (child.type === "array") {
+              for (const str of child.namedChildren) {
+                if (str.type !== "string") continue;
+                const name = stringContent(str);
+                if (name) {
+                  facts.push({ kind: "package", name: name.toLowerCase(), evidence: [{ file }], layer: "ast" });
+                }
+              }
+            }
+          }
+        }
+      }
     }
-  }
+  } catch { /* unparseable TOML */ }
 
   return facts;
 }
@@ -48,10 +70,47 @@ async function fromPythonEnvVars(repoPath, file) {
     const s = await stat(abs);
     if (s.size > 500_000) return [];
     const content = await readFile(abs, "utf8");
+
     const facts = [];
-    for (const m of content.matchAll(ENV_RE)) {
-      facts.push({ kind: "env_var", name: m[1], evidence: [{ file }], layer: "heuristic" });
+
+    for (const { node } of await queryCaptures("python", content, "(subscript) @sub")) {
+      const m = node.text.match(/^os\.environ\[["']([A-Z][A-Z0-9_]*)["']\]/);
+      if (m) {
+        facts.push({ kind: "env_var", name: m[1], evidence: [{ file }], layer: "ast" });
+      }
     }
+
+    for (const { node } of await queryCaptures("python", content, "(call) @call")) {
+      const m = node.text.match(/^os\.(?:getenv|environ\.get)\s*\(\s*["']([A-Z][A-Z0-9_]*)["']/);
+      if (m) {
+        facts.push({ kind: "env_var", name: m[1], evidence: [{ file }], layer: "ast" });
+      }
+    }
+
     return facts;
   } catch { return []; }
+}
+
+// ── TOML helpers ───────────────────────────────────────────
+
+function tableKey(tableNode) {
+  for (const child of tableNode.namedChildren) {
+    if (child.type === "dotted_key" || child.type === "bare_key") {
+      return child.text;
+    }
+  }
+  return null;
+}
+
+function pairName(pairNode) {
+  for (const child of pairNode.namedChildren) {
+    if (child.type === "bare_key") return child.text;
+  }
+  return null;
+}
+
+function stringContent(strNode) {
+  const text = strNode.text.replace(/^["']|["']$/g, "");
+  const m = text.match(/^([a-z][a-z0-9_-]*)/);
+  return m ? m[1] : null;
 }

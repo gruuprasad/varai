@@ -21,8 +21,6 @@ export async function extract(repoPath, files) {
       content = await readFile(path.join(repoPath, file), "utf8");
     } catch { continue; }
 
-    const inStoreDir = file.includes("/store/") || file.includes("/stores/");
-
     let hasZustandImport = false;
     for (const { node } of await queryCaptures(lang, content, "(import_statement) @imp")) {
       const srcNode = node.childForFieldName("source");
@@ -35,12 +33,12 @@ export async function extract(repoPath, files) {
       if (node.text === "create") { hasCreateCall = true; break; }
     }
 
-    if (inStoreDir || (hasZustandImport && hasCreateCall)) {
+    if (hasZustandImport && hasCreateCall) {
       facts.push({
         kind: "state_store",
         name: path.basename(file, path.extname(file)),
         evidence: [{ file }],
-        layer: hasCreateCall ? "ast" : "heuristic"
+        layer: "ast"
       });
     }
 

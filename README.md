@@ -42,22 +42,17 @@ varai map ../kalakar --include services/backend --include services/frontend/src
 
 | Stack | What's extracted |
 |---|---|
-| Next.js | pages, API routes (`app/` and `pages/`), Prisma models, Supabase migrations |
 | FastAPI | decorator routes (`@router.get`, `@app.post`, etc.) via tree-sitter |
 | SQLAlchemy | `class X(Base)` model classes via tree-sitter; Alembic migration files |
 | React/Vite | `<Route path=...>` pages, Zustand `create()` stores via tree-sitter |
-| Python | pyproject.toml packages, `os.environ`/`os.getenv` vars |
+| Python | pyproject.toml packages, `os.environ`/`os.getenv` vars via tree-sitter |
 
 ## Evidence layers
 
-Every fact is tagged with how it was found:
-- `ast` — a tree-sitter parse tree confirmed the node (routes, models, stores)
-- `heuristic` — file-path convention or manifest parsing (Next.js routes, packages, env var names)
+Every fact is tagged `"ast"` — produced from a tree-sitter parse tree. Comments, strings, and multiline formatting are excluded at the parser level, not by regex.
 
 ## Development
 
 ```bash
 npm test
 ```
-
-Golden scenarios in `examples/golden/` lock the Next.js extractor. Add new scenarios there to lock new extractor behaviour.
