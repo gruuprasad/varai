@@ -13,6 +13,10 @@ export async function extract(repoPath, files, ctx = createScanContext(repoPath)
     }
     if (path.extname(file) !== ".py") continue;
 
+    const content = await ctx.read(file);
+    if (!content) continue;
+    if (!content.includes("class ") || !content.includes("Base")) continue;
+
     const tree = await ctx.tree(file, "python");
     if (!tree) continue;
 
