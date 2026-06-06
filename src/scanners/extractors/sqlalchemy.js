@@ -1,10 +1,10 @@
 import path from "node:path";
-import { readFile, stat } from "node:fs/promises";
-import { queryCaptures } from "../treesitter.js";
+import { createScanContext } from "../context.js";
+import { queryTree } from "../treesitter.js";
 
 const SUPERCLASSES_FIELD = "superclasses";
 
-export async function extract(repoPath, files) {
+export async function extract(repoPath, files, ctx = createScanContext(repoPath)) {
   const facts = [];
   for (const file of files) {
     if (/(?:^|\/)alembic\/versions\//.test(file) && path.extname(file) === ".py") {
@@ -13,14 +13,10 @@ export async function extract(repoPath, files) {
     }
     if (path.extname(file) !== ".py") continue;
 
-    let content;
-    try {
-      const s = await stat(path.join(repoPath, file));
-      if (s.size > 500_000) continue;
-      content = await readFile(path.join(repoPath, file), "utf8");
-    } catch { continue; }
+    const tree = await ctx.tree(file, "python");
+    if (!tree) continue;
 
-    for (const { node } of await queryCaptures("python", content, "(class_definition) @cls")) {
+    for (const { node } of await queryTree(tree, "python", "(class_definition) @cls")) {
       const nameNode = node.childForFieldName("name");
       const supersNode = node.childForFieldName(SUPERCLASSES_FIELD);
       if (!nameNode || !supersNode) continue;

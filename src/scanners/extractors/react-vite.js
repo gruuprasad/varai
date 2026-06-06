@@ -1,6 +1,6 @@
 import path from "node:path";
-import { readFile, stat } from "node:fs/promises";
-import { queryCaptures } from "../treesitter.js";
+import { createScanContext } from "../context.js";
+import { queryTree } from "../treesitter.js";
 
 const LANG_FOR_EXT = {
   ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
@@ -8,28 +8,28 @@ const LANG_FOR_EXT = {
 };
 
 const ROUTE_PATH_RE = /\bpath\s*=\s*["']([^"']+)["']/;
+const FETCH_RE = /fetch\s*\(\s*(["'][^"']+["'])/;
+const AXIOS_RE = /axios\s*\(\s*(["'][^"']+["'])/;
+const AXIOS_METHOD_RE = /axios\.(get|post|put|patch|delete|head)\s*\(\s*(["'][^"']+["'])/;
+const VITE_ENV_RE = /\bimport\.meta\.env\.(VITE_[A-Z][A-Z0-9_]*)\b/;
 
-export async function extract(repoPath, files) {
+export async function extract(repoPath, files, ctx = createScanContext(repoPath)) {
   const facts = [];
   for (const file of files) {
     const lang = LANG_FOR_EXT[path.extname(file)];
     if (!lang) continue;
-    let content;
-    try {
-      const s = await stat(path.join(repoPath, file));
-      if (s.size > 500_000) continue;
-      content = await readFile(path.join(repoPath, file), "utf8");
-    } catch { continue; }
+    const tree = await ctx.tree(file, lang);
+    if (!tree) continue;
 
     let hasZustandImport = false;
-    for (const { node } of await queryCaptures(lang, content, "(import_statement) @imp")) {
+    for (const { node } of await queryTree(tree, lang, "(import_statement) @imp")) {
       const srcNode = node.childForFieldName("source");
       const srcText = srcNode ? srcNode.text : node.text;
       if (srcText.includes("zustand")) { hasZustandImport = true; break; }
     }
 
     let hasCreateCall = false;
-    for (const { node } of await queryCaptures(lang, content, "(call_expression function: (identifier) @fn)")) {
+    for (const { node } of await queryTree(tree, lang, "(call_expression function: (identifier) @fn)")) {
       if (node.text === "create") { hasCreateCall = true; break; }
     }
 
@@ -42,7 +42,7 @@ export async function extract(repoPath, files) {
       });
     }
 
-    for (const { node } of await queryCaptures(lang, content,
+    for (const { node } of await queryTree(tree, lang,
       "[(jsx_self_closing_element)(jsx_opening_element)] @el")) {
       const nameNode = node.childForFieldName("name");
       if (nameNode?.text !== "Route") continue;
@@ -50,6 +50,77 @@ export async function extract(repoPath, files) {
       if (!m) continue;
       facts.push({ kind: "page", name: m[1], evidence: [{ file, line: node.startPosition.row + 1 }], layer: "ast" });
     }
+
+    const content = await ctx.read(file);
+    if (!content) continue;
+
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+
+      let apiCallM;
+      if ((apiCallM = trimmed.match(AXIOS_METHOD_RE))) {
+        facts.push({
+          kind: "api_call", name: `${apiCallM[1].toUpperCase()} ${apiCallM[2].slice(1, -1)}`,
+          evidence: [{ file }], layer: "heuristic"
+        });
+      } else if ((apiCallM = trimmed.match(AXIOS_RE)) && !trimmed.includes(".")) {
+        facts.push({
+          kind: "api_call", name: `GET ${apiCallM[1].slice(1, -1)}`,
+          evidence: [{ file }], layer: "heuristic"
+        });
+      } else if ((apiCallM = trimmed.match(FETCH_RE))) {
+        facts.push({
+          kind: "api_call", name: `GET ${apiCallM[1].slice(1, -1)}`,
+          evidence: [{ file }], layer: "heuristic"
+        });
+      }
+    }
+
+    for (const line of content.split("\n")) {
+      const m = line.match(VITE_ENV_RE);
+      if (m) {
+        facts.push({
+          kind: "env_var", name: m[1],
+          evidence: [{ file }], layer: "heuristic"
+        });
+      }
+    }
+
+    if (isComponentScope(file)) {
+      extractComponentsAndHooks(tree, lang, file, facts);
+    }
   }
   return facts;
+}
+
+function isComponentScope(file) {
+  return /\/components\/|\/pages\/|\/hooks\//.test("/" + file);
+}
+
+const COMP_FUNC_RE = /export\s+(?:async\s+)?function\s+(\w+)/g;
+const COMP_CONST_RE = /export\s+const\s+(\w+)\s*=\s*(?:\([^)]*\)|\(\s*\))\s*=>/g;
+
+function extractComponentsAndHooks(tree, lang, file, facts) {
+  const content = tree.rootNode.text;
+
+  for (const match of content.matchAll(COMP_FUNC_RE)) {
+    const name = match[1];
+    const lineIdx = content.slice(0, match.index).split("\n").length;
+    classifyAndPush(name, lineIdx, file, facts);
+  }
+
+  for (const match of content.matchAll(COMP_CONST_RE)) {
+    const name = match[1];
+    const lineIdx = content.slice(0, match.index).split("\n").length;
+    classifyAndPush(name, lineIdx, file, facts);
+  }
+}
+
+function classifyAndPush(name, line, file, facts) {
+  if (/^[A-Z]/.test(name) && !/^[A-Z]+$/.test(name)) {
+    facts.push({ kind: "component", name, evidence: [{ file, line }], layer: "ast" });
+  }
+  if (/^use[A-Z]/.test(name)) {
+    facts.push({ kind: "hook", name, evidence: [{ file, line }], layer: "ast" });
+  }
 }

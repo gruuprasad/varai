@@ -1,16 +1,19 @@
 import path from "node:path";
 import { readdir, stat } from "node:fs/promises";
 import { detectStacks } from "./stack-detect.js";
+import { createScanContext } from "./context.js";
 import { extract as extractFastapi } from "./extractors/fastapi.js";
 import { extract as extractSqlalchemy } from "./extractors/sqlalchemy.js";
 import { extract as extractReactVite } from "./extractors/react-vite.js";
 import { extract as extractPythonCommon } from "./extractors/python-common.js";
+import { extract as extractNpm } from "./extractors/npm.js";
+import { buildPrefixMap } from "./router-prefix.js";
 
 const ROOT_MARKERS = ["pyproject.toml", "package.json"];
 
 const IGNORED_DIRS = new Set([
   ".git", ".next", ".varai", "build", "coverage", "dist", "node_modules",
-  "__pycache__", ".venv", "venv", ".pytest_cache", ".mypy_cache"
+  "__pycache__", ".venv", "venv", ".pytest_cache", ".mypy_cache", ".worktrees"
 ]);
 
 const TEXT_FILE_EXTENSIONS = new Set([
@@ -22,15 +25,15 @@ const EXTRACTOR_MAP = [
   ["fastapi",       extractFastapi],
   ["sqlalchemy",    extractSqlalchemy],
   ["react-vite",    extractReactVite],
-  ["python-common", extractPythonCommon]
+  ["python-common", extractPythonCommon],
+  ["npm",           extractNpm]
 ];
 
 export async function scanRepo(repoPath, options = {}) {
   const include = options.include ?? [];
-  const files = await walk(repoPath, include);
+  const gitignore = options.gitignore !== false;
+  const files = await walk(repoPath, include, gitignore);
 
-  // Always include root marker files regardless of scope filter,
-  // so pyproject.toml / package.json packages are always available.
   for (const marker of ROOT_MARKERS) {
     if (!files.includes(marker)) {
       try {
@@ -40,23 +43,52 @@ export async function scanRepo(repoPath, options = {}) {
     }
   }
 
-  const stacks = await detectStacks(repoPath);
+  const stacks = await detectStacks(repoPath, files);
+
+  const ctx = createScanContext(repoPath);
+
+  if (stacks.has("fastapi")) {
+    ctx.prefixMap = await buildPrefixMap(files, ctx);
+  }
 
   const allFacts = [];
   for (const [stack, extractFn] of EXTRACTOR_MAP) {
     if (stacks.has(stack)) {
-      allFacts.push(...await extractFn(repoPath, files));
+      allFacts.push(...await extractFn(repoPath, files, ctx));
     }
   }
 
-  return {
-    summary: { fileCount: files.length, factCount: allFacts.length },
-    files,
-    facts: allFacts
+  const sectionCounts = countByKind(allFacts);
+  const summary = {
+    fileCount: files.length,
+    factCount: allFacts.length,
+    stacks: [...stacks],
+    sectionCounts
   };
+
+  return { summary, stacks: [...stacks], files, facts: allFacts };
 }
 
-async function walk(root, include = []) {
+function countByKind(facts) {
+  const counts = {};
+  for (const f of facts) {
+    counts[f.kind] = (counts[f.kind] || 0) + 1;
+  }
+  return counts;
+}
+
+async function walk(root, include = [], gitignore = true) {
+  let ig = null;
+  if (gitignore) {
+    try {
+      const { default: ignoreFactory } = await import("ignore");
+      const { readFile } = await import("node:fs/promises");
+      const gitignorePath = path.join(root, ".gitignore");
+      const raw = await readFile(gitignorePath, "utf8");
+      ig = ignoreFactory().add(raw);
+    } catch { /* no .gitignore or ignore package unavailable */ }
+  }
+
   const files = [];
   async function visit(dir) {
     const entries = await readdir(dir, { withFileTypes: true });
@@ -64,6 +96,12 @@ async function walk(root, include = []) {
       if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) continue;
       const abs = path.join(dir, entry.name);
       const rel = path.relative(root, abs);
+
+      if (ig) {
+        const isDir = entry.isDirectory();
+        if (ig.ignores(rel + (isDir ? "/" : ""))) continue;
+      }
+
       if (entry.isDirectory()) {
         if (include.length === 0 ||
             include.some((p) => rel.startsWith(p) || p.startsWith(rel + path.sep) || p === rel)) {
@@ -71,7 +109,8 @@ async function walk(root, include = []) {
         }
       } else if (entry.isFile()) {
         if (include.length === 0 || include.some((p) => rel.startsWith(p))) {
-          if (TEXT_FILE_EXTENSIONS.has(path.extname(entry.name)) || entry.name.startsWith(".env")) {
+          const ext = path.extname(entry.name);
+          if (TEXT_FILE_EXTENSIONS.has(ext) || entry.name.startsWith(".env")) {
             files.push(rel);
           }
         }
