@@ -5,7 +5,7 @@ import test from "node:test";
 
 import { readIntent } from "../src/intent.js";
 import { matchIntentToScan } from "../src/matcher.js";
-import { scanRepo } from "../src/scanners/repo.js";
+import { scanRepo } from "../src/scanners/index.js";
 
 const goldenRoot = path.resolve("examples/golden");
 
