@@ -9,7 +9,7 @@ import { extract as extractPythonCommon } from "./extractors/python-common.js";
 import { extract as extractNpm } from "./extractors/npm.js";
 import { buildPrefixMap } from "./router-prefix.js";
 
-const ROOT_MARKERS = ["pyproject.toml", "package.json"];
+const ROOT_MARKERS = ["pyproject.toml", "package.json", "services/frontend/package.json"];
 
 const IGNORED_DIRS = new Set([
   ".git", ".next", ".varai", "build", "coverage", "dist", "node_modules",
