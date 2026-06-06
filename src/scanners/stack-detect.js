@@ -3,19 +3,22 @@ import { join } from "node:path";
 
 export async function detectStacks(repoPath) {
   const stacks = new Set();
-  const [packageJson, pyprojectToml, requirementsTxt] =
+  const [packageJson, frontendPackageJson, pyprojectToml, requirementsTxt] =
     await Promise.all([
       tryRead(join(repoPath, "package.json")),
+      tryRead(join(repoPath, "services/frontend/package.json")),
       tryRead(join(repoPath, "pyproject.toml")),
       tryRead(join(repoPath, "requirements.txt"))
     ]);
 
-  if (packageJson !== null) {
+  for (const pkg of [packageJson, frontendPackageJson]) {
+    if (pkg === null) continue;
     try {
-      const parsed = JSON.parse(packageJson);
+      const parsed = JSON.parse(pkg);
       const allDeps = { ...(parsed.dependencies ?? {}), ...(parsed.devDependencies ?? {}) };
       if ("vite" in allDeps || "react" in allDeps) {
         stacks.add("react-vite");
+        break;
       }
     } catch { /* malformed package.json — skip */ }
   }
