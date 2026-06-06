@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-export async function detectStacks(repoPath) {
+export async function detectStacks(repoPath, files = []) {
   const stacks = new Set();
   const [packageJson, frontendPackageJson, pyprojectToml, requirementsTxt] =
     await Promise.all([
@@ -16,6 +16,9 @@ export async function detectStacks(repoPath) {
     try {
       const parsed = JSON.parse(pkg);
       const allDeps = { ...(parsed.dependencies ?? {}), ...(parsed.devDependencies ?? {}) };
+      if (Object.keys(allDeps).length > 0) {
+        stacks.add("npm");
+      }
       if ("vite" in allDeps || "react" in allDeps) {
         stacks.add("react-vite");
         break;

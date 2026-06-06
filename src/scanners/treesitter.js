@@ -10,6 +10,8 @@ const WASM_DIR = path.join(
 
 let initDone = false;
 const langCache = new Map();
+const parserCache = new Map();
+const queryCache = new Map();
 
 async function ensureInit() {
   if (!initDone) {
@@ -28,23 +30,35 @@ export async function loadLanguage(lang) {
   return langCache.get(lang);
 }
 
-/**
- * Parse `code` as `lang` and run `queryString`.
- * Returns captures: Array<{ name: string, node: Node }>
- * node.text        — source text of the node (string)
- * node.startPosition.row  — 0-based line number
- * node.childForFieldName(fieldName)  — named child node or null
- */
-export async function queryCaptures(lang, code, queryString) {
+export async function parseTree(lang, code) {
   const Lang = await loadLanguage(lang);
-  const parser = new Parser();
-  parser.setLanguage(Lang);
-  const tree = parser.parse(code);
-  const query = Lang.query(queryString);
+  if (!parserCache.has(lang)) {
+    const parser = new Parser();
+    parser.setLanguage(Lang);
+    parserCache.set(lang, parser);
+  }
+  const parser = parserCache.get(lang);
+  return parser.parse(code);
+}
+
+export async function queryTree(tree, lang, queryString) {
+  if (!queryCache.has(lang)) {
+    queryCache.set(lang, new Map());
+  }
+  const langQueries = queryCache.get(lang);
+  if (!langQueries.has(queryString)) {
+    const Lang = await loadLanguage(lang);
+    langQueries.set(queryString, Lang.query(queryString));
+  }
+  const query = langQueries.get(queryString);
   return query.captures(tree.rootNode);
 }
 
-/** For the spike only — prints the s-expression parse tree. */
+export async function queryCaptures(lang, code, queryString) {
+  const tree = await parseTree(lang, code);
+  return queryTree(tree, lang, queryString);
+}
+
 export async function debugTree(lang, code) {
   const Lang = await loadLanguage(lang);
   const parser = new Parser();
