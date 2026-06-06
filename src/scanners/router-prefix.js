@@ -5,8 +5,10 @@ export async function buildPrefixMap(files, ctx) {
   const pyFiles = files.filter((f) => f.endsWith(".py"));
   if (pyFiles.length === 0) return prefixMap;
 
+  const fileSet = new Set(pyFiles);
+
   const importsByFile = new Map();
-  const routerPrefixes = new Map();
+  const routerDecls = new Map();
   const includeCalls = [];
 
   for (const file of pyFiles) {
@@ -14,10 +16,10 @@ export async function buildPrefixMap(files, ctx) {
     if (!content) continue;
 
     for (const line of content.split("\n")) {
-      const fromMatch = line.match(/^from\s+(\.?\S+)\s+import\s+(.+)$/);
+      const fromMatch = line.match(/^\s*from\s+(\.?\S+)\s+import\s+(.+)$/);
       if (fromMatch) {
         const mod = fromMatch[1];
-        const namesRaw = fromMatch[2];
+        const namesRaw = fromMatch[2].replace(/#.*$/, "").trim();
         const parsedNames = [];
         for (const part of namesRaw.split(",")) {
           const cleaned = part.trim();
@@ -34,9 +36,10 @@ export async function buildPrefixMap(files, ctx) {
         continue;
       }
 
-      const routerDeclM = line.match(/^(\w+)\s*=\s*APIRouter\s*\([^)]*prefix\s*=\s*["']([^"']+)["']/);
+      const routerDeclM = line.match(/^\s*(\w+)\s*=\s*APIRouter\s*\(([^)]*)\)/);
       if (routerDeclM) {
-        routerPrefixes.set(`${file}::${routerDeclM[1]}`, routerDeclM[2]);
+        const prefixM = routerDeclM[2].match(/prefix\s*=\s*["']([^"']+)["']/);
+        routerDecls.set(`${file}::${routerDeclM[1]}`, { prefix: prefixM ? prefixM[1] : "", file });
         continue;
       }
 
@@ -65,9 +68,20 @@ export async function buildPrefixMap(files, ctx) {
     for (const imp of imports) {
       let resolvedFile = resolveModulePath(imp.mod, file, modToFile);
       if (!resolvedFile) continue;
+
+      const isPackage = path.basename(resolvedFile) === "__init__.py";
+      const pkgDir = isPackage ? path.dirname(resolvedFile) : null;
+
       for (const { name, alias } of imp.names) {
-        aliasToFile.set(`${file}::${alias}`, resolvedFile);
-        aliasToFile.set(`${file}::${alias}_router`, resolvedFile);
+        let nameFile = resolvedFile;
+        if (isPackage) {
+          const subPy = path.join(pkgDir, name + ".py");
+          const subInit = path.join(pkgDir, name, "__init__.py");
+          if (fileSet.has(subPy)) nameFile = subPy;
+          else if (fileSet.has(subInit)) nameFile = subInit;
+        }
+        aliasToFile.set(`${file}::${alias}`, nameFile);
+        aliasToFile.set(`${file}::${alias}_router`, nameFile);
       }
     }
   }
@@ -77,17 +91,33 @@ export async function buildPrefixMap(files, ctx) {
 
   for (const call of includeCalls) {
     const key = `${call.file}::${call.targetVar}`;
-    const targetFile = aliasToFile.get(key) || modToFile.get(resolveSimpleModule(call.targetVar, call.file));
+    let targetFile = aliasToFile.get(key);
+
+    if (!targetFile) {
+      const dir = path.dirname(call.file);
+      const localPy = path.join(dir, call.targetVar + ".py");
+      const localInit = path.join(dir, call.targetVar, "__init__.py");
+      if (fileSet.has(localPy)) targetFile = localPy;
+      else if (fileSet.has(localInit)) targetFile = localInit;
+    }
 
     if (!targetFile) continue;
 
     if (call.receiver === "app") {
+      targetFile = followRouterImport(targetFile, importsByFile, aliasToFile, routerDecls, fileSet);
       if (!fileToAppPrefix.has(targetFile) || call.prefix) {
         fileToAppPrefix.set(targetFile, call.prefix || "");
       }
     } else {
       const receiverKey = `${call.file}::${call.receiver}`;
-      const receiverFile = aliasToFile.get(receiverKey);
+      let receiverFile = aliasToFile.get(receiverKey);
+
+      if (!receiverFile) {
+        if (routerDecls.has(receiverKey) || call.receiver === "router") {
+          receiverFile = call.file;
+        }
+      }
+
       if (receiverFile) {
         if (!childIncludes.has(receiverFile)) childIncludes.set(receiverFile, []);
         childIncludes.get(receiverFile).push({ targetFile, prefix: call.prefix });
@@ -96,8 +126,8 @@ export async function buildPrefixMap(files, ctx) {
   }
 
   for (const [file, appPrefix] of fileToAppPrefix) {
-    const resolved = resolveChain(file, appPrefix, fileToAppPrefix, childIncludes, routerPrefixes, new Set());
-    if (resolved !== null) {
+    const resolved = resolveChain(file, appPrefix, fileToAppPrefix, childIncludes, routerDecls, new Set());
+    if (resolved !== null && resolved !== undefined) {
       prefixMap.set(file, resolved);
     }
   }
@@ -105,9 +135,42 @@ export async function buildPrefixMap(files, ctx) {
   return prefixMap;
 }
 
+function followRouterImport(file, importsByFile, aliasToFile, routerDecls, fileSet) {
+  if (!importsByFile.has(file)) return file;
+
+  for (const imp of importsByFile.get(file)) {
+    for (const { name, alias } of imp.names) {
+      if (alias === "router" || alias.endsWith("_router")) {
+        const fullPath = resolveLocalImport(imp.mod, file, fileSet);
+        if (fullPath) {
+          const deeper = followRouterImport(fullPath, importsByFile, aliasToFile, routerDecls, fileSet);
+          if (deeper !== file) return deeper;
+        }
+      }
+    }
+  }
+
+  return file;
+}
+
+function resolveLocalImport(mod, fromFile, fileSet) {
+  if (mod.startsWith(".")) {
+    const depth = mod.match(/^\.+/)[0].length;
+    const modPart = mod.replace(/^\.+/, "");
+    let dir = path.dirname(fromFile);
+    for (let i = 1; i < depth; i++) dir = path.dirname(dir);
+    const parts = modPart ? modPart.split(".") : [];
+    const fullPath = path.join(dir, ...parts);
+    const pyFile = fullPath + ".py";
+    const initFile = path.join(fullPath, "__init__.py");
+    if (fileSet.has(pyFile)) return pyFile;
+    if (fileSet.has(initFile)) return initFile;
+  }
+  return null;
+}
+
 function resolveModules(pyFiles) {
   const modToFile = new Map();
-  const fileSet = new Set(pyFiles);
 
   for (const file of pyFiles) {
     const dir = path.dirname(file);
@@ -116,12 +179,12 @@ function resolveModules(pyFiles) {
     if (dir === ".") {
       modToFile.set(base, file);
     } else {
-      modToFile.set(dir.replace(/\//g, ".") + "." + base, file);
+      const fullMod = dir.replace(/\//g, ".") + "." + base;
+      modToFile.set(fullMod, file);
     }
 
-    const initFile = path.join(dir, "__init__.py");
-    if (fileSet.has(initFile) && dir !== ".") {
-      modToFile.set(dir.replace(/\//g, "."), initFile);
+    if (base === "__init__" && dir !== ".") {
+      modToFile.set(dir.replace(/\//g, "."), file);
     }
   }
 
@@ -131,51 +194,44 @@ function resolveModules(pyFiles) {
 function resolveModulePath(mod, fromFile, modToFile) {
   if (modToFile.has(mod)) return modToFile.get(mod);
 
+  const modParts = mod.split(".");
+
+  for (let i = 0; i <= modParts.length; i++) {
+    const suffix = modParts.slice(i).join(".");
+    if (!suffix) continue;
+    for (const [modPath, file] of modToFile) {
+      if (modPath.endsWith("." + suffix)) {
+        return file;
+      }
+    }
+  }
+
   const dir = path.dirname(fromFile);
-  if (dir === ".") return modToFile.get(mod) || null;
+  const localPy = path.join(dir, ...modParts) + ".py";
+  const localInit = path.join(dir, ...modParts, "__init__.py");
+  const localPyNorm = localPy.replace(/\\/g, "/");
+  const localInitNorm = localInit.replace(/\\/g, "/");
+  if (modToFile.has(localPyNorm)) return modToFile.get(localPyNorm);
+  if (modToFile.has(localInitNorm)) return modToFile.get(localInitNorm);
 
-  const resolved = resolveRelative(mod, dir, modToFile);
-  if (resolved) return resolved;
-
-  return modToFile.get(mod) || null;
-}
-
-function resolveRelative(mod, fromDir, modToFile) {
-  const parts = mod.split(".");
-  const absPath = path.join(fromDir, ...parts);
-  const normed = absPath.replace(/\\/g, "/");
-
-  for (const [modPath, file] of modToFile) {
-    if (file.replace(/\\/g, "/") === normed + ".py") return file;
-    if (file.replace(/\\/g, "/") === normed + "/__init__.py") return file;
-  }
-
-  const filePath = normed + ".py";
-  for (const [modPath, file] of modToFile) {
-    if (file === filePath) return file;
-  }
-
-  const initPath = normed + "/__init__.py";
-  for (const [modPath, file] of modToFile) {
-    if (file === initPath) return file;
-  }
+  const fileSet = new Set(Object.values(modToFile));
+  if (fileSet.has(localPyNorm)) return localPyNorm;
+  if (fileSet.has(localInitNorm)) return localInitNorm;
 
   return null;
 }
 
-function resolveSimpleModule(varName, fromFile) {
-  return varName;
-}
-
-function resolveChain(file, prefix, fileToAppPrefix, childIncludes, routerPrefixes, visited) {
+function resolveChain(file, prefix, fileToAppPrefix, childIncludes, routerDecls, visited) {
   if (visited.has(file)) return prefix;
   visited.add(file);
 
   let full = prefix;
 
-  for (const [key, ownPrefix] of routerPrefixes) {
+  for (const [key, decl] of routerDecls) {
     if (key.startsWith(file + "::")) {
-      full = joinPrefixes(prefix, ownPrefix);
+      if (decl.prefix) {
+        full = joinPrefixes(prefix, decl.prefix);
+      }
       break;
     }
   }
@@ -185,20 +241,16 @@ function resolveChain(file, prefix, fileToAppPrefix, childIncludes, routerPrefix
 
   for (const child of children) {
     const childPrefix = child.prefix || "";
-    const subChain = resolveChain(child.targetFile, joinPrefixes(full, childPrefix), fileToAppPrefix, childIncludes, routerPrefixes, visited);
-    if (subChain !== null && !prefixMapHas(fileToAppPrefix, child.targetFile)) {
+    const combinedPrefix = joinPrefixes(full, childPrefix);
+    const subChain = resolveChain(child.targetFile, combinedPrefix, fileToAppPrefix, childIncludes, routerDecls, visited);
+    if (subChain !== null && subChain !== undefined) {
       if (!fileToAppPrefix.has(child.targetFile)) {
         fileToAppPrefix.set(child.targetFile, subChain);
       }
     }
-    full = subChain || full;
   }
 
   return full;
-}
-
-function prefixMapHas(map, file) {
-  return map.has(file);
 }
 
 function joinPrefixes(a, b) {
