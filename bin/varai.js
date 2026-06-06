@@ -1,73 +1,55 @@
 #!/usr/bin/env node
 
-import { runAudit } from "../src/index.js";
+import { runMap } from "../src/map.js";
 
 const args = process.argv.slice(2);
-const command = args[0] ?? "help";
+const command = args[0];
 
 function usage() {
-  return `Varai
+  return `Varai — a lens for your codebase
 
 Usage:
-  varai audit --intent <file|-> [--repo <dir>] [--out <file>]
-  varai help
+  varai map [<repo-path>] [--include <prefix>]...
+
+Options:
+  --include <prefix>   Scan only files under this path prefix (repeatable)
 
 Examples:
-  varai audit --intent ./intent.md
-  varai audit --intent - --repo .
-  varai audit --repo ./my-app --intent ./brief.md --out ./varai-report.md
+  varai map
+  varai map ../kalakar
+  varai map ../kalakar --include services/backend --include services/frontend/src
 `;
 }
 
-function parseOptions(argv) {
-  const options = {};
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const next = argv[index + 1];
-
-    if (arg === "--repo") {
-      options.repo = next;
-      index += 1;
-    } else if (arg === "--intent") {
-      options.intent = next;
-      index += 1;
-    } else if (arg === "--out") {
-      options.out = next;
-      index += 1;
-    } else if (arg === "--json") {
-      options.json = true;
+function parseMapOptions(argv) {
+  const opts = { include: [] };
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--include" && argv[i + 1]) {
+      opts.include.push(argv[++i]);
+    } else if (!argv[i].startsWith("-")) {
+      opts.repo = argv[i];
     } else {
-      throw new Error(`Unknown option: ${arg}`);
+      process.stderr.write(`Unknown option: ${argv[i]}\n\n${usage()}`);
+      process.exit(1);
     }
   }
-
-  return options;
+  return opts;
 }
 
 async function main() {
-  if (command === "help" || command === "--help" || command === "-h") {
+  if (!command || command === "help" || command === "--help" || command === "-h") {
     process.stdout.write(usage());
     return;
   }
-
-  if (command !== "audit") {
-    throw new Error(`Unknown command: ${command}\n\n${usage()}`);
-  }
-
-  const options = parseOptions(args.slice(1));
-  const result = await runAudit(options);
-
-  if (options.json) {
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  if (command !== "map") {
+    process.stderr.write(`Unknown command: ${command}\n\n${usage()}`);
+    process.exitCode = 1;
     return;
   }
-
-  process.stdout.write(`Varai report written to ${result.reportPath}\n`);
-  process.stdout.write(`Found ${result.scan.summary.fileCount} files and ${result.findings.length} initial findings.\n`);
+  await runMap(parseMapOptions(args.slice(1)));
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error.message}\n`);
+main().catch((err) => {
+  process.stderr.write(`${err.message}\n`);
   process.exitCode = 1;
 });
