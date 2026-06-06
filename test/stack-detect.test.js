@@ -40,8 +40,9 @@ test("detects python-common whenever pyproject.toml exists", async () => {
   assert.ok(stacks.has("python-common"));
 });
 
-test("empty dir returns empty set", async () => {
+test("empty dir returns only the base stack", async () => {
   const dir = await mkdtemp(join(tmpdir(), "varai-detect-"));
   const stacks = await detectStacks(dir);
-  assert.equal(stacks.size, 0);
+  assert.equal(stacks.size, 1);
+  assert.ok(stacks.has("base"));
 });
