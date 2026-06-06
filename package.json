@@ -14,5 +14,9 @@
   "engines": {
     "node": ">=20"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "tree-sitter-wasms": "^0.1.11",
+    "web-tree-sitter": "^0.20.8"
+  }
 }
