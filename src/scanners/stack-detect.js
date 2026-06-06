@@ -3,6 +3,9 @@ import { join } from "node:path";
 
 export async function detectStacks(repoPath, files = []) {
   const stacks = new Set();
+  // Always-on stack for extractors that aren't tied to a language/framework
+  // (e.g. runnable artifacts: scripts, Dockerfiles, compose services).
+  stacks.add("base");
   const [packageJson, frontendPackageJson, pyprojectToml, requirementsTxt] =
     await Promise.all([
       tryRead(join(repoPath, "package.json")),

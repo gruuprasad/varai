@@ -9,13 +9,21 @@ import { extract as extractSqlalchemy } from "./extractors/sqlalchemy.js";
 import { extract as extractReactVite } from "./extractors/react-vite.js";
 import { extract as extractPythonCommon } from "./extractors/python-common.js";
 import { extract as extractNpm } from "./extractors/npm.js";
+import { extract as extractRunnable } from "./extractors/runnable.js";
+import { extract as extractSchema } from "./extractors/schema.js";
 import { deriveIntegrations } from "./extractors/integration.js";
 import { buildPrefixMap } from "./router-prefix.js";
 import { dedupeFacts } from "./utils.js";
 import { createFactCache } from "./cache.js";
 import { selectBackend } from "./treesitter.js";
 
-const ROOT_MARKERS = ["pyproject.toml", "package.json", "services/frontend/package.json"];
+// ROOT_MARKERS are always included in the file list even when an --include
+// filter is active — they describe the whole project, not one service subdir.
+const ROOT_MARKERS = [
+  "pyproject.toml", "package.json", "services/frontend/package.json",
+  "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml",
+  "Makefile",
+];
 
 const IGNORED_DIRS = new Set([
   ".git", ".next", ".varai", "build", "coverage", "dist", "node_modules",
@@ -27,28 +35,41 @@ const TEXT_FILE_EXTENSIONS = new Set([
   ".prisma", ".py", ".sql", ".toml", ".ts", ".tsx", ".txt", ".yaml", ".yml"
 ]);
 
+// Extensionless or special-name files worth scanning (runnable artifacts).
+function isInterestingName(name) {
+  return name === "Makefile" ||
+    name === "Dockerfile" ||
+    name.startsWith("Dockerfile.") ||
+    name.startsWith(".env");
+}
+
 const EXTRACTOR_MAP = [
   ["fastapi",       extractFastapi],
   ["sqlalchemy",    extractSqlalchemy],
   ["react-vite",    extractReactVite],
   ["python-common", extractPythonCommon],
-  ["npm",           extractNpm]
+  ["python-common", extractSchema],
+  ["npm",           extractNpm],
+  ["base",          extractRunnable]
 ];
 
 const KIND_RANK = new Map([
   ["integration",        1],
-  ["api_route",          2],
-  ["webhook_route",      3],
-  ["page",               4],
-  ["db_model",           5],
-  ["database_migration", 6],
-  ["state_store",        7],
-  ["api_call",           8],
-  ["component",          9],
-  ["hook",              10],
-  ["settings_field",    11],
-  ["package",           12],
-  ["env_var",           13],
+  ["service",            2],
+  ["script",             3],
+  ["api_route",          4],
+  ["webhook_route",      5],
+  ["page",               6],
+  ["db_model",           7],
+  ["schema",             8],
+  ["database_migration", 9],
+  ["state_store",       10],
+  ["api_call",          11],
+  ["component",         12],
+  ["hook",              13],
+  ["settings_field",    14],
+  ["package",           15],
+  ["env_var",           16],
 ]);
 
 // The worker pool exists to amortize slow WASM parsing across cores. The native
@@ -139,15 +160,18 @@ export async function scanRepo(repoPath, options = {}) {
   const derivedFacts = deriveIntegrations(dedupedFacts);
   const finalFacts = sortFacts([...dedupedFacts, ...derivedFacts]);
 
+  // "base" is an internal always-on stack; don't surface it to the report.
+  const displayStacks = [...stacks].filter((s) => s !== "base");
+
   const sectionCounts = countByKind(finalFacts);
   const summary = {
     fileCount: files.length,
     factCount: finalFacts.length,
-    stacks: [...stacks],
+    stacks: displayStacks,
     sectionCounts
   };
 
-  return { summary, stacks: [...stacks], files, facts: finalFacts };
+  return { summary, stacks: displayStacks, files, facts: finalFacts };
 }
 
 async function extractFileAll(repoPath, file, ctx, activeExtractors, cache) {
@@ -224,7 +248,7 @@ async function walk(root, include = [], gitignore = true) {
       } else if (entry.isFile()) {
         if (include.length === 0 || include.some((p) => rel.startsWith(p))) {
           const ext = path.extname(entry.name);
-          if (TEXT_FILE_EXTENSIONS.has(ext) || entry.name.startsWith(".env")) {
+          if (TEXT_FILE_EXTENSIONS.has(ext) || isInterestingName(entry.name)) {
             files.push(rel);
           }
         }

@@ -2,7 +2,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, readFile, rename } from "node:fs/promises";
 
-export const EXTRACTOR_VERSION = 1;
+export const EXTRACTOR_VERSION = 2; // added runnable (script/service) and schema extractors
 
 const CACHE_FORMAT_VERSION = 1;
 

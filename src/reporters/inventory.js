@@ -12,10 +12,13 @@ export function renderInventory({ repoPath, scan }) {
   const by = groupByKind(scan.facts);
 
   appendIntegrationSection(lines, by.integration ?? []);
+  appendRunnableSection(lines, "Services",         by.service ?? []);
+  appendRunnableSection(lines, "Scripts",          by.script  ?? []);
   appendItemSection(lines, "API Routes",          by.api_route          ?? []);
   appendItemSection(lines, "Webhook Routes",       by.webhook_route      ?? []);
   appendItemSection(lines, "Pages",               by.page               ?? []);
   appendItemSection(lines, "Data Models",         by.db_model           ?? []);
+  appendItemSection(lines, "Schemas",             by.schema             ?? []);
   appendItemSection(lines, "Database Migrations", by.database_migration ?? []);
   appendItemSection(lines, "Frontend Stores",     by.state_store        ?? []);
   appendItemSection(lines, "API Calls",           by.api_call           ?? []);
@@ -73,6 +76,16 @@ function appendListSection(lines, title, facts) {
   if (facts.length === 0) return;
   lines.push(`## ${title}`, "");
   lines.push(`  ${facts.map((f) => f.name).join(", ")}`);
+  lines.push("");
+}
+
+function appendRunnableSection(lines, title, facts) {
+  if (facts.length === 0) return;
+  lines.push(`## ${title} (${facts.length})`, "");
+  for (const f of facts) {
+    const tag = f.source ?? f.runner ?? "";
+    writeTwoCol(lines, f.name, tag ? `${evRef(f.evidence?.[0])}  [${tag}]` : evRef(f.evidence?.[0]));
+  }
   lines.push("");
 }
 
