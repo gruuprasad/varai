@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>varai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <span class="brand">varai</span>
+      <span class="repo-path" id="repo-path">{{REPO_PATH}}</span>
+      <div class="topbar-stats" id="topbar-stats"></div>
+      <div class="topbar-status">
+        <span class="status-dot scanning" id="status-dot"></span>
+        <span id="status-text">Scanning...</span>
+      </div>
+      <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark">◑</button>
+    </header>
+    <div class="layout">
+      <aside class="sidebar">
+        <nav id="sidebar-nav"></nav>
+      </aside>
+      <main class="main">
+        <div class="search-wrap">
+          <div class="search-icon">⌕</div>
+          <input class="search" id="search" type="text" placeholder="Filter facts..." autocomplete="off" spellcheck="false">
+          <span class="search-count" id="search-count"></span>
+        </div>
+        <div class="facts-list" id="facts-list">
+          <div class="empty-state">
+            <span class="empty-icon">◌</span>
+            <span>Scanning repository...</span>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

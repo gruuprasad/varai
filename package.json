@@ -9,6 +9,7 @@
   },
   "scripts": {
     "map:example": "node ./bin/varai.js map ./examples/golden/todo-partial/app",
+    "start:example": "node ./bin/varai.js start ./examples/golden/todo-partial/app --no-open",
     "test": "node --test"
   },
   "engines": {
