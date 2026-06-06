@@ -11,6 +11,7 @@ export function renderInventory({ repoPath, scan }) {
 
   const by = groupByKind(scan.facts);
 
+  appendIntegrationSection(lines, by.integration ?? []);
   appendItemSection(lines, "API Routes",          by.api_route          ?? []);
   appendItemSection(lines, "Webhook Routes",       by.webhook_route      ?? []);
   appendItemSection(lines, "Pages",               by.page               ?? []);
@@ -72,6 +73,19 @@ function appendListSection(lines, title, facts) {
   if (facts.length === 0) return;
   lines.push(`## ${title}`, "");
   lines.push(`  ${facts.map((f) => f.name).join(", ")}`);
+  lines.push("");
+}
+
+function appendIntegrationSection(lines, facts) {
+  if (facts.length === 0) return;
+  lines.push(`## External Integrations (${facts.length})`, "");
+  for (const f of facts) {
+    const signals = [];
+    if (f.signals?.packages?.length) signals.push(f.signals.packages.join(", "));
+    if (f.signals?.envVars?.length) signals.push(f.signals.envVars.join(", "));
+    const detail = `${f.category ?? "service"} — ${signals.join("; ")}`;
+    writeTwoCol(lines, f.name, detail);
+  }
   lines.push("");
 }
 
