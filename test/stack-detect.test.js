@@ -5,21 +5,6 @@ import { tmpdir } from "node:os";
 import test from "node:test";
 import { detectStacks } from "../src/scanners/stack-detect.js";
 
-test("detects nextjs from next.config.js", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "varai-detect-"));
-  await writeFile(join(dir, "next.config.js"), "module.exports = {}");
-  const stacks = await detectStacks(dir);
-  assert.ok(stacks.has("nextjs"));
-});
-
-test("detects nextjs from package.json next dep", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "varai-detect-"));
-  await writeFile(join(dir, "package.json"), JSON.stringify({ dependencies: { next: "^15" } }));
-  const stacks = await detectStacks(dir);
-  assert.ok(stacks.has("nextjs"));
-  assert.ok(!stacks.has("react-vite"), "next projects must not also be detected as react-vite");
-});
-
 test("detects fastapi from pyproject.toml", async () => {
   const dir = await mkdtemp(join(tmpdir(), "varai-detect-"));
   await writeFile(join(dir, "pyproject.toml"), `[tool.poetry.dependencies]\nfastapi = "^0.100.0"\n`);
@@ -41,12 +26,11 @@ test("detects fastapi from requirements.txt", async () => {
   assert.ok(stacks.has("fastapi"));
 });
 
-test("detects react-vite from package.json vite dep (non-next)", async () => {
+test("detects react-vite from package.json vite dep", async () => {
   const dir = await mkdtemp(join(tmpdir(), "varai-detect-"));
   await writeFile(join(dir, "package.json"), JSON.stringify({ dependencies: { react: "^18", vite: "^5" } }));
   const stacks = await detectStacks(dir);
   assert.ok(stacks.has("react-vite"));
-  assert.ok(!stacks.has("nextjs"));
 });
 
 test("detects python-common whenever pyproject.toml exists", async () => {

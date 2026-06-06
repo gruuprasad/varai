@@ -3,30 +3,21 @@ import { join } from "node:path";
 
 export async function detectStacks(repoPath) {
   const stacks = new Set();
-  const [packageJson, pyprojectToml, requirementsTxt, nextConfigJs, nextConfigTs, nextConfigMjs] =
+  const [packageJson, pyprojectToml, requirementsTxt] =
     await Promise.all([
       tryRead(join(repoPath, "package.json")),
       tryRead(join(repoPath, "pyproject.toml")),
-      tryRead(join(repoPath, "requirements.txt")),
-      tryRead(join(repoPath, "next.config.js")),
-      tryRead(join(repoPath, "next.config.ts")),
-      tryRead(join(repoPath, "next.config.mjs"))
+      tryRead(join(repoPath, "requirements.txt"))
     ]);
-
-  const hasNextConfig = nextConfigJs !== null || nextConfigTs !== null || nextConfigMjs !== null;
 
   if (packageJson !== null) {
     try {
       const parsed = JSON.parse(packageJson);
       const allDeps = { ...(parsed.dependencies ?? {}), ...(parsed.devDependencies ?? {}) };
-      if (hasNextConfig || "next" in allDeps) {
-        stacks.add("nextjs");
-      } else if ("vite" in allDeps || "react" in allDeps) {
+      if ("vite" in allDeps || "react" in allDeps) {
         stacks.add("react-vite");
       }
     } catch { /* malformed package.json — skip */ }
-  } else if (hasNextConfig) {
-    stacks.add("nextjs");
   }
 
   if (pyprojectToml !== null) {
