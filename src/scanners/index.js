@@ -1,10 +1,12 @@
 import path from "node:path";
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { detectStacks } from "./stack-detect.js";
 import { extract as extractFastapi } from "./extractors/fastapi.js";
 import { extract as extractSqlalchemy } from "./extractors/sqlalchemy.js";
 import { extract as extractReactVite } from "./extractors/react-vite.js";
 import { extract as extractPythonCommon } from "./extractors/python-common.js";
+
+const ROOT_MARKERS = ["pyproject.toml", "package.json"];
 
 const IGNORED_DIRS = new Set([
   ".git", ".next", ".varai", "build", "coverage", "dist", "node_modules",
@@ -26,6 +28,18 @@ const EXTRACTOR_MAP = [
 export async function scanRepo(repoPath, options = {}) {
   const include = options.include ?? [];
   const files = await walk(repoPath, include);
+
+  // Always include root marker files regardless of scope filter,
+  // so pyproject.toml / package.json packages are always available.
+  for (const marker of ROOT_MARKERS) {
+    if (!files.includes(marker)) {
+      try {
+        const s = await stat(path.join(repoPath, marker));
+        if (s.isFile()) files.push(marker);
+      } catch { /* doesn't exist */ }
+    }
+  }
+
   const stacks = await detectStacks(repoPath);
 
   const allFacts = [];
