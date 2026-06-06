@@ -5,7 +5,7 @@ import test from "node:test";
 
 import { extractRequirements } from "../src/intent.js";
 import { matchIntentToScan } from "../src/matcher.js";
-import { scanRepo } from "../src/scanners/repo.js";
+import { scanRepo } from "../src/scanners/index.js";
 
 const scenarioPath = path.resolve("examples/golden/todo-partial");
 
