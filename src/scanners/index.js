@@ -9,6 +9,7 @@ import { extract as extractSqlalchemy } from "./extractors/sqlalchemy.js";
 import { extract as extractReactVite } from "./extractors/react-vite.js";
 import { extract as extractPythonCommon } from "./extractors/python-common.js";
 import { extract as extractNpm } from "./extractors/npm.js";
+import { deriveIntegrations } from "./extractors/integration.js";
 import { buildPrefixMap } from "./router-prefix.js";
 import { dedupeFacts } from "./utils.js";
 import { createFactCache } from "./cache.js";
@@ -35,18 +36,19 @@ const EXTRACTOR_MAP = [
 ];
 
 const KIND_RANK = new Map([
-  ["api_route",          1],
-  ["webhook_route",      2],
-  ["page",               3],
-  ["db_model",           4],
-  ["database_migration", 5],
-  ["state_store",        6],
-  ["api_call",           7],
-  ["component",          8],
-  ["hook",               9],
-  ["settings_field",    10],
-  ["package",           11],
-  ["env_var",           12],
+  ["integration",        1],
+  ["api_route",          2],
+  ["webhook_route",      3],
+  ["page",               4],
+  ["db_model",           5],
+  ["database_migration", 6],
+  ["state_store",        7],
+  ["api_call",           8],
+  ["component",          9],
+  ["hook",              10],
+  ["settings_field",    11],
+  ["package",           12],
+  ["env_var",           13],
 ]);
 
 // The worker pool exists to amortize slow WASM parsing across cores. The native
@@ -129,18 +131,23 @@ export async function scanRepo(repoPath, options = {}) {
     }
   }
 
-  const sortedFacts = sortFacts(allFacts);
-  const dedupedFacts = dedupeFacts(sortedFacts);
+  const dedupedFacts = dedupeFacts(sortFacts(allFacts));
 
-  const sectionCounts = countByKind(dedupedFacts);
+  // Derive cross-cutting facts from the merged set (integrations are inferred
+  // from package/env_var facts, not from any single file), then re-sort so they
+  // group correctly. Derived facts are deterministic, so this stays stable.
+  const derivedFacts = deriveIntegrations(dedupedFacts);
+  const finalFacts = sortFacts([...dedupedFacts, ...derivedFacts]);
+
+  const sectionCounts = countByKind(finalFacts);
   const summary = {
     fileCount: files.length,
-    factCount: dedupedFacts.length,
+    factCount: finalFacts.length,
     stacks: [...stacks],
     sectionCounts
   };
 
-  return { summary, stacks: [...stacks], files, facts: dedupedFacts };
+  return { summary, stacks: [...stacks], files, facts: finalFacts };
 }
 
 async function extractFileAll(repoPath, file, ctx, activeExtractors, cache) {
