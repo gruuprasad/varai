@@ -8,6 +8,10 @@ export async function extract(repoPath, files, ctx = createScanContext(repoPath)
   const facts = [];
   for (const file of files) {
     if (path.extname(file) !== ".py") continue;
+    const content = await ctx.read(file);
+    if (!content) continue;
+    if (!content.includes("@app.") && !content.includes("@router.")) continue;
+
     const tree = await ctx.tree(file, "python");
     if (!tree) continue;
 

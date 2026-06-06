@@ -1,7 +1,7 @@
 import path from "node:path";
 import { createScanContext } from "../context.js";
 import { dedupeFacts } from "../utils.js";
-import { queryTree, parseTree } from "../treesitter.js";
+import { queryTree } from "../treesitter.js";
 
 export async function extract(repoPath, files, ctx = createScanContext(repoPath)) {
   const facts = [];
@@ -9,8 +9,14 @@ export async function extract(repoPath, files, ctx = createScanContext(repoPath)
     if (path.basename(file) === "pyproject.toml") {
       facts.push(...await fromPyproject(repoPath, file, ctx));
     } else if (path.extname(file) === ".py") {
-      facts.push(...await fromPythonEnvVars(repoPath, file, ctx));
-      facts.push(...await fromPythonSettings(repoPath, file, ctx));
+      const content = await ctx.read(file);
+      if (!content) continue;
+      if (content.includes("os.environ") || content.includes("os.getenv")) {
+        facts.push(...await fromPythonEnvVars(file, ctx));
+      }
+      if (content.includes("BaseSettings")) {
+        facts.push(...await fromPythonSettings(file, ctx));
+      }
     } else if (file.startsWith(".env") || path.basename(file).startsWith(".env.")) {
       facts.push(...await fromEnvFile(repoPath, file, ctx));
     }
@@ -60,7 +66,7 @@ async function fromPyproject(repoPath, file, ctx) {
   return facts;
 }
 
-async function fromPythonEnvVars(repoPath, file, ctx) {
+async function fromPythonEnvVars(file, ctx) {
   const tree = await ctx.tree(file, "python");
   if (!tree) return [];
 
@@ -83,7 +89,7 @@ async function fromPythonEnvVars(repoPath, file, ctx) {
   return facts;
 }
 
-async function fromPythonSettings(repoPath, file, ctx) {
+async function fromPythonSettings(file, ctx) {
   const tree = await ctx.tree(file, "python");
   if (!tree) return [];
 
