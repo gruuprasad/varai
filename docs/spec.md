@@ -31,6 +31,8 @@ local repo
 | `hook` | exported `use[A-Z]` functions in `*/components/`, `*/pages/`, `*/hooks/` | `ast` |
 | `settings_field` | Pydantic `BaseSettings` class attributes | `ast` |
 
+Every fact may also carry an optional `stock: string[]` field — a list of stock pattern names (`auth`, `payment`, `file_storage`, `email`, `notifications`, `settings`, `health`) it matches. Populated by a post-merge derived pass. See `docs/superpowers/specs/2026-06-07-varai-stock-catalog-design.md`.
+
 ### Ecosystem tagging
 
 `package` facts carry an `ecosystem` field (`"python"` or `"npm"`). The inventory renderer groups packages by ecosystem in the `## Packages` section.
