@@ -446,4 +446,21 @@ body {
 
 .empty-icon { font-size: 28px; opacity: 0.35; animation: blink 2s ease-in-out infinite; }
 
+.stock-chip {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  margin-right: 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  text-transform: lowercase;
+}
+
+.fact-chips {
+  margin-bottom: 2px;
+}
+
 * { scrollbar-width: thin; scrollbar-color: var(--border-mid) transparent; }

@@ -24,6 +24,18 @@ const NAV_GROUPS = [
   { label: "Config",         kinds: ["settings_field", "package", "env_var"] },
 ];
 
+const STOCK_META = {
+  auth:          { label: "Auth" },
+  payment:       { label: "Payment" },
+  file_storage:  { label: "File Storage" },
+  email:         { label: "Email" },
+  notifications: { label: "Notifications" },
+  settings:      { label: "Settings" },
+  health:        { label: "Health" },
+};
+
+const STOCK_ORDER = ["auth", "payment", "file_storage", "email", "notifications", "settings", "health"];
+
 // ── Theme toggle ────────────────────────────────────────────────────────────
 (function () {
   const saved = localStorage.getItem("varai-theme") || "dark";
@@ -116,6 +128,31 @@ function renderNav() {
     `<span class="nav-count">${total}</span>` +
     `</div>`;
 
+  const stockCounts = {};
+  for (const f of scanData.facts ?? []) {
+    for (const tag of f.stock ?? []) stockCounts[tag] = (stockCounts[tag] || 0) + 1;
+  }
+  const stockTags = Object.keys(stockCounts).sort(
+    (a, b) => {
+      const ia = STOCK_ORDER.indexOf(a);
+      const ib = STOCK_ORDER.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    }
+  );
+  if (stockTags.length) {
+    html += `<div class="nav-group"><span class="nav-group-label">Standard</span>`;
+    for (const tag of stockTags) {
+      const meta = STOCK_META[tag] ?? { label: tag };
+      html +=
+        `<div class="nav-item${activeKind === `stock:${tag}` ? " active" : ""}" data-kind="stock:${tag}">` +
+        `<span class="nav-icon">★</span>` +
+        `<span class="nav-name">${esc(meta.label)}</span>` +
+        `<span class="nav-count">${stockCounts[tag]}</span>` +
+        `</div>`;
+    }
+    html += `</div>`;
+  }
+
   for (const { label, kinds } of NAV_GROUPS) {
     const visible = kinds.filter((k) => counts[k]);
     if (!visible.length) continue;
@@ -147,7 +184,15 @@ function renderFacts() {
   const facts = scanData?.facts ?? [];
   const query = el.search.value.toLowerCase().trim();
 
-  let pool = activeKind ? facts.filter((f) => f.kind === activeKind) : facts;
+  let pool;
+  if (activeKind?.startsWith("stock:")) {
+    const tag = activeKind.slice("stock:".length);
+    pool = facts.filter((f) => (f.stock ?? []).includes(tag));
+  } else if (activeKind) {
+    pool = facts.filter((f) => f.kind === activeKind);
+  } else {
+    pool = facts;
+  }
 
   if (query) {
     pool = pool.filter(
@@ -156,7 +201,7 @@ function renderFacts() {
     );
   }
 
-  const meta = activeKind ? KIND_META[activeKind] : null;
+  const meta = activeKind ? (activeKind.startsWith("stock:") ? STOCK_META[activeKind.slice("stock:".length)] : KIND_META[activeKind]) : null;
   const placeholder = meta
     ? `Filter ${pool.length} ${meta.label.toLowerCase()}...`
     : `Filter ${pool.length} facts...`;
@@ -196,6 +241,10 @@ function renderFacts() {
       locHtml = `<div class="fact-loc"><span class="fact-loc-file">${esc(ev.file)}</span>${line}</div>`;
     }
 
+    const stockChips = (f.stock ?? [])
+      .map((t) => `<span class="stock-chip">${esc(t)}</span>`)
+      .join("");
+
     html +=
       `<div class="fact-row">` +
       (activeKind
@@ -203,6 +252,7 @@ function renderFacts() {
         : "") +
       `<div class="fact-body">` +
       `<div class="fact-name" title="${esc(f.name)}">${esc(f.name)}</div>` +
+      (stockChips ? `<div class="fact-chips">${stockChips}</div>` : "") +
       locHtml +
       `</div></div>`;
   }
