@@ -9,6 +9,8 @@ export function renderInventory({ repoPath, scan }) {
 
   appendSummary(lines, scan);
 
+  appendStandardPatternsSection(lines, scan.facts);
+
   const by = groupByKind(scan.facts);
 
   appendIntegrationSection(lines, by.integration ?? []);
@@ -130,4 +132,47 @@ function writeTwoCol(lines, name, loc) {
 function evRef(ev) {
   if (!ev) return "";
   return ev.line ? `${ev.file}:${ev.line}` : ev.file;
+}
+
+const STOCK_LABELS = {
+  auth: "Auth",
+  payment: "Payment",
+  file_storage: "File Storage",
+  email: "Email",
+  notifications: "Notifications",
+  settings: "Settings",
+  health: "Health",
+};
+
+const STOCK_ORDER = ["auth", "payment", "file_storage", "email", "notifications", "settings", "health"];
+
+function appendStandardPatternsSection(lines, facts) {
+  const grouped = new Map();
+  for (const f of facts) {
+    for (const tag of f.stock ?? []) {
+      if (!grouped.has(tag)) grouped.set(tag, []);
+      grouped.get(tag).push(f);
+    }
+  }
+  if (grouped.size === 0) return;
+
+  const sortedTags = [...grouped.keys()].sort(
+    (a, b) => {
+      const ia = STOCK_ORDER.indexOf(a);
+      const ib = STOCK_ORDER.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    }
+  );
+
+  lines.push(`## Standard Patterns (${sortedTags.length})`, "");
+  for (const tag of sortedTags) {
+    const label = STOCK_LABELS[tag] ?? tag;
+    const list = grouped.get(tag);
+    lines.push(`### ${label} (${list.length})`, "");
+    for (const f of list) {
+      const loc = evRef(f.evidence?.[0]);
+      writeTwoCol(lines, f.name, loc);
+    }
+    lines.push("");
+  }
 }
