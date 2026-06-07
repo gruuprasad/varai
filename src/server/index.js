@@ -4,6 +4,7 @@ import path from "node:path";
 import { exec } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { scanRepo } from "../scanners/index.js";
+import { loadRepoConfig } from "../scanners/config.js";
 import { createWatcher } from "./watcher.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -56,15 +57,8 @@ function openBrowser(url) {
 
 export async function startServer({ repoPath, port = 3847, open = true }) {
   const absRepo = path.resolve(repoPath);
-  const scanOptions = {};
-
-  // Try to read varai.config.json for include defaults, same as runMap does.
-  try {
-    const config = JSON.parse(
-      fs.readFileSync(path.join(absRepo, "varai.config.json"), "utf8")
-    );
-    if (Array.isArray(config.include)) scanOptions.include = config.include;
-  } catch { /* no config */ }
+  const config = await loadRepoConfig(absRepo);
+  const scanOptions = { include: config.include ?? [], config };
 
   let latestScan = null;
   let scanning = false;
