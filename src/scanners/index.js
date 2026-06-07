@@ -12,6 +12,7 @@ import { extract as extractNpm } from "./extractors/npm.js";
 import { extract as extractRunnable } from "./extractors/runnable.js";
 import { extract as extractSchema } from "./extractors/schema.js";
 import { deriveIntegrations } from "./extractors/integration.js";
+import { tagStock } from "./extractors/stock-tagger.js";
 import { buildPrefixMap } from "./router-prefix.js";
 import { dedupeFacts } from "./utils.js";
 import { createFactCache } from "./cache.js";
@@ -158,7 +159,9 @@ export async function scanRepo(repoPath, options = {}) {
   // from package/env_var facts, not from any single file), then re-sort so they
   // group correctly. Derived facts are deterministic, so this stays stable.
   const derivedFacts = deriveIntegrations(dedupedFacts);
-  const finalFacts = sortFacts([...dedupedFacts, ...derivedFacts]);
+  const merged = [...dedupedFacts, ...derivedFacts];
+  tagStock(merged, options.config ?? {});
+  const finalFacts = sortFacts(merged);
 
   // "base" is an internal always-on stack; don't surface it to the report.
   const displayStacks = [...stacks].filter((s) => s !== "base");
