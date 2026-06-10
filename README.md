@@ -1,6 +1,8 @@
 # Varai
 
-A lens for your codebase. Run `varai map` and get a clean inventory of what your repo contains — routes, models, stores, packages, env vars — each traced to a source file.
+A lens for your codebase, built for people who delegate implementation to AI coding tools — any of them — and want to see and steer what's happening without reading every line. Vendor-neutral, local-first.
+
+Run `varai map` and get a clean inventory of what your repo contains — routes, models, stores, packages, env vars — each traced to a source file. Direction and upcoming work: `docs/roadmap.md`, `docs/adr/0003`.
 
 ## Install
 
