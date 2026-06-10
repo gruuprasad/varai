@@ -6,6 +6,8 @@ Direction: see ADR 0003 — vendor-neutral lens for technical builders supervisi
 
 An IR snapshot is the merged fact set (with stock tags) serialized to `.varai/snapshots/`, keyed by git commit hash (plus a dirty-state content hash when the tree is dirty). Cheap: the scanner already produces the fact set. Triggers are vendor-neutral — explicit `varai snapshot`, an optional git post-commit hook, or the watcher.
 
+Snapshots also record the repo's intent artifacts (paths + content hashes of design/spec markdown, e.g. `openspec/`, `DESIGN.md`) so later phases can correlate fact changes with spec changes on the same timeline. Recording only — no parsing or binding yet.
+
 ## 2. Concept-level diff (wedge feature)
 
 `varai diff <a> <b>` (and dashboard surface) renders the difference between two snapshots at concept level: facts added/removed/changed, grouped by kind and stock pattern — "auth gained a route", "new integration: email", "3 env vars added". Needs a design spec (snapshot identity, rename/move handling, rendering) before implementation.
@@ -21,6 +23,10 @@ Falsifiable claims as derived passes over the fact set, same architecture as sto
 ## 5. Steering output
 
 A violated check emits a paste-ready, evidence-grounded fix instruction in plain markdown, usable with any AI coding tool. No vendor integration.
+
+## 6. Intent binding (reconciliation)
+
+In the AI-codegen workflow, intent exists as durable repo artifacts (design specs, plan docs) written *before* the code — it never needs to be recovered from code, only correlated with it. A reconciliation pass binds intent mentions to facts/stock patterns and sorts claims into three buckets: **intended-and-present** (verified, with evidence), **intended-but-absent** (gap), **present-but-unintended** (drift — the AI-supervision payoff). Bindings live in an overlay layer with their own honesty states (bound / unbound / ambiguous); facts stay pure. Hard constraint: no intent DSL — input is the markdown that already exists in the repo. Closes the control loop: intent is the setpoint the steering output corrects toward. Anticipated by ADR 0001 and CONTEXT.md's deferred "intent input".
 
 ## Deferred
 
