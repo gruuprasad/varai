@@ -9,6 +9,8 @@ This feature is an experiment with a product surface, in that order. The hypothe
 
 A behavior is what a user can poke: a front door (route, page, script, worker handler) plus the contract observable from outside — what it takes, what it gives, what it requires, what it touches, what it changes, how it fails. The model for the reader experience is a **library spec**: nobody reads a library's code; they read "call this, it does that" and are satisfied. Varai shows the owner their own app the way a library shows itself to its users.
 
+The daily loop this serves: **prompt → code appears → look at varai → poke exactly the right things in the running app → steer the next prompt.** Today that loop has only code (too low) and tests/manual use (pass-fail, and only on the paths you walk). The cards are the in-between view, and the vocabulary that a later "what changed since the last prompt" diff will speak. The vocabulary is not invented — it names what developers already think in (auth, storage, endpoints, jobs) and was never unified because the person thinking it also wrote the code. That person no longer writes the code; hence the lens.
+
 v1 scope: FastAPI routes only, dogfooded on kalakar. The verdict comes from reading the generated kalakar bundle view: rings true (construct confirmed → diff/checks get built on it), wrong (tracer bug), or hollow (construct gap — the most valuable outcome to learn cheaply).
 
 ## Vocabulary
@@ -40,7 +42,9 @@ Illustrative composite — clauses drawn from the login and render behaviors to 
 
 `reads`/`writes` targets resolve to existing facts where possible (db_model, env_var, integration); otherwise they carry a plain name. The read-only vs side-effecting split (any `writes` present) is first-class — it is the clause a nervous owner needs most.
 
-Every `reads`/`writes` target carries a `substrate` field from a **closed taxonomy**: `db | file | net_out | queue | clock | config`. This is the system-level machine the clause touches — the analog of registers/RAM one level up (the door itself is the `net_in` resource). The taxonomy is deliberately small and fixed: substrate categories are universal across apps, which is what makes cards comparable between projects and lets later features (diff, checks) generalize. A target that fits no category is a spec bug, not a seventh category.
+**Storage is one concept; the medium is a detail.** A card says *stores* or *reads*; every such target carries a `medium` field from a small closed list: `db | file | memory | queue`. With the storage concept, putting data in Postgres, in a JSON file, or in an in-process copy is the same pattern — the medium detail is kept because it tells the reader who checks that data (the db engine checks itself; files barely; memory nobody), not because the pattern differs. Outbound network calls are their own verb (*calls out*), and gates/config live under *requires*. A target that fits no medium is a spec bug, not a fifth medium.
+
+**Rendered vocabulary is plain words only**: *takes, returns, stores, reads, calls out, needs, fails with*. Internal field names are free; nothing a user reads says "substrate" or "clause".
 
 ## Tracer
 
@@ -89,13 +93,13 @@ Markdown (`varai map` gains a `## Behaviors` section above the kind sections; pl
 ```
 ## Behaviors (169 across 12 bundles)
 
-### building-model (111) — gate: get_job_context · trunk: _ensure_persisted_building_model
-  GET  /api/v1/building-model/{job_id}/quantities    read-only · takes —, gives QuantityTakeoffResponse · fails 409
-  POST /api/v1/building-model/{job_id}/render        WRITES file(.glb), ProjectArtifact · gives WorkspaceRenderResponse
+### building-model (111) — needs: get_job_context · shared: building-model document (file, per-job)
+  GET  /api/v1/building-model/{job_id}/quantities    reads only · returns QuantityTakeoffResponse · fails with 409
+  POST /api/v1/building-model/{job_id}/render        stores file (.glb) and db (ProjectArtifact) · returns WorkspaceRenderResponse
   ...
 
 ### auth (8)
-  POST /api/auth/login   takes LoginRequest · gives LoginResponse · reads User, JWT_* · fails 401, 403
+  POST /api/auth/login   takes LoginRequest · returns LoginResponse · reads db (User) · needs JWT config · fails with 401, 403
   ...
 ```
 
@@ -132,4 +136,9 @@ Bundle assertion: routes 2–5 cluster into one bundle; route 1 does not join it
 
 ## Success criterion
 
-The owner reads the generated kalakar bundle view and can answer "what does this part of my app do, and what does it touch" without opening code — the same "roughly, yes" the five hand cards earned, at full-app scale. Hollow cards are recorded, not hidden: each one marks either a tracer gap or a construct gap, and which one it is becomes the next decision.
+Two questions, both answered by the owner reading the generated kalakar bundle view:
+
+1. "Can I tell what this part of my app does, and what it touches, without opening code?" — the same "roughly, yes" the five hand cards earned, at full-app scale.
+2. "If a card's line changed after a prompt, is that the signal I would use to decide what to poke in the running app and how to steer the next prompt?" — the loop test.
+
+Hollow cards are recorded, not hidden: each one marks either a tracer gap or a construct gap, and which one it is becomes the next decision.
