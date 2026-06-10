@@ -23,6 +23,8 @@ export async function findHandlers(routeFacts, ctx) {
     for (const { node } of decorated) {
       const fn = node.childForFieldName("definition");
       if (!fn || fn.type !== "function_definition") continue;
+      // Intentionally iterates all decorators so a function with multiple
+      // decorators maps every decorator line to the same handler node.
       for (const child of node.namedChildren) {
         if (child.type === "decorator") {
           lineToFn.set(child.startPosition.row + 1, fn);
@@ -33,11 +35,14 @@ export async function findHandlers(routeFacts, ctx) {
     for (const fact of facts) {
       const handlerNode = lineToFn.get(fact.evidence[0].line);
       if (!handlerNode) continue;
-      const [method, ...rest] = fact.name.split(" ");
+      const spaceIdx = fact.name.indexOf(" ");
+      if (spaceIdx === -1) continue;
+      const method = fact.name.slice(0, spaceIdx);
+      const routePath = fact.name.slice(spaceIdx + 1);
       handlers.push({
         file,
         handlerNode,
-        door: { method, path: rest.join(" "), evidence: { ...fact.evidence[0] } },
+        door: { method, path: routePath, evidence: { ...fact.evidence[0] } },
       });
     }
   }
