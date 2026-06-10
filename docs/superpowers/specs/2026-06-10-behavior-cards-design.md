@@ -55,6 +55,19 @@ A new scan phase after fact merge (it needs `ScanContext` parse trees, not just 
 
 Determinism rule: identical source ⇒ identical behaviors. No model assist anywhere in the tracer.
 
+### Call-graph stance
+
+v1 deliberately builds **no general call graph**. The accuracy burden differs per output, and the design exploits that:
+
+- **Bundles need no call resolution.** Gates live in the handler signature (`Depends(...)`) and the trunk is the first shared call *by name* — depth-0 reading. Bundle clustering is therefore the most robust output, not the most fragile.
+- **takes / gives / requires / fails** are signature- and body-local. Robust.
+- **reads / writes** is where call depth bites (side effects hide inside helpers). Three mechanisms instead of a call graph:
+  1. **Pattern-known calls** — `db.query/add/commit` recognized via the `Session` parameter annotation plus call pattern; env constants; known storage idioms. Recognized by shape, never followed into libraries.
+  2. **Bounded walk, cheap resolver** — depth ≤ 2 into same-repo functions, resolving only direct `from x import y` imports (same machinery family as router-prefix resolution). No re-export chains, no dynamic dispatch, no function-valued arguments.
+  3. **Silence never proves read-only.** Unresolved calls — beyond depth, function-passed-as-argument (e.g. kalakar's `apply_mutation(..., update_site_context, ...)`), decorator indirection — become `untraced` clauses, and a behavior with any `untraced` clause may not claim "read-only": the renderer shows **"no writes found · N calls unverified"**. Tracing weakness is allowed to make cards vaguer, never falsely confident — the fact-layer honesty discipline applied to tracing.
+
+Known v1 blind spots, accepted and surfaced as `untraced`: higher-order calls, decorator wrappers, package re-exports, methods on objects of unresolved type. The judgment-day reading measures **untraced density per card**; where unverified clauses cluster on behaviors the owner cares about, that names the next targeted tracer investment — instead of front-loading general call-graph work.
+
 Performance: the trace pass reuses the shared parse cache; v1 accepts an uncached full-repo trace per scan (kalakar-scale is fine). Fact-cache behavior is untouched; behavior caching is future work if it ever matters.
 
 ## Bundle clustering
@@ -95,6 +108,8 @@ The five hand-traced kalakar cards below are the golden target. The tracer is do
 3. **POST /api/v1/building-model/{job_id}/render** — requires `get_job_context`, `get_db`; gives `WorkspaceRenderResponse`; **writes** file (`.glb`) and `ProjectArtifact` (`db.commit`); reads `Project`.
 4. **GET /api/v1/building-model/{job_id}/elevation-view/{direction}** — requires `get_job_context`; read-only; gives `ElevationViewResponse`; fails 400 (invalid direction).
 5. **POST /api/v1/building-model/{job_id}/sheet-export** — requires `get_job_context`; read-only; gives PDF stream (no `response_model` — gives clause from `StreamingResponse`, heuristic layer); fails 400.
+
+Read-only wording in fixtures 2, 4, 5 follows the call-graph stance: the card claims "read-only" only if every call is traced or pattern-known; otherwise it must render "no writes found · N calls unverified". Either rendering passes the fixture — what fails it is a missing clause or a false "read-only" alongside untraced calls.
 
 Bundle assertion: routes 2–5 cluster into one bundle; route 1 does not join it.
 
