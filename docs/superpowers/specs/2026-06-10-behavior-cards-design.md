@@ -40,6 +40,8 @@ Illustrative composite — clauses drawn from the login and render behaviors to 
 
 `reads`/`writes` targets resolve to existing facts where possible (db_model, env_var, integration); otherwise they carry a plain name. The read-only vs side-effecting split (any `writes` present) is first-class — it is the clause a nervous owner needs most.
 
+Every `reads`/`writes` target carries a `substrate` field from a **closed taxonomy**: `db | file | net_out | queue | clock | config`. This is the system-level machine the clause touches — the analog of registers/RAM one level up (the door itself is the `net_in` resource). The taxonomy is deliberately small and fixed: substrate categories are universal across apps, which is what makes cards comparable between projects and lets later features (diff, checks) generalize. A target that fits no category is a spec bug, not a seventh category.
+
 ## Tracer
 
 A new scan phase after fact merge (it needs `ScanContext` parse trees, not just facts). Per route handler:
