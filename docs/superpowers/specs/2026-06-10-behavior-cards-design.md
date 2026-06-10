@@ -20,6 +20,26 @@ v1 scope: FastAPI routes only, dogfooded on kalakar. The verdict comes from read
 - **Bundle** — a cluster of behaviors sharing a **trunk**: the same dependency gates and shared first-call spine (e.g. kalakar's `get_job_context` → `_ensure_persisted_building_model`). The bundle is the ten-minute-read unit; expect ~a dozen for kalakar.
 - Behaviors and bundles **reference** facts; they never modify them. Facts stay pure atoms underneath.
 
+## The four constructs (v1 includes all, at stated confidence)
+
+The vocabulary has parts of speech: behaviors are the verbs, subjects are the nouns, authored→derived is the arrow, ceremonies and stock patterns are the laws (local and global).
+
+### Subject (noun) — high confidence
+
+The central thing a bundle is about. Recovery: the object returned by the bundle's trunk call and passed through its behaviors (kalakar: `ensure_building_model_document` → "building-model document"). Named from the loader/type name — code-recovered nouns only. The subject card states its life phases, derived from the verbs that touch it: **created** (by what), **edited** (under what protection), **viewed** (as what projections), **exported** (as what formats), plus history if present. Rendered at the top of its bundle.
+
+### Authored → derived (arrow) — high confidence
+
+The subject is authored (persisted, mutated). Read-only behaviors in the bundle that compute payloads from it produce **derived** data — recomputed each time, never written back. Recovery: a read-only behavior in a subject bundle whose return is built from the subject. Rendered on the subject card: `document → quantities, elevations, sheets (derived — recomputed, never edited directly)`. Built-in checkable rule (future check, not v1): derived data that starts being persisted as its own authority gets flagged.
+
+### Ceremony (local law) — highest confidence
+
+The app's own conventions, recovered from repetition: when ≥3 mutating behaviors in a bundle share the same set of helper steps around their mutation (kalakar: assert revision → mutate → persist → push undo snapshot), that shared set **is** the ceremony — nobody has to declare it. Recovery: per mutating behavior, collect the bundle-shared helper calls in its body (the depth-2 walk already visits them); the modal set across siblings is the ceremony; per-behavior adherence is reported. v1 matches on the *set* of steps; ordering checks come later. Rendered as a ceremony line on the bundle: `mutation ceremony: check revision · persist · save undo — followed by 33/33` (or naming the deviants). Deviation is information, not necessarily error — the lens reports, the owner judges.
+
+### Job (work that outlives a request) — low confidence, minimal in v1
+
+v1 does only this: a bundle whose doors share a job-style path parameter (`{job_id}` and the like) and whose subject is loaded per that id is annotated **job-scoped**, and the subject card says what the subject is created from (kalakar: "created from a render job"). No async tracing, no status modeling — that's later, if the annotation proves useful.
+
 ## Behavior schema
 
 Illustrative composite — clauses drawn from the login and render behaviors to show every field; a real behavior carries only its own:
@@ -93,7 +113,14 @@ Markdown (`varai map` gains a `## Behaviors` section above the kind sections; pl
 ```
 ## Behaviors (169 across 12 bundles)
 
-### building-model (111) — needs: get_job_context · shared: building-model document (file, per-job)
+### building-model (111) — job-scoped · needs: get_job_context
+
+  Subject: **building-model document** (file, per-job) — created from a render job ·
+  edited under revision protection · viewed as plan slices, elevations, quantities,
+  schedules · exported as GLB, PDF · has undo history
+  document → quantities, elevations, sheets, schedules (derived — recomputed, never edited directly)
+  mutation ceremony: check revision · persist · save undo — followed by 33/33
+
   GET  /api/v1/building-model/{job_id}/quantities    reads only · returns QuantityTakeoffResponse · fails with 409
   POST /api/v1/building-model/{job_id}/render        stores file (.glb) and db (ProjectArtifact) · returns WorkspaceRenderResponse
   ...
@@ -119,11 +146,19 @@ Read-only wording in fixtures 2, 4, 5 follows the call-graph stance: the card cl
 
 Bundle assertion: routes 2–5 cluster into one bundle; route 1 does not join it.
 
+Construct fixtures (kalakar, manual checklist):
+
+6. **Subject** — the building-model bundle's subject is identified as the building-model document (file medium, per-job), with phases: created from job, edited under revision protection, viewed as projections, exported as GLB/PDF, undo history present.
+7. **Derived** — quantities, elevation views, and sheet exports are marked derived from the document; none marked authored.
+8. **Ceremony** — the mutation ceremony (check revision, persist, save undo) is recovered from repetition alone, and the handlers in `dimensions.py` and `compound_walls.py` — which follow it by hand rather than via `apply_mutation` — are reported as adherent, not as deviations.
+9. **Job** — the building-model bundle is annotated job-scoped via `{job_id}`; the auth bundle is not.
+
 ## Testing
 
 - Unit: tracer pieces on synthetic FastAPI snippets — gates, takes/gives linking, each body-walk marker, depth limit, untraced emission, HTTPException collection.
 - Golden: a fixture FastAPI mini-app in `examples/` (or `test/fixtures/`) exercising every clause type → checked-in markdown. The kalakar acceptance fixtures run as a manual checklist (kalakar is not vendored into the test suite).
 - Clustering: unit tests on synthetic behavior sets for each rule and the singleton path.
+- Constructs: unit tests on synthetic bundles — subject identification from a trunk return, derived marking of read-only siblings, ceremony recovery from ≥3 repeated step sets plus one deviant correctly reported, job-scoped annotation from path params. Kalakar construct fixtures 6–9 run as the manual checklist.
 
 ## Out of scope (v1)
 
