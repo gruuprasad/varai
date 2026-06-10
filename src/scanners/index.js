@@ -17,6 +17,7 @@ import { buildPrefixMap } from "./router-prefix.js";
 import { dedupeFacts } from "./utils.js";
 import { createFactCache } from "./cache.js";
 import { selectBackend } from "./treesitter.js";
+import { traceBehaviors } from "./behaviors/index.js";
 
 // ROOT_MARKERS are always included in the file list even when an --include
 // filter is active — they describe the whole project, not one service subdir.
@@ -163,6 +164,16 @@ export async function scanRepo(repoPath, options = {}) {
   tagStock(merged, options.config ?? {});
   const finalFacts = sortFacts(merged);
 
+  let behaviors = { bundles: [] };
+  if (stacks.has("fastapi")) {
+    try {
+      const traced = await traceBehaviors(repoPath, files, ctx, finalFacts);
+      behaviors = { bundles: traced.bundles };
+    } catch (err) {
+      process.stderr.write(`varai: behavior trace failed (${err.message})\n`);
+    }
+  }
+
   // "base" is an internal always-on stack; don't surface it to the report.
   const displayStacks = [...stacks].filter((s) => s !== "base");
 
@@ -174,7 +185,7 @@ export async function scanRepo(repoPath, options = {}) {
     sectionCounts
   };
 
-  return { summary, stacks: displayStacks, files, facts: finalFacts };
+  return { summary, stacks: displayStacks, files, facts: finalFacts, behaviors };
 }
 
 async function extractFileAll(repoPath, file, ctx, activeExtractors, cache) {

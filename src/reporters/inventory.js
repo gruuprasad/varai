@@ -1,4 +1,5 @@
 import path from "node:path";
+import { appendBehaviorsSection } from "./behaviors-section.js";
 
 const COL = 42;
 
@@ -8,6 +9,8 @@ export function renderInventory({ repoPath, scan }) {
   lines.push(`# App Map — ${name}`, "");
 
   appendSummary(lines, scan);
+
+  appendBehaviorsSection(lines, scan.behaviors);
 
   appendStandardPatternsSection(lines, scan.facts);
 
