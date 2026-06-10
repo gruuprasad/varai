@@ -31,7 +31,7 @@ export function traceSignature(fnNode, decoratorText, file, factIndex) {
     }
   }
 
-  const rm = decoratorText.match(/response_model\s*=\s*([A-Za-z_]\w*)/);
+  const rm = decoratorText ? decoratorText.match(/response_model\s*=\s*([A-Za-z_]\w*)/) : null;
   if (rm && factIndex.schemaNames.has(rm[1])) {
     gives.push({ schema: rm[1], evidence: { file, line: line(fnNode) }, layer: "ast" });
   } else {
@@ -49,8 +49,9 @@ export function traceSignature(fnNode, decoratorText, file, factIndex) {
     }
   }
 
-  // config: env-var identifiers referenced anywhere in the function.
-  const seen = new Set();
+  // config: env-var identifiers referenced anywhere in the function body.
+  // Skip names already emitted as dependency gates to avoid duplicate requires entries.
+  const seen = new Set(requires.map((r) => r.name));
   for (const id of fnNode.descendantsOfType("identifier")) {
     if (factIndex.envNames.has(id.text) && !seen.has(id.text)) {
       seen.add(id.text);
