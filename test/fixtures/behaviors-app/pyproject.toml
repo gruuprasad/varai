@@ -1,0 +1,4 @@
+[project]
+name = "behaviors-app"
+version = "0.0.0"
+dependencies = ["fastapi", "sqlalchemy"]
