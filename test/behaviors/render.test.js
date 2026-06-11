@@ -27,3 +27,27 @@ test("renders bundle header, subject, ceremony, and plain-word behavior lines", 
   assert.ok(out.includes("reads only"));
   assert.ok(out.includes("stores file") && out.includes("db (ProjectArtifact)"));
 });
+
+test("byMedium deduplicates repeated targets", () => {
+  const b = {
+    door: { method: "GET", path: "/api/v1/things" },
+    requires: [],
+    takes: [],
+    gives: [],
+    reads: [
+      { target: "User", medium: "db" },
+      { target: "User", medium: "db" },
+      { target: "Project", medium: "db" },
+    ],
+    writes: [],
+    fails: [],
+    untraced: [],
+  };
+  const lines = [];
+  appendBehaviorsSection(lines, {
+    bundles: [{ name: "things", behaviors: [b], jobScoped: false }],
+  });
+  const row = lines.find((l) => l.includes("GET"));
+  assert.ok(row.includes("reads db (User, Project)"), `got: ${row}`);
+  assert.ok(!row.includes("User, User"), "no duplicate targets");
+});

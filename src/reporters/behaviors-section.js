@@ -68,8 +68,8 @@ function renderBehavior(b) {
 function byMedium(clauses) {
   const m = new Map();
   for (const c of clauses) {
-    if (!m.has(c.medium)) m.set(c.medium, []);
-    if (c.target && c.target !== "file") m.get(c.medium).push(c.target);
+    if (!m.has(c.medium)) m.set(c.medium, new Set());
+    if (c.target && c.target !== "file") m.get(c.medium).add(c.target);
   }
-  return [...m.entries()];
+  return [...m.entries()].map(([med, targets]) => [med, [...targets]]);
 }
