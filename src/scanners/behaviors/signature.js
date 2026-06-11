@@ -16,9 +16,14 @@ export function traceSignature(fnNode, decoratorText, file, factIndex) {
       const valueNode = p.childForFieldName("value");
       const typeText = typeNode ? typeNode.text : "";
 
-      if (valueNode && DEPENDS_RE.test(valueNode.text)) {
+      const valueText = valueNode ? valueNode.text : "";
+      const depsText = DEPENDS_RE.test(valueText)
+        ? valueText
+        : DEPENDS_RE.test(typeText) ? typeText : null;
+
+      if (depsText) {
         requires.push({
-          name: valueNode.text.match(DEPENDS_RE)[1],
+          name: depsText.match(DEPENDS_RE)[1],
           kind: "dependency",
           evidence: { file, line: line(p) },
           layer: "ast",

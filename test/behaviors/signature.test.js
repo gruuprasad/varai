@@ -33,3 +33,20 @@ test("traceSignature extracts gates, request schema, response_model, and config"
   assert.ok(out.takes.some((t) => t.schema === "LoginRequest"));
   assert.ok(out.gives.some((g) => g.schema === "LoginResponse"));
 });
+
+test("Annotated[T, Depends(fn)] style gate is detected", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-sig-ann-"));
+  await writeFile(join(dir, "bm.py"), `from typing import Annotated
+def get_quantities(ctx: Annotated[JobContext, Depends(get_job_context)]):
+    return {}
+`);
+  const fn = await firstFn(dir, "bm.py");
+  const factIndex = { schemaNames: new Set(), modelNames: new Set(), envNames: new Set() };
+
+  const out = traceSignature(fn, null, "bm.py", factIndex);
+
+  assert.ok(
+    out.requires.some((r) => r.name === "get_job_context" && r.kind === "dependency"),
+    "Annotated-style Depends gate detected"
+  );
+});
