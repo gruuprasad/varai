@@ -29,14 +29,25 @@ async function walk(fnNode, file, ctx, resolver, factIndex, acc, depth, seen) {
 
     if (callee.type === "attribute") {
       const method = callee.childForFieldName("attribute").text;
-      const receiver = callee.childForFieldName("object").text;
-      if (method === "query" || method === "delete") {
+      const receiver = callee.childForFieldName("object");
+      const receiverText = receiver.text;
+
+      if (method === "query") {
         const arg = firstArgIdent(call);
-        const target = arg && factIndex.modelNames.has(arg) ? arg : receiver;
-        const bucket = method === "delete" ? acc.writes : acc.reads;
-        bucket.push({ target, kind: "db_model", medium: "db", via: `${receiver}.${method}`, evidence: { file, line }, layer: "semantic" });
+        const target = arg && factIndex.modelNames.has(arg) ? arg : receiverText;
+        acc.reads.push({ target, kind: "db_model", medium: "db", via: `${receiverText}.query`, evidence: { file, line }, layer: "semantic" });
+      } else if (method === "delete") {
+        // May be direct db.delete(X) or chained db.query(X).filter(...).delete()
+        const target = receiver.type === "identifier"
+          ? (firstArgIdent(call) || null)
+          : extractChainedQueryTarget(receiver, factIndex.modelNames);
+        acc.writes.push({ target, kind: "db_model", medium: "db", via: `${receiverText}.delete`, evidence: { file, line }, layer: "semantic" });
       } else if (method === "add" || method === "commit" || method === "refresh") {
-        acc.writes.push({ target: receiver, kind: "db_model", medium: "db", via: `${receiver}.${method}`, evidence: { file, line }, layer: "semantic" });
+        // Only recognize session-like direct identifiers (db, session).
+        // Chained expressions like artifact_map.setdefault(...).add() are not DB writes.
+        if (receiver.type !== "identifier") { continue; }
+        const target = method === "add" ? firstArgModel(call, factIndex.modelNames) : null;
+        acc.writes.push({ target, kind: "db_model", medium: "db", via: `${receiverText}.${method}`, evidence: { file, line }, layer: "semantic" });
       }
       continue;
     }
@@ -70,5 +81,36 @@ function firstArgIdent(call) {
   const args = call.childForFieldName("arguments");
   if (!args) return null;
   for (const a of args.namedChildren) if (a.type === "identifier") return a.text;
+  return null;
+}
+
+function firstArgModel(callNode, modelNames) {
+  const args = callNode.childForFieldName("arguments");
+  if (!args) return null;
+  const first = args.namedChildren[0];
+  if (!first) return null;
+  if (first.type === "identifier" && modelNames.has(first.text)) return first.text;
+  if (first.type === "call") {
+    const callee = first.childForFieldName("function");
+    const nm = callee ? callee.text : "";
+    if (modelNames.has(nm)) return nm;
+  }
+  return null;
+}
+
+function extractChainedQueryTarget(node, modelNames) {
+  // Walk a chained expression like db.query(X).filter(...) to find X.
+  if (!node) return null;
+  if (node.type === "call") {
+    const callee = node.childForFieldName("function");
+    if (callee && callee.type === "attribute") {
+      const method = callee.childForFieldName("attribute").text;
+      if (method === "query") return firstArgIdent(node);
+      return extractChainedQueryTarget(callee.childForFieldName("object"), modelNames);
+    }
+  }
+  if (node.type === "attribute") {
+    return extractChainedQueryTarget(node.childForFieldName("object"), modelNames);
+  }
   return null;
 }
