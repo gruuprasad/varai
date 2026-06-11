@@ -45,5 +45,7 @@ function urlPrefix(p) {
   let i = 0;
   if (segs[i] === "api") i++;
   if (segs[i] && /^v\d+$/.test(segs[i])) i++;
+  // Skip path-param placeholders so a bundle is never named after "{job_id}".
+  while (segs[i] && /^\{.*\}$/.test(segs[i])) i++;
   return (segs[i] || "root").replace(/_/g, "-");
 }

@@ -16,6 +16,9 @@ export function _deriveDerived(bundle) {
   for (const b of bundle.behaviors) {
     if (b.writes.length > 0) continue;
     for (const g of b.gives) {
+      // Skip heuristic gives (e.g. a returned StreamingResponse) — those name a
+      // transport, not a projection of the subject.
+      if (g.layer === "heuristic") continue;
       const short = g.schema.replace(/(Response|View)$/i, "").toLowerCase();
       if (short) names.add(short);
     }

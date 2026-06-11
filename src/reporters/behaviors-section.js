@@ -44,7 +44,10 @@ function renderBehavior(b) {
   const parts = [];
 
   const readonly = b.writes.length === 0;
-  if (readonly) parts.push(b.untraced.length ? `no writes found · ${b.untraced.length} calls unverified` : "reads only");
+  if (readonly) {
+    const n = b.untraced.length;
+    parts.push(n ? `no writes found · ${n} ${n === 1 ? "call" : "calls"} unverified` : "reads only");
+  }
 
   if (b.takes.length) parts.push(`takes ${b.takes.map((t) => t.schema).join(", ")}`);
   if (b.gives.length) parts.push(`returns ${b.gives.map((g) => g.schema).join(", ")}`);
