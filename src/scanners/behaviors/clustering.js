@@ -36,16 +36,43 @@ export function clusterBundles(behaviors) {
     bundles.push({ name: "Other", behaviors: others });
   }
 
+  // Disambiguate duplicate names using a deeper URL path segment.
+  const nameCounts = new Map();
+  for (const b of bundles) nameCounts.set(b.name, (nameCounts.get(b.name) || 0) + 1);
+  for (const b of bundles) {
+    if ((nameCounts.get(b.name) || 0) > 1) {
+      const longer = urlPrefix(b.behaviors[0].door.path, 2);
+      if (longer !== b.name) {
+        b.name = longer;
+        for (const beh of b.behaviors) beh.bundle = b.name;
+      }
+    }
+  }
+  // Final pass: number any remaining duplicates.
+  const seen = new Map();
+  for (const b of bundles) {
+    const n = seen.get(b.name) || 0;
+    if (n > 0) {
+      b.name = `${b.name}-${n + 1}`;
+      for (const beh of b.behaviors) beh.bundle = b.name;
+    }
+    seen.set(b.name, (n || 0) + 1);
+  }
+
   bundles.sort((a, b) => b.behaviors.length - a.behaviors.length);
   return bundles;
 }
 
-function urlPrefix(p) {
+function urlPrefix(p, depth = 1) {
   const segs = p.split("/").filter(Boolean);
   let i = 0;
   if (segs[i] === "api") i++;
   if (segs[i] && /^v\d+$/.test(segs[i])) i++;
-  // Skip path-param placeholders so a bundle is never named after "{job_id}".
-  while (segs[i] && /^\{.*\}$/.test(segs[i])) i++;
-  return (segs[i] || "root").replace(/_/g, "-");
+  const parts = [];
+  while (parts.length < depth) {
+    while (segs[i] && /^\{.*\}$/.test(segs[i])) i++;
+    if (!segs[i]) break;
+    parts.push(segs[i++].replace(/_/g, "-"));
+  }
+  return parts.join("/") || "root";
 }
