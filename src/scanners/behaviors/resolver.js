@@ -4,6 +4,15 @@ import { queryTree } from "../treesitter.js";
 // Resolve a called name to a same-repo top-level function_definition node.
 // v1: local definitions, then direct `from <mod> import <name>` imports. No
 // re-export chains, no dynamic dispatch (spec call-graph stance).
+function normalizeImports(content) {
+  // Join multi-line parenthesized imports onto one line so the
+  // line-by-line parser sees: "from x import a, b, c"
+  return content.replace(
+    /^(\s*from\s+[\w.]+\s+import\s*)\(([^)]*)\)/gms,
+    (_, prefix, names) => prefix + names.replace(/\s+/g, " ").trim()
+  );
+}
+
 export function createResolver(files, ctx) {
   const fileSet = new Set(files.filter((f) => f.endsWith(".py")));
   const modToFile = buildModuleMap(fileSet);
@@ -27,7 +36,8 @@ export function createResolver(files, ctx) {
   async function importsIn(file) {
     if (importCache.has(file)) return importCache.get(file);
     const map = new Map();
-    const content = await ctx.read(file);
+    const raw = await ctx.read(file);
+    const content = raw ? normalizeImports(raw) : "";
     if (content) {
       for (const line of content.split("\n")) {
         const m = line.match(/^\s*from\s+(\.?[\w.]+)\s+import\s+(.+)$/);

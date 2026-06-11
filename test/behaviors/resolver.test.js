@@ -24,3 +24,27 @@ test("resolveFunction finds local and imported same-repo functions", async () =>
 
   assert.equal(await resolver.resolveFunction("pkg/routes.py", "nonexistent"), null);
 });
+
+test("resolveFunction handles multi-line parenthesized imports", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-resolver-ml-"));
+  await mkdir(join(dir, "pkg"), { recursive: true });
+  await writeFile(join(dir, "pkg/common.py"), `def _ensure_doc(ctx):\n    pass\ndef _assert_rev(ctx):\n    pass\n`);
+  await writeFile(join(dir, "pkg/routes.py"), `from pkg.common import (
+    _ensure_doc,
+    _assert_rev,
+)
+
+def handler(ctx):
+    doc = _ensure_doc(ctx)
+    _assert_rev(doc)
+`);
+  const ctx = createScanContext(dir);
+  const resolver = createResolver(["pkg/common.py", "pkg/routes.py"], ctx);
+
+  const ensureDoc = await resolver.resolveFunction("pkg/routes.py", "_ensure_doc");
+  assert.ok(ensureDoc, "_ensure_doc resolved through multi-line import");
+  assert.equal(ensureDoc.node.childForFieldName("name").text, "_ensure_doc");
+
+  const assertRev = await resolver.resolveFunction("pkg/routes.py", "_assert_rev");
+  assert.ok(assertRev, "_assert_rev resolved through multi-line import");
+});
