@@ -18,3 +18,21 @@ test("ceremony recovered from >=3 mutating members; deviant reported", () => {
   assert.equal(bundle.ceremony.followed, 3);
   assert.equal(bundle.ceremony.total, 4);
 });
+
+test("ceremony not derived when only 1 step is shared", async () => {
+  const mk = (writes, helpers) => ({
+    door: { method: "POST", path: "/api/v1/things/x", evidence: { file: "r.py", line: 1 } },
+    trunkCall: null, requires: [], reads: [], writes, gives: [], takes: [], fails: [], untraced: [],
+    helperCalls: helpers, bundle: "things"
+  });
+  const bundle = {
+    name: "things",
+    behaviors: [
+      mk([{ medium: "file" }], ["persist_document"]),
+      mk([{ medium: "file" }], ["persist_document"]),
+      mk([{ medium: "file" }], ["persist_document"]),
+    ],
+  };
+  _deriveCeremony(bundle);
+  assert.equal(bundle.ceremony, undefined, "single-step shared helper is not a ceremony");
+});

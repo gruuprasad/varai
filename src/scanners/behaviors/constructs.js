@@ -1,6 +1,14 @@
 import { queryTree } from "../treesitter.js";
 
-const VERB_TOKENS = new Set(["ensure", "get", "load", "fetch", "build", "persist", "persisted", "resolve", "require"]);
+const VERB_TOKENS = new Set([
+  "ensure", "get", "load", "fetch", "build", "persist", "persisted",
+  "resolve", "require", "parse", "create", "make", "handle", "process",
+]);
+const SUBJECT_VERBS_RE = /^(get|load|fetch|ensure|find|build)_/i;
+const GENERIC_VARS = new Set([
+  "result", "data", "response", "obj", "item", "value",
+  "file_path", "filepath", "path", "output",
+]);
 const ID_PARAM_RE = /\{(\w*_id|job_id)\}/;
 
 export async function deriveConstructs(bundle, ctx, resolver) {
@@ -42,14 +50,20 @@ async function deriveSubject(bundle, ctx, resolver) {
   const trunk = bundle.behaviors[0]?.trunkCall;
   if (!trunk || !bundle.behaviors.every((b) => b.trunkCall === trunk)) return;
 
+  // Only derive subject when the trunk function clearly loads/retrieves data.
+  if (!SUBJECT_VERBS_RE.test(trunk.replace(/^_+/, ""))) return;
+
   const tokens = trunk.replace(/^_+/, "").split("_");
   while (tokens.length && VERB_TOKENS.has(tokens[0].toLowerCase())) tokens.shift();
   let label = tokens.join("-");
+  if (label.includes("-or-")) return; // exception-helper pattern (e.g. project-or-404)
 
   const file = bundle.behaviors[0].door.evidence.file;
   const resolved = await resolver.resolveFunction(file, trunk);
   const returnVar = resolved ? returnIdentifier(resolved.node) : null;
-  if (returnVar && !label.includes(returnVar)) label = `${label} ${returnVar}`;
+  if (returnVar && !label.includes(returnVar) && !GENERIC_VARS.has(returnVar)) {
+    label = `${label} ${returnVar}`;
+  }
 
   const mediums = new Set();
   for (const b of bundle.behaviors) for (const w of b.writes) mediums.add(w.medium);
@@ -86,7 +100,7 @@ export function _deriveCeremony(bundle) {
     .filter(([, c]) => c >= threshold)
     .map(([l]) => l)
     .sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99));
-  if (steps.length === 0) return;
+  if (steps.length < 2) return;
 
   let followed = 0;
   const deviants = [];
