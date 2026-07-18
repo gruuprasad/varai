@@ -1,8 +1,10 @@
+import { CLAUSE_KINDS } from "../ir/behavior-schema.js";
+
 function values(ir, collection) {
   if (collection === "clauses") {
     return ir.behaviors.flatMap((behavior) =>
-      ["requires", "takes", "gives", "reads", "writes", "fails", "untraced"]
-        .flatMap((kind) => behavior[kind].map((clause) => ({ ...clause, clauseKind: kind, behavior }))));
+      CLAUSE_KINDS
+        .flatMap((kind) => (behavior[kind] ?? []).map((clause) => ({ ...clause, clauseKind: kind, behavior }))));
   }
   return ir[collection] ?? [];
 }

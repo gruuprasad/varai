@@ -2,7 +2,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, readFile, rename } from "node:fs/promises";
 
-export const EXTRACTOR_VERSION = 3; // unified extractor registry and cache fingerprint
+export const EXTRACTOR_VERSION = 4; // frontend interaction behavior extraction
 
 const CACHE_FORMAT_VERSION = 1;
 

@@ -39,3 +39,18 @@ test("duplicate semantic clauses merge evidence deterministically", () => {
   assert.equal(left.behaviors[0].requires.length, 1);
   assert.equal(left.behaviors[0].requires[0].evidence.length, 2);
 });
+
+test("UI action identity ignores guard changes but separates source files", () => {
+  const behavior = (source, guards = []) => ({
+    door: { kind: "ui_action", source, component: "Modal", event: "click", action: "onClose", evidence: { file: source, line: 1 } },
+    bundle: null, requires: [], takes: [], gives: [], reads: [], writes: [], fails: [], untraced: [], guards,
+    helperCalls: [], trunkCall: null,
+  });
+  const a = createAnalysisIR({ scanContext: context, facts: [], behaviors: [behavior("a.tsx")] });
+  const guarded = createAnalysisIR({ scanContext: context, facts: [], behaviors: [behavior("a.tsx", [
+    { kind: "disabled_when", condition: "loading", evidence: { file: "a.tsx", line: 2 }, layer: "ast" },
+  ])] });
+  const other = createAnalysisIR({ scanContext: context, facts: [], behaviors: [behavior("b.tsx")] });
+  assert.equal(a.behaviors[0].id, guarded.behaviors[0].id);
+  assert.notEqual(a.behaviors[0].id, other.behaviors[0].id);
+});

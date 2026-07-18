@@ -24,6 +24,9 @@ export function factIdentity(fact) {
 }
 
 export function behaviorIdentity(behavior) {
+  if (behavior.door?.kind === "ui_action") {
+    return ["ui_action", normalizePath(behavior.door.source), behavior.door.component, behavior.door.event, behavior.door.action];
+  }
   return ["http", String(behavior.door?.method ?? "").toUpperCase(), normalizePath(behavior.door?.path)];
 }
 
@@ -35,6 +38,7 @@ export function clausePayload(kind, clause) {
   }
   if (kind === "fails") return { status: clause.status ?? null, reason: clause.reason ?? null };
   if (kind === "untraced") return { call: clause.call ?? null, reason: clause.reason ?? null };
+  if (kind === "guards") return { kind: clause.kind ?? "unknown", condition: clause.condition ?? null };
   return { ...clause, evidence: undefined, id: undefined };
 }
 

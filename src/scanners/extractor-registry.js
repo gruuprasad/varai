@@ -10,7 +10,7 @@ import { extract as extractSchema } from "./extractors/schema.js";
 export const EXTRACTOR_REGISTRY = Object.freeze([
   { id: "fastapi.routes.v1", stack: "fastapi", extract: extractFastapi },
   { id: "sqlalchemy.models.v1", stack: "sqlalchemy", extract: extractSqlalchemy },
-  { id: "react-vite.ui.v1", stack: "react-vite", extract: extractReactVite },
+  { id: "react-vite.ui.v2", stack: "react-vite", extract: extractReactVite },
   { id: "python.common.v1", stack: "python-common", extract: extractPythonCommon },
   { id: "python.schemas.v1", stack: "python-common", extract: extractSchema },
   { id: "npm.packages.v1", stack: "npm", extract: extractNpm },

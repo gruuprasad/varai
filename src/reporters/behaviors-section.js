@@ -1,9 +1,13 @@
 export function appendBehaviorsSection(lines, result) {
   const bundles = result?.bundles ?? [];
-  if (bundles.length === 0) return;
+  const frontend = result?.frontend ?? [];
+  if (bundles.length === 0 && frontend.length === 0) return;
   const total = bundles.reduce((n, b) => n + b.behaviors.length, 0);
 
-  lines.push(`## Behaviors (${total} across ${bundles.length} bundles)`, "");
+  const countLabel = frontend.length
+    ? `${total + frontend.length}`
+    : `${total} across ${bundles.length} bundles`;
+  lines.push(`## Behaviors (${countLabel})`, "");
 
   for (const bundle of bundles) {
     const gates = sharedGates(bundle);
@@ -28,6 +32,15 @@ export function appendBehaviorsSection(lines, result) {
     if (bundle.subject || bundle.ceremony) lines.push("");
 
     for (const b of bundle.behaviors) lines.push(`  ${renderBehavior(b)}`);
+    lines.push("");
+  }
+  if (frontend.length) {
+    lines.push(`### Frontend interactions (${frontend.length})`, "");
+    for (const behavior of frontend) {
+      const action = behavior.door.action === "onClose" ? "dismissal" : behavior.door.action;
+      const guards = behavior.guards.map((guard) => guard.kind === "disabled_when" ? `disabled when ${guard.condition}` : guard.kind);
+      lines.push(`  ${behavior.door.component} ${action}${guards.length ? ` — ${guards.join(" · ")}` : ""}`);
+    }
     lines.push("");
   }
 }

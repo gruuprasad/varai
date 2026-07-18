@@ -1,4 +1,4 @@
-const CLAUSE_KINDS = ["requires", "takes", "gives", "reads", "writes", "fails", "untraced"];
+import { CLAUSE_KINDS } from "../ir/behavior-schema.js";
 
 function byId(items) { return new Map(items.map((item) => [item.id, item])); }
 function evidenceKey(value) { return JSON.stringify(value ?? []); }

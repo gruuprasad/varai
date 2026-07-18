@@ -1,15 +1,8 @@
+import { clauseLabel, doorLabel } from "../ir/behavior-schema.js";
+
 function evidence(value) {
   const list = value?.evidence ?? [];
   return list.map((ev) => `${ev.file}${ev.line ? `:${ev.line}` : ""}`).join(", ") || "no evidence";
-}
-
-function clauseLabel(kind, clause) {
-  if (kind === "requires") return `needs ${clause.name}`;
-  if (kind === "takes" || kind === "gives") return `${kind} ${clause.schema ?? clause.name ?? "unknown"}`;
-  if (kind === "reads" || kind === "writes") return `${kind} ${clause.medium}:${clause.target ?? clause.detail ?? "unknown"}`;
-  if (kind === "fails") return `fails ${clause.status ?? clause.reason ?? "unknown"}`;
-  if (kind === "untraced") return `untraced ${clause.call}`;
-  return kind;
 }
 
 export function renderSemanticDiff(diff, context = {}) {
@@ -25,10 +18,10 @@ export function renderSemanticDiff(diff, context = {}) {
     return lines.join("\n");
   }
   lines.push(`Behaviors: +${diff.summary.behaviorsAdded} -${diff.summary.behaviorsRemoved} ~${diff.summary.behaviorsChanged}`, "");
-  for (const behavior of diff.behaviors.added) lines.push(`## + ${behavior.door.method} ${behavior.door.path}`, "", `Evidence: ${evidence(behavior.door)}`, "");
-  for (const behavior of diff.behaviors.removed) lines.push(`## - ${behavior.door.method} ${behavior.door.path}`, "", `Evidence: ${evidence(behavior.door)}`, "");
+  for (const behavior of diff.behaviors.added) lines.push(`## + ${doorLabel(behavior.door)}`, "", `Evidence: ${evidence(behavior.door)}`, "");
+  for (const behavior of diff.behaviors.removed) lines.push(`## - ${doorLabel(behavior.door)}`, "", `Evidence: ${evidence(behavior.door)}`, "");
   for (const behavior of diff.behaviors.changed) {
-    lines.push(`## ~ ${behavior.door.method} ${behavior.door.path}`, "");
+    lines.push(`## ~ ${doorLabel(behavior.door)}`, "");
     const rank = { "claim-state": 0, added: 1, removed: 2 };
     for (const change of [...behavior.clauses].sort((a, b) => rank[a.change] - rank[b.change])) {
       if (change.change === "claim-state") {
@@ -76,7 +69,7 @@ export function renderSemanticDiff(diff, context = {}) {
 function renderEvidenceChanges(lines, diff) {
   lines.push("## Evidence movement", "");
   for (const behavior of diff.behaviors.evidenceChanged) {
-    lines.push(`### ${behavior.door.method} ${behavior.door.path}`, "");
+    lines.push(`### ${doorLabel(behavior.door)}`, "");
     for (const change of behavior.changes) {
       lines.push(`- ${change.kind}: ${evidence(change.before)} -> ${evidence(change.after)}`);
     }

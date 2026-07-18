@@ -282,7 +282,13 @@ function diffClause(kind, clause) {
   if (kind === "takes" || kind === "gives") return `${kind} ${esc(clause.schema ?? clause.name ?? "unknown")}`;
   if (kind === "reads" || kind === "writes") return `${kind} ${esc(clause.medium)}:${esc(clause.target ?? clause.detail ?? "unknown")}`;
   if (kind === "fails") return `fails ${esc(clause.status ?? clause.reason ?? "unknown")}`;
+  if (kind === "guards" && clause.kind === "disabled_when") return `disabled when ${esc(clause.condition)}`;
   return `${kind} ${esc(clause.call ?? "")}`;
+}
+
+function diffDoor(door) {
+  if (door.kind === "ui_action") return `${esc(door.component)} ${esc(door.action === "onClose" ? "dismissal" : door.action)}`;
+  return `${esc(door.method)} ${esc(door.path)}`;
 }
 
 function renderSemanticDiff() {
@@ -302,13 +308,13 @@ function renderSemanticDiff() {
   }
   let html = `<div class="diff-summary"><strong>Semantic progression</strong><span>+${diff.summary.behaviorsAdded} −${diff.summary.behaviorsRemoved} ~${diff.summary.behaviorsChanged} behaviors</span></div>`;
   for (const behavior of diff.behaviors.added) {
-    html += `<article class="diff-card added"><h3>+ ${esc(behavior.door.method)} ${esc(behavior.door.path)}</h3><p>${diffEvidence(behavior.door)}</p></article>`;
+    html += `<article class="diff-card added"><h3>+ ${diffDoor(behavior.door)}</h3><p>${diffEvidence(behavior.door)}</p></article>`;
   }
   for (const behavior of diff.behaviors.removed) {
-    html += `<article class="diff-card removed"><h3>− ${esc(behavior.door.method)} ${esc(behavior.door.path)}</h3><p>${diffEvidence(behavior.door)}</p></article>`;
+    html += `<article class="diff-card removed"><h3>− ${diffDoor(behavior.door)}</h3><p>${diffEvidence(behavior.door)}</p></article>`;
   }
   for (const behavior of diff.behaviors.changed) {
-    html += `<article class="diff-card changed"><h3>~ ${esc(behavior.door.method)} ${esc(behavior.door.path)}</h3><ul>`;
+    html += `<article class="diff-card changed"><h3>~ ${diffDoor(behavior.door)}</h3><ul>`;
     for (const change of behavior.clauses) {
       if (change.change === "claim-state") html += `<li class="risk">! ${diffClause(change.kind, change.after)}: ${esc(change.before.claimState)} → ${esc(change.after.claimState)}</li>`;
       else html += `<li>${change.change === "added" ? "+" : "−"} ${diffClause(change.kind, change.clause)} <small>${diffEvidence(change.clause)}</small></li>`;

@@ -16,3 +16,12 @@ test("serial and worker scans produce equivalent facts and behaviors", { timeout
   assert.equal(canonicalView(worker), canonicalView(serial));
   assert.ok(worker.facts.some((fact) => fact.kind === "schema"));
 });
+
+test("frontend interactions are identical in serial and worker scans", { timeout: 30_000 }, async () => {
+  const frontend = path.resolve("test/fixtures/frontend-interaction/after");
+  const common = { cache: false, parser: "native" };
+  const serial = await scanRepo(frontend, { ...common, jobs: 1 });
+  const worker = await scanRepo(frontend, { ...common, jobs: 4 });
+  assert.equal(JSON.stringify(worker.analysis), JSON.stringify(serial.analysis));
+  assert.equal(serial.analysis.behaviors.filter((item) => item.door.kind === "ui_action").length, 1);
+});

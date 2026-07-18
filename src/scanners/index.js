@@ -12,9 +12,10 @@ import { dedupeFacts } from "./utils.js";
 import { createFactCache } from "./cache.js";
 import { selectBackend } from "./treesitter.js";
 import { traceBehaviors } from "./behaviors/index.js";
+import { traceFrontendInteractions } from "./frontend/interactions.js";
 import { createAnalysisIR } from "../ir/canonicalize.js";
 import { validateAnalysisIR } from "../ir/validate.js";
-import { stableId } from "../ir/identity.js";
+import { behaviorIdentity, stableId } from "../ir/identity.js";
 
 // ROOT_MARKERS are always included in the file list even when an --include
 // filter is active — they describe the whole project, not one service subdir.
@@ -153,6 +154,7 @@ export async function scanRepo(repoPath, options = {}) {
 
   const diagnostics = [];
   let behaviors = { bundles: [] };
+  let frontendBehaviors = [];
   if (stacks.has("fastapi")) {
     try {
       const traced = await traceBehaviors(repoPath, files, ctx, finalFacts);
@@ -160,6 +162,18 @@ export async function scanRepo(repoPath, options = {}) {
     } catch (err) {
       diagnostics.push({
         code: "behavior-trace-failed",
+        severity: "error",
+        message: err.message,
+        claimState: "unverified",
+      });
+    }
+  }
+  if (stacks.has("react-vite")) {
+    try {
+      frontendBehaviors = await traceFrontendInteractions(files, ctx);
+    } catch (err) {
+      diagnostics.push({
+        code: "frontend-behavior-trace-failed",
         severity: "error",
         message: err.message,
         claimState: "unverified",
@@ -178,7 +192,7 @@ export async function scanRepo(repoPath, options = {}) {
     sectionCounts
   };
 
-  const flatBehaviors = behaviors.bundles.flatMap((bundle) => bundle.behaviors);
+  const flatBehaviors = [...behaviors.bundles.flatMap((bundle) => bundle.behaviors), ...frontendBehaviors];
   const patternInstances = [...stock.instances.entries()].map(([name, members]) => ({
     id: stableId("pattern", name),
     name,
@@ -198,11 +212,11 @@ export async function scanRepo(repoPath, options = {}) {
     behaviors: flatBehaviors,
     bundleViews: behaviors.bundles.map((bundle) => ({
       ...bundle,
-      behaviors: bundle.behaviors.map((behavior) => stableId("behavior", ["http", behavior.door.method, behavior.door.path])),
+      behaviors: bundle.behaviors.map((behavior) => stableId("behavior", behaviorIdentity(behavior))),
     })),
     diagnostics,
   }));
-  return { summary, stacks: displayStacks, files, facts: finalFacts, behaviors, diagnostics, analysis };
+  return { summary, stacks: displayStacks, files, facts: finalFacts, behaviors: { ...behaviors, frontend: frontendBehaviors }, diagnostics, analysis };
 }
 
 function factIdentityForScan(fact) {

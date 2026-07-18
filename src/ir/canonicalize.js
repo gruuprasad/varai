@@ -1,5 +1,6 @@
 import { ANALYSIS_SCHEMA_VERSION, ANALYZER_VERSION } from "./version.js";
 import { behaviorIdentity, clauseIdentity, factIdentity, stableId, stateIdentity } from "./identity.js";
+import { CLAUSE_KINDS } from "./behavior-schema.js";
 
 function compareJson(a, b) {
   return JSON.stringify(a).localeCompare(JSON.stringify(b));
@@ -67,7 +68,7 @@ function normalizeBehavior(behavior) {
     id: stableId("behavior", behaviorIdentity(behavior)),
     door: { ...behavior.door, evidence: evidenceList(behavior.door?.evidence) },
   };
-  for (const kind of ["requires", "takes", "gives", "reads", "writes", "fails", "untraced"]) {
+  for (const kind of CLAUSE_KINDS) {
     normalized[kind] = normalizeClauses(kind, behavior[kind] ?? []);
   }
   return canonicalizeValue(normalized);
