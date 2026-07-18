@@ -1,6 +1,8 @@
 # ADR 0001: Local-First Evidence Report
 
-Status: Accepted
+Status: Partially superseded by ADR 0004
+
+ADR 0004 supersedes the intent-file evidence-report product shape. The local-first, evidence-backed, uncertainty-aware constraints remain accepted.
 
 ## Context
 

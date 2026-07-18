@@ -23,5 +23,6 @@ test("frontend interactions are identical in serial and worker scans", { timeout
   const serial = await scanRepo(frontend, { ...common, jobs: 1 });
   const worker = await scanRepo(frontend, { ...common, jobs: 4 });
   assert.equal(JSON.stringify(worker.analysis), JSON.stringify(serial.analysis));
+  assert.equal(JSON.stringify(worker.systemModel), JSON.stringify(serial.systemModel));
   assert.equal(serial.analysis.behaviors.filter((item) => item.door.kind === "ui_action").length, 1);
 });

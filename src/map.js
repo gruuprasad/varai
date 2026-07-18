@@ -1,6 +1,6 @@
 import path from "node:path";
 import { scanRepo } from "./scanners/index.js";
-import { renderInventory } from "./reporters/inventory.js";
+import { renderSystemModel } from "./reporters/system-model-markdown.js";
 import { loadRepoConfig } from "./scanners/config.js";
 
 export async function runMap(options = {}) {
@@ -13,7 +13,7 @@ export async function runMap(options = {}) {
   if (options.jobs !== undefined) scanOptions.jobs = options.jobs;
   if (options.parser !== undefined) scanOptions.parser = options.parser;
   const scan = await scanRepo(repoPath, scanOptions);
-  const report = renderInventory({ repoPath, scan });
+  const report = renderSystemModel({ model: scan.systemModel });
   process.stdout.write(report);
   return { repoPath, scan };
 }

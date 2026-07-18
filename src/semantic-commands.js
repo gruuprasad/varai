@@ -9,7 +9,7 @@ import { readGitState } from "./snapshots/git-state.js";
 export async function runSnapshot(options = {}) {
   const repoPath = path.resolve(options.repo ?? ".");
   const { manifest } = await createSnapshot(repoPath, options);
-  process.stdout.write(`Created semantic snapshot ${manifest.id}\nObject ${manifest.semanticObjectHash}\nGit ${manifest.git.head}${manifest.git.clean ? " (clean)" : " (dirty)"}\n`);
+  process.stdout.write(`Created semantic snapshot ${manifest.id}\nAnalysis object ${manifest.semanticObjectHash}\nSystem Model object ${manifest.systemModelObjectHash}\nGit ${manifest.git.head}${manifest.git.clean ? " (clean)" : " (dirty)"}\n`);
   return manifest;
 }
 

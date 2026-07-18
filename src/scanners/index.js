@@ -16,6 +16,7 @@ import { traceFrontendInteractions } from "./frontend/interactions.js";
 import { createAnalysisIR } from "../ir/canonicalize.js";
 import { validateAnalysisIR } from "../ir/validate.js";
 import { behaviorIdentity, stableId } from "../ir/identity.js";
+import { projectAnalysisV2 } from "../system-model/projectors/analysis-v2.js";
 
 // ROOT_MARKERS are always included in the file list even when an --include
 // filter is active — they describe the whole project, not one service subdir.
@@ -216,7 +217,8 @@ export async function scanRepo(repoPath, options = {}) {
     })),
     diagnostics,
   }));
-  return { summary, stacks: displayStacks, files, facts: finalFacts, behaviors: { ...behaviors, frontend: frontendBehaviors }, diagnostics, analysis };
+  const systemModel = projectAnalysisV2(analysis, { repoPath });
+  return { summary, stacks: displayStacks, files, facts: finalFacts, behaviors: { ...behaviors, frontend: frontendBehaviors }, diagnostics, analysis, systemModel };
 }
 
 function factIdentityForScan(fact) {

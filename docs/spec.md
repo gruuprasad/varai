@@ -1,76 +1,81 @@
 # Varai Spec
 
-`varai map <repo>` scans a repo and outputs a structured inventory of what it contains. One command, no configuration, no intent file.
+## Product contract
+
+`varai map <repo>` builds and renders a local, deterministic, evidence-backed System Model. The user-facing result describes the system above implementation level while keeping every claim traceable to source and every analyzer limit explicit.
+
+Varai does not require an intent file or an LLM. It does not upload repository contents silently.
 
 ## Pipeline
 
+```text
+local repository
+  -> scope-aware file walk and stack detection
+  -> language/framework observations
+  -> Analysis IR v2 (migration evidence payload)
+  -> System Model v1
+       -> current-system Markdown
+       -> snapshots
+       -> later: semantic diff, checks, intent reconciliation
 ```
-local repo
-  -> files (walker, scope-filtered, gitignore-aware)
-  -> stack detection (marker files)
-  -> facts (per-stack extractors, shared parse cache)
-  -> route prefix resolution (cross-file semantic)
-  -> inventory (renderer)
-  -> stdout
-```
 
-## Fact types
+During the migration slice, existing FastAPI/UI behavior objects and facts are projected into System Model v1. Later semantic adapters will emit the same model contract directly.
 
-| Kind | Source | Layer |
-|---|---|---|
-| `api_route` | FastAPI `@router.*` / `@app.*` | `ast` (local) / `semantic` (prefix-resolved) |
-| `webhook_route` | route path matches `/webhook/` | same as parent route |
-| `page` | react-router `<Route path=...>` | `ast` |
-| `db_model` | SQLAlchemy `class X(Base)` | `ast` |
-| `database_migration` | Alembic `versions/*.py` | `heuristic` |
-| `state_store` | Zustand `create()` files | `ast` |
-| `package` | `pyproject.toml` / `package.json` deps | `ast` |
-| `env_var` | `os.environ["X"]`, `os.getenv("X")`, `.env` files, `import.meta.env.VITE_*` | `ast` / `file` / `heuristic` |
-| `api_call` | `fetch("...")`, `axios.<verb>("...")` (string-literal URLs) | `heuristic` |
-| `component` | exported PascalCase fn/const in `*/components/`, `*/pages/`, `*/hooks/` | `ast` |
-| `hook` | exported `use[A-Z]` functions in `*/components/`, `*/pages/`, `*/hooks/` | `ast` |
-| `settings_field` | Pydantic `BaseSettings` class attributes | `ast` |
+## System Model v1
 
-Every fact may also carry an optional `stock: string[]` field — a list of stock pattern names (`auth`, `payment`, `file_storage`, `email`, `notifications`, `settings`, `health`) it matches. Populated by a post-merge derived pass. See `docs/superpowers/specs/2026-06-07-varai-stock-catalog-design.md`.
+The model contains:
 
-### Ecosystem tagging
+- one System;
+- Subsystems identified by registered lenses;
+- stable Elements with lens-specific kinds and generic interface/behavior/resource roles;
+- typed Claims using the relationship vocabulary in `docs/semantic-language.md`;
+- evidence, observation method, and claim state;
+- analyzer capability coverage and diagnostics.
 
-`package` facts carry an `ecosystem` field (`"python"` or `"npm"`). The inventory renderer groups packages by ecosystem in the `## Packages` section.
+Element identity derives from subsystem, kind, and a semantic key. Claim identity derives from its source, relationship, and semantic slot or target. Source paths, evidence, confidence, qualifiers, and analyzer versions do not define semantic identity.
 
-### Route prefix resolution
+## Current compatibility input
 
-When `fastapi` stack is detected, `src/scanners/router-prefix.js` builds a prefix map from cross-file import analysis:
-- Resolves `app.include_router(x.router, prefix="/p")` to mounted file
-- Resolves recursive `router.include_router(sub)` chains
-- Combines `APIRouter(prefix="/x")` own prefixes with mounted prefixes
+Analysis IR v2 remains the existing structured observation payload:
 
-Routes with resolved prefixes are tagged `layer: "semantic"`; unresolved routes keep `layer: "ast"` with the local decorator path.
+- facts and stock-pattern instances;
+- HTTP and UI behavior cards;
+- state locations and bundle views;
+- diagnostics and intent-artifact hashes.
 
-## Evidence layers
+It remains the payload consumed by the existing differ until System Model diff ships. Historical Analysis objects are never silently reinterpreted as System Models.
 
-- `"ast"` — produced from a tree-sitter parse tree
-- `"semantic"` — cross-file resolution (route prefixes)
-- `"heuristic"` — regex-based extraction on source text (api calls, VITE_ env vars)
-- `"file"` — direct file content parsing (.env files)
+## Coverage contract
 
-## Performance
+Coverage attaches to an analyzer capability and System/Subsystem/Element scope:
 
-- Shared `Parser` cache per language (reused across files and extractors)
-- Shared `Query` cache per `(lang, queryString)` 
-- Shared content+tree cache via `ScanContext` — each `.py` is parsed once across all three Python extractors
+- `analyzed`: relevant constructs in scope were handled;
+- `partial`: known supported shapes were handled but gaps remain;
+- `unsupported`: the area was recognized without a supporting analyzer;
+- `failed`: an expected analyzer did not complete.
 
-## Walk behavior
+Compatibility-projected capabilities are initially `partial`; today's extractors do not prove exhaustive syntax coverage. Absence may be stated only under analyzed coverage.
 
-- `.worktrees/` is ignored alongside standard cache/virtualenv directories
-- Root `.gitignore` patterns are honored (requires `ignore` npm package)
-- `--include` scoping is applied at the walk level before extraction
+## Parser and performance contract
 
-## Direction
+Parsing remains behind `src/scanners/treesitter.js` with native and WASM backends. Both satisfy the same node-shape contract. Cached and uncached, serial and worker, and native and WASM scans must produce canonical byte-identical model JSON.
 
-Phase 1 (this): flat inventory, altitude 1, all tree-sitter + semantic route prefixes.
-Phase 2: structural graph via SCIP — "this route writes this model, which this page reads."
-Phase 3: capability names, only with supplied intent — not recoverable from code alone.
+The per-file cache key includes `EXTRACTOR_VERSION` in `src/scanners/cache.js`. Bump it whenever extractor logic changes. Projection/model-only changes do not require a cache bump.
 
-## What it is not
+## Snapshot contract
 
-Not a code reviewer, security scanner, test coverage tool, or AI Q&A tool.
+Snapshot manifests are Git-bound and content-addressed. Manifest v2 stores both:
+
+- `semanticObjectHash`: Analysis IR v2 for existing diff/dashboard compatibility;
+- `systemModelObjectHash`: System Model v1 for the current-system product and later model diff.
+
+Clean snapshots update the shared Git commit ref; linked worktrees share the semantic object store. Older manifest v1 files remain readable.
+
+## Non-goals for the current slice
+
+- exhaustive language/framework coverage;
+- runtime correctness or behavioral guarantees;
+- intent recovery from implementation;
+- hosted repository analysis;
+- LLM-created findings;
+- architecture diagrams before model evidence stabilizes.

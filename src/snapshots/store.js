@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { canonicalStringify } from "../ir/canonicalize.js";
 import { semanticHash } from "../ir/identity.js";
 
-export const SNAPSHOT_FORMAT_VERSION = 1;
+export const SNAPSHOT_FORMAT_VERSION = 2;
 
 async function atomicWrite(file, content) {
   await mkdir(path.dirname(file), { recursive: true });
@@ -20,8 +20,8 @@ export function createSnapshotStore(repoPath) {
 
   return {
     root,
-    async putObject(analysis) {
-      const content = canonicalStringify(analysis);
+    async putObject(value) {
+      const content = canonicalStringify(value);
       const hash = semanticHash(content);
       const file = objectPath(hash);
       try { await readFile(file); } catch { await atomicWrite(file, content); }

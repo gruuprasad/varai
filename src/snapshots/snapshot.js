@@ -6,6 +6,7 @@ import { loadRepoConfig } from "../scanners/config.js";
 import { canonicalStringify } from "../ir/canonicalize.js";
 import { semanticHash, stableId } from "../ir/identity.js";
 import { validateAnalysisIR } from "../ir/validate.js";
+import { validateSystemModel } from "../system-model/validate.js";
 import { readGitState } from "./git-state.js";
 import { createSnapshotStore, SNAPSHOT_FORMAT_VERSION } from "./store.js";
 
@@ -72,9 +73,13 @@ export async function createSnapshot(repoPath, options = {}) {
 export async function persistCurrentAnalysis(repoPath, current) {
   const store = createSnapshotStore(current.git.semanticStoreRoot ?? repoPath);
   const semanticObjectHash = await store.putObject(current.scan.analysis);
+  const systemModel = validateSystemModel(current.scan.systemModel);
+  const systemModelObjectHash = await store.putObject(systemModel);
   const identity = {
     formatVersion: SNAPSHOT_FORMAT_VERSION,
     semanticObjectHash,
+    systemModelObjectHash,
+    systemModelSchemaVersion: systemModel.schemaVersion,
     git: { head: current.git.head, clean: current.git.clean },
     scannedTreeHash: current.scannedTreeHash,
     scanConfigHash: current.scanConfigHash,
@@ -87,5 +92,5 @@ export async function persistCurrentAnalysis(repoPath, current) {
     git: { ...identity.git, statusLines: current.git.statusLines },
   };
   await store.putSnapshot(manifest);
-  return { manifest, analysis: current.scan.analysis };
+  return { manifest, analysis: current.scan.analysis, systemModel };
 }

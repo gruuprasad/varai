@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "react": "latest",
+    "vite": "latest"
+  }
+}

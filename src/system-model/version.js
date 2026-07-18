@@ -1,0 +1,2 @@
+export const SYSTEM_MODEL_SCHEMA_VERSION = 1;
+export const SYSTEM_MODEL_ANALYZER_VERSION = "0.1.0";

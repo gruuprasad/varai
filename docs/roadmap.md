@@ -1,35 +1,61 @@
 # Varai Roadmap
 
-Direction: see ADR 0003 — vendor-neutral lens for technical builders supervising AI-written code. Dogfooded on kalakar. Ordered by build sequence; each step must pass the dogfood rule before the next starts.
+Direction: ADR 0004. Varai builds a local, evidence-backed System Model for technical builders supervising AI-written code. Kalakar is the first serious acceptance project, never the source of core vocabulary.
 
-## 1. Snapshot foundation
+## 0. Product and language alignment
 
-An IR snapshot is the merged fact set (with stock tags) serialized to `.varai/snapshots/`, keyed by git commit hash (plus a dirty-state content hash when the tree is dirty). Cheap: the scanner already produces the fact set. Triggers are vendor-neutral — explicit `varai snapshot`, an optional git post-commit hook, or the watcher.
+- Keep `docs/semantic-language.md` normative.
+- Record the System Model product decision and shared vocabulary.
+- Validate kernel changes across multiple system contexts.
 
-Snapshots also record the repo's intent artifacts (paths + content hashes of design/spec markdown, e.g. `openspec/`, `DESIGN.md`) so later phases can correlate fact changes with spec changes on the same timeline. Recording only — no parsing or binding yet.
+Status: complete for semantic language v0; product documentation alignment is part of the System Model v1 slice.
 
-## 2. Concept-level diff (wedge feature)
+## 1. System Model v1 vertical slice
 
-`varai diff <a> <b>` (and dashboard surface) renders the difference between two snapshots at concept level: facts added/removed/changed, grouped by kind and stock pattern — "auth gained a route", "new integration: email", "3 env vars added". Needs a design spec (snapshot identity, rename/move handling, rendering) before implementation.
+- Introduce a framework-neutral, versioned model beside Analysis IR v2.
+- Project current API, UI, Data, CLI, and Service observations.
+- Add explicit analyzer coverage.
+- Make `varai map` render the System Model.
+- Persist both Analysis IR and System Model objects.
 
-## 3. Dogfood loop on kalakar
+Exit: the current system is understandable in system language while existing snapshots/diffs remain compatible.
 
-Daily use during real AI-assisted development. Every diff session feeds the catalog: concepts that fail to describe a real change reveal the next fact kind or stock pattern to add.
+## 2. Semantic adapter contract
 
-## 4. Checks (trust layer), kalakar-stack first
+- Replace scanner-level framework branches with registered semantic adapters.
+- Require each adapter to emit Elements, Claims, capability coverage, and diagnostics.
+- Prove that adding a second implementation of one lens changes no kernel/diff/persistence code.
 
-Falsifiable claims as derived passes over the fact set, same architecture as stock tags: FastAPI routes lacking auth dependencies, secrets referenced client-side, unverified webhook handlers. Each check reports *holds / violated / can't verify*, with evidence. New fact kinds (middleware, auth dependency) added as needed.
+## 3. Current-system interface
 
-## 5. Steering output
+- Make System Model navigation the primary dashboard experience.
+- Add subsystem and Element detail views with evidence links.
+- Make partial/unsupported/failed coverage prominent.
 
-A violated check emits a paste-ready, evidence-grounded fix instruction in plain markdown, usable with any AI coding tool. No vendor integration.
+## 4. System Model diff
 
-## 6. Intent binding (reconciliation)
+- Diff Elements and Claims rather than fixed framework clauses.
+- Separate application changes, qualifier changes, confidence changes, evidence movement, and coverage evolution.
+- Replay the backend output-contract and frontend availability dogfood scenarios.
 
-In the AI-codegen workflow, intent exists as durable repo artifacts (design specs, plan docs) written *before* the code — it never needs to be recovered from code, only correlated with it. A reconciliation pass binds intent mentions to facts/stock patterns and sorts claims into three buckets: **intended-and-present** (verified, with evidence), **intended-but-absent** (gap), **present-but-unintended** (drift — the AI-supervision payoff). Bindings live in an overlay layer with their own honesty states (bound / unbound / ambiguous); facts stay pure. Hard constraint: no intent DSL — input is the markdown that already exists in the repo. Closes the control loop: intent is the setpoint the steering output corrects toward. Anticipated by ADR 0001 and CONTEXT.md's deferred "intent input".
+## 5. Breadth through structurally different lenses
+
+Recommended order: CLI, Worker, Data, a second API framework, then a second UI implementation style. Each capability needs a generic fixture, adapter conformance test, model assertion, semantic diff assertion, and real-project acceptance when applicable.
+
+## 6. Checks and intent reconciliation
+
+- Derive falsifiable checks from the System Model with holds/violated/cannot-verify outcomes.
+- Bind durable repository intent artifacts as a separate overlay with bound/unbound/ambiguous states.
+- Keep steering output evidence-grounded and vendor-neutral.
+
+## 7. Optional English interpreter
+
+An opt-in LLM may explain selected System Model Claims after deterministic output is useful. Every sentence must cite model IDs; removing the LLM changes readability only.
 
 ## Deferred
 
-- SaaS-founder trust panel (re-targeting of step 4–5 machinery; see ADR 0003)
-- Context-evidence tier for stock matching (see CONTEXT.md)
-- Hosted/web-connected distribution
+- hosted repository upload;
+- LLM-first discovery;
+- exhaustive framework coverage;
+- generic architecture diagrams;
+- runtime guarantees without runtime evidence.

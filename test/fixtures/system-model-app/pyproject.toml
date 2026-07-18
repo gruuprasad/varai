@@ -1,0 +1,6 @@
+[project]
+name = "system-model-app"
+dependencies = ["fastapi", "sqlalchemy", "pydantic"]
+
+[project.scripts]
+system-model-tool = "app:main"

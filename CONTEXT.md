@@ -1,68 +1,67 @@
 # Varai Glossary
 
-Canonical terms for the codebase. Implementation details (file paths, function names, schema) live in `docs/spec.md` and source. This file is the *meaning* layer — the shared vocabulary.
+Canonical terms for the product and codebase. `docs/semantic-language.md` is the normative language definition; `docs/spec.md` describes the implementation contract.
 
----
+## System Model
 
-## Atom
+The local, evidence-backed description Varai builds from a repository. It is the product object from which the map, progression, checks, and explanations are projected.
 
-### Fact
+## System
 
-A fact is the **smallest deterministic observation** the lens makes about a repository. One fact is one observation, grounded in a specific file. Facts are the atoms of the inventory — they are produced by extractors, merged and deduped by the scanner, optionally enriched with derived attributes, and rendered by the markdown and UI surfaces.
+The independently understandable software project being described. A repository normally maps to one System; future monorepo support may discover several.
 
-A fact is *not* a verdict, a score, a coverage gap, or a guess. It is "this thing exists in your code, here is where, here is how confidently we know."
+## Subsystem
 
-A fact carries four properties that are always present, plus a small number of optional extensions (see *Fact extensions* below):
+A coherent part of a System rendered through its own interaction language. Initial lenses include API, UI, Worker, CLI, Data, Service, Library, and Application.
 
-- **Kind** — the technical category of the observation. *What kind of thing is this?* A fact is `kind: "api_route"` or `kind: "db_model"` or `kind: "package"`, and so on. One fact has exactly one kind.
-- **Name** — the human-readable identifier of the thing observed. The shape of the name depends on the kind: `POST /api/auth/login` for a route, `User` for a model, `stripe` for a package, `STRIPE_SECRET_KEY` for an env var, `planStore` for a state store. The *thing itself*, not a description of it.
-- **Evidence** — the grounding. Always a file (path relative to the repo root), often a line number. The proof that the fact is real and the link back to source. "Every line traces to a real file" is the truth condition of the lens.
-- **Layer** — the honesty tag. *How confident can we be in this fact?* One of three values:
-    - **`ast`** — a tree-sitter parse tree confirmed the node is real. A parser ruled out comments, strings, and broken formatting. Most trustworthy for syntax-shaped facts.
-    - **`heuristic`** — a file-path convention, manifest read, or text scan. Reliable for things like Next.js path-based routes or env-var name regexes, but not parser-verified.
-    - **`semantic`** — cross-file resolution. Examples: FastAPI router prefixes resolved by walking `app.include_router(...)` calls.
+## Element
 
-### Fact extensions
+A stable, referable system-level part inside a Subsystem. Examples include an operation, screen, action, job, command, entity, contract, workflow, or process.
 
-Some kinds carry optional fields beyond the four core properties. Two that exist today:
+## Interface
 
-- **Integration facts** carry a `category` (the kind of external service: `payments`, `email`, `database`, …) and a `signals` object (which packages and env-var names triggered the integration match, with file references).
-- **Package facts** carry an `ecosystem` (`"python"` or `"npm"`) so the renderer can group them.
+An Element role through which something outside a Subsystem can interact with it: endpoint, screen/control, queue, schedule, command, or service port.
 
-Future extensions will follow the same shape: an optional field on a fact, populated by a derived pass that runs over the merged fact set.
+## Behavior
 
----
+An Element role representing something the System can do. Behaviors are the primary units users inspect and compare. Meaningful internal application logic is lifted only when it has a stable use-case, workflow, decision, orchestration, or state-effect boundary.
 
-## Stock and Custom
+## Resource
 
-The lens has a second, orthogonal axis on top of `kind`: **stock**, the recognizable-pattern axis.
+An Element role for state, data, contracts, files, configuration, queues, or external systems that Behaviors read or affect.
 
-### Stock pattern
+## Claim
 
-A **stock pattern** is a *common, recognizable building block* of typical SaaS and mobile apps — auth, payment, file storage, email, notifications, user management, settings, health endpoints, and the like. A stock pattern is *recoverable from code with high confidence* because the world converged on conventions: a route at `/api/auth/login` plus a `JWT_SECRET` env var plus a `User` model plus a `next-auth` or `passport` package is almost certainly the auth pattern. The lens matches these conventions and tags the matching facts.
+One atomic relationship from a source System/Subsystem/Element to a referenced Element or literal. Every Claim carries evidence, observation method, confidence state, and responsible analyzer capability.
 
-A stock pattern is *not* a problem-domain name. The lens never claims "this is the construction domain" or "this is the billing module" — that naming is destroyed at code-generation time and is not recoverable from code alone.
+## Evidence
 
-### Stock tag
+The repository-relative location and optional symbol/manifest key grounding an Element or Claim. Evidence can move without changing semantic identity.
 
-A **stock tag** is a value attached to a fact indicating which stock pattern it matches. A fact can carry zero, one, or many stock tags. The tag set is a small, curated vocabulary (e.g. `auth`, `payment`, `file_storage`, `email`, `notifications`, `user_mgmt`, `settings`, `health`).
+## Claim state
 
-A fact's stock tags are populated by a derived pass over the merged fact set, the same architectural shape used for integration facts.
+The honesty state of an Element or Claim: `observed`, `inferred`, `unverified`, or `ambiguous`.
 
-### Custom
+## Coverage
 
-**Custom** is the residual bucket: any fact that does not match a stock pattern's signature. The lens does *not* positively name what a custom fact is — it simply is not in the stock catalog. This is honesty, not a limitation: positive domain naming requires an intent input (a separate concept, deferred to a later phase).
+What an analyzer capability could determine within a scope: `analyzed`, `partial`, `unsupported`, or `failed`. Coverage describes analyzer reach, not code quality or test coverage.
 
-The renderer shows custom facts in a "Custom to this app" section. The reader understands the section as "these are the parts the lens did not recognize as stock" — a real, actionable signal: a fact the user expected to be stock but isn't is usually a path or naming problem that points to a structural choice in the code.
+## Lens
 
----
+A subsystem-specific vocabulary and presentation over the framework-neutral kernel. Framework names belong in adapter/evidence details, not lens or relationship vocabulary.
 
-## Evidence tiers
+## Adapter
 
-A stock-pattern signature can use different **evidence tiers** to decide whether a fact matches. The tier is a guardrail on how much context a signature is allowed to consume before tagging a fact.
+A deterministic translator from language/framework observations into System Model Elements, Claims, coverage records, and diagnostics.
 
-- **Self-evidence** — the fact's own kind and name are unambiguous. Example: an env var named `STRIPE_SECRET_KEY` or a package named `stripe` is unmistakably payment-related; no path or context required. The safe floor.
-- **Path-evidence** — the fact's own kind, name, *and* the file path from `evidence` are required for ambiguous names. Example: a model named `User` is ambiguous by itself, but a `User` model in `models/auth/user.py` is unambiguous. Required for names that are overloaded across domains.
-- **Context-evidence** — the fact plus its path plus nearby facts (same file, same directory, or whole-repo set) are required. Example: a `User` model in a generic `models/user.py` with no path hint, but a `JWT_SECRET` env var and a `POST /api/auth/login` route in the same subtree. Most expensive, most error-prone. **Deferred** — not part of the initial design.
+## Fact
 
-A signature entry declares which tier it requires, and a fact matches only if the signature's required evidence is available.
+The smallest deterministic technical observation produced by existing extractors. Facts remain valuable evidence and drill-down data, but are not the primary product surface. During migration they live in Analysis IR v2 and feed the System Model compatibility projector.
+
+## Stock pattern
+
+A common recognizable implementation pattern such as auth, payments, or notifications, grounded in deterministic fact signatures. Stock patterns are an optional classification overlay, not domain intent and not part of semantic identity.
+
+## Semantic progression
+
+The structural difference between two System Models: Elements, Claims, qualifiers, evidence, confidence, coverage, and ambiguity changing across Git or explicit checkpoints.

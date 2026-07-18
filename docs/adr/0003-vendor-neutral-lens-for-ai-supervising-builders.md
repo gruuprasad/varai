@@ -1,6 +1,8 @@
 # ADR 0003: Vendor-Neutral Lens for Builders Supervising AI-Written Code
 
-Status: Accepted
+Status: Partially superseded by ADR 0004
+
+ADR 0004 makes the System Model the product and semantic diff one projection over it. The target user, vendor-neutrality, Git boundaries, and dogfood rule remain accepted.
 
 ## Context
 

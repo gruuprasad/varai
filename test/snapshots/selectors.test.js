@@ -3,7 +3,7 @@ import test from "node:test";
 import { resolveSnapshotSelector } from "../../src/snapshots/selectors.js";
 
 const snapshots = [
-  { id: "abcdef111", semanticObjectHash: "111111", createdAt: "2026-01-02" },
+  { id: "abcdef111", semanticObjectHash: "111111", systemModelObjectHash: "333333", createdAt: "2026-01-02" },
   { id: "abcdef222", semanticObjectHash: "222222", createdAt: "2026-01-01" },
 ];
 const store = {
@@ -15,6 +15,10 @@ const store = {
 test("resolves last and commit selectors", async () => {
   assert.equal((await resolveSnapshotSelector(store, "last")).id, "abcdef111");
   assert.equal((await resolveSnapshotSelector(store, "deadbeef")).id, "abcdef111");
+});
+
+test("resolves a System Model object hash", async () => {
+  assert.equal((await resolveSnapshotSelector(store, "333333")).id, "abcdef111");
 });
 
 test("rejects missing and ambiguous prefixes", async () => {
