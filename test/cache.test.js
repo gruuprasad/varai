@@ -69,6 +69,18 @@ test("cache key changes with different prefixFingerprint", async () => {
   }
 });
 
+test("cache key changes with different extractor fingerprint", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-cache-"));
+  try {
+    const cacheA = createFactCache({ cacheDir: join(dir, ".varai/cache"), extractorFingerprint: "a", enabled: true });
+    await cacheA.set("test.py", "x = 1", [{ kind: "a", name: "A", evidence: [] }]);
+    const cacheB = createFactCache({ cacheDir: join(dir, ".varai/cache"), extractorFingerprint: "b", enabled: true });
+    assert.equal(await cacheB.get("test.py", "x = 1"), null);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("cache disabled returns null and does not write", async () => {
   const dir = await mkdtemp(join(tmpdir(), "varai-cache-"));
   try {

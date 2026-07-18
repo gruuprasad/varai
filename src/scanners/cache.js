@@ -2,7 +2,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, readFile, rename } from "node:fs/promises";
 
-export const EXTRACTOR_VERSION = 2; // added runnable (script/service) and schema extractors
+export const EXTRACTOR_VERSION = 3; // unified extractor registry and cache fingerprint
 
 const CACHE_FORMAT_VERSION = 1;
 
@@ -12,6 +12,7 @@ export function createFactCache({
   extractorVersion = EXTRACTOR_VERSION,
   stacks = [],
   prefixFingerprint = "",
+  extractorFingerprint = "",
   enabled = true,
 }) {
   const factsDir = path.join(cacheDir, "facts");
@@ -24,6 +25,7 @@ export function createFactCache({
     h.update(content);
     h.update(stacksKey);
     h.update(prefixFingerprint);
+    h.update(extractorFingerprint);
     return h.digest("hex");
   }
 

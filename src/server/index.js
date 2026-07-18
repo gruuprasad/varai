@@ -3,9 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { exec } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { scanRepo } from "../scanners/index.js";
 import { loadRepoConfig } from "../scanners/config.js";
 import { createWatcher } from "./watcher.js";
+import { analyzeCurrent, persistCurrentAnalysis } from "../snapshots/snapshot.js";
+import { createSnapshotStore } from "../snapshots/store.js";
+import { diffAnalyses } from "../diff/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.resolve(__dirname, "..", "ui");
@@ -61,6 +63,7 @@ export async function startServer({ repoPath, port = 3847, open = true }) {
   const scanOptions = { include: config.include ?? [], config };
 
   let latestScan = null;
+  let latestDiff = null;
   let scanning = false;
   let sseClients = new Set();
 
@@ -68,7 +71,25 @@ export async function startServer({ repoPath, port = 3847, open = true }) {
     if (scanning) return;
     scanning = true;
     try {
-      latestScan = await scanRepo(absRepo, scanOptions);
+      const current = await analyzeCurrent(absRepo, scanOptions);
+      latestScan = current.scan;
+      const store = createSnapshotStore(absRepo);
+      let ref = await store.getCommitRef(current.git.head);
+      if (current.git.clean && !ref) {
+        const created = await persistCurrentAnalysis(absRepo, current);
+        ref = { snapshotId: created.manifest.id };
+      }
+      if (ref) {
+        const baseline = await store.getSnapshot(ref.snapshotId);
+        if (baseline.scanConfigHash === current.scanConfigHash) {
+          latestDiff = { baseline, diff: diffAnalyses(await store.getObject(baseline.semanticObjectHash), latestScan.analysis) };
+          broadcast({ type: "semantic-diff", data: latestDiff });
+        } else {
+          latestDiff = { error: "Baseline uses a different scan configuration" };
+        }
+      } else {
+        latestDiff = { error: "No clean semantic baseline exists for HEAD" };
+      }
       broadcast({ type: "scan", data: latestScan });
     } catch (err) {
       console.error("[server] scan error:", err.message);
@@ -98,6 +119,18 @@ export async function startServer({ repoPath, port = 3847, open = true }) {
       return;
     }
 
+    if (url.pathname === "/api/snapshots") {
+      createSnapshotStore(absRepo).listSnapshots().then((items) => serveJSON(res, items), (err) => {
+        res.writeHead(500); res.end(err.message);
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/diff") {
+      serveJSON(res, latestDiff || { error: "Semantic diff is not ready" });
+      return;
+    }
+
     if (url.pathname === "/api/events") {
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -110,6 +143,7 @@ export async function startServer({ repoPath, port = 3847, open = true }) {
       if (latestScan) {
         res.write(`data: ${JSON.stringify({ type: "scan", data: latestScan })}\n\n`);
       }
+      if (latestDiff) res.write(`data: ${JSON.stringify({ type: "semantic-diff", data: latestDiff })}\n\n`);
 
       req.on("close", () => {
         sseClients.delete(res);

@@ -66,6 +66,7 @@ const el = {
 
 let activeKind = null;
 let scanData = null;
+let diffData = null;
 
 // ── SSE connection ──────────────────────────────────────────────────────────
 const es = new EventSource("/api/events");
@@ -75,6 +76,9 @@ es.addEventListener("message", (e) => {
   if (msg.type === "scan") {
     setScanData(msg.data);
     setStatus("live", "Live");
+  } else if (msg.type === "semantic-diff") {
+    diffData = msg.data;
+    if (activeKind === "semantic-diff") render();
   } else if (msg.type === "scanning") {
     setStatus("scanning", "Scanning...");
   } else if (msg.type === "error") {
@@ -89,6 +93,8 @@ fetch("/api/scan")
   .then((r) => r.json())
   .then((data) => { if (data.summary) { setScanData(data); setStatus("live", "Live"); } })
   .catch(() => setStatus("error", "Connection error"));
+
+fetch("/api/diff").then((r) => r.json()).then((data) => { diffData = data; render(); });
 
 // ── State ───────────────────────────────────────────────────────────────────
 function setScanData(data) {
@@ -106,7 +112,8 @@ function render() {
   if (!scanData?.summary) return;
   renderStats();
   renderNav();
-  renderFacts();
+  if (activeKind === "semantic-diff") renderSemanticDiff();
+  else renderFacts();
 }
 
 function renderStats() {
@@ -122,7 +129,12 @@ function renderNav() {
   const counts = scanData.summary?.sectionCounts ?? {};
   const total  = scanData.summary?.factCount ?? 0;
 
-  let html = `<div class="nav-all${activeKind === null ? " active" : ""}" data-kind="">` +
+  let html = `<div class="nav-all${activeKind === "semantic-diff" ? " active" : ""}" data-kind="semantic-diff">` +
+    `<span class="nav-icon">∆</span>` +
+    `<span class="nav-name">Progression</span>` +
+    `<span class="nav-count">${diffData?.diff?.summary?.clauseChanges ?? 0}</span>` +
+    `</div>` +
+    `<div class="nav-all${activeKind === null ? " active" : ""}" data-kind="">` +
     `<span class="nav-icon">≡</span>` +
     `<span class="nav-name">All Facts</span>` +
     `<span class="nav-count">${total}</span>` +
@@ -181,6 +193,7 @@ function renderNav() {
 }
 
 function renderFacts() {
+  el.search.closest(".search-wrap").hidden = false;
   const facts = scanData?.facts ?? [];
   const query = el.search.value.toLowerCase().trim();
 
@@ -257,6 +270,49 @@ function renderFacts() {
       `</div></div>`;
   }
 
+  el.factsList.innerHTML = html;
+}
+
+function diffEvidence(value) {
+  return (value?.evidence ?? []).map((item) => `${esc(item.file)}${item.line ? `:${item.line}` : ""}`).join(", ") || "no evidence";
+}
+
+function diffClause(kind, clause) {
+  if (kind === "requires") return `needs ${esc(clause.name)}`;
+  if (kind === "takes" || kind === "gives") return `${kind} ${esc(clause.schema ?? clause.name ?? "unknown")}`;
+  if (kind === "reads" || kind === "writes") return `${kind} ${esc(clause.medium)}:${esc(clause.target ?? clause.detail ?? "unknown")}`;
+  if (kind === "fails") return `fails ${esc(clause.status ?? clause.reason ?? "unknown")}`;
+  return `${kind} ${esc(clause.call ?? "")}`;
+}
+
+function renderSemanticDiff() {
+  el.search.closest(".search-wrap").hidden = true;
+  if (diffData?.error) {
+    el.factsList.innerHTML = `<div class="empty-state"><span class="empty-icon">△</span><span>${esc(diffData.error)}</span></div>`;
+    return;
+  }
+  const diff = diffData?.diff;
+  if (!diff) return;
+  if (!diff.summary.hasChanges) {
+    el.factsList.innerHTML = `<div class="empty-state"><span class="empty-icon">✓</span><span>No semantic changes from the HEAD baseline</span></div>`;
+    return;
+  }
+  let html = `<div class="diff-summary"><strong>Semantic progression</strong><span>+${diff.summary.behaviorsAdded} −${diff.summary.behaviorsRemoved} ~${diff.summary.behaviorsChanged} behaviors</span></div>`;
+  for (const behavior of diff.behaviors.added) {
+    html += `<article class="diff-card added"><h3>+ ${esc(behavior.door.method)} ${esc(behavior.door.path)}</h3><p>${diffEvidence(behavior.door)}</p></article>`;
+  }
+  for (const behavior of diff.behaviors.removed) {
+    html += `<article class="diff-card removed"><h3>− ${esc(behavior.door.method)} ${esc(behavior.door.path)}</h3><p>${diffEvidence(behavior.door)}</p></article>`;
+  }
+  for (const behavior of diff.behaviors.changed) {
+    html += `<article class="diff-card changed"><h3>~ ${esc(behavior.door.method)} ${esc(behavior.door.path)}</h3><ul>`;
+    for (const change of behavior.clauses) {
+      if (change.change === "claim-state") html += `<li class="risk">! ${diffClause(change.kind, change.after)}: ${esc(change.before.claimState)} → ${esc(change.after.claimState)}</li>`;
+      else if (change.change === "evidence-moved") html += `<li class="muted">evidence moved: ${diffEvidence(change.before)} → ${diffEvidence(change.after)}</li>`;
+      else html += `<li>${change.change === "added" ? "+" : "−"} ${diffClause(change.kind, change.clause)} <small>${diffEvidence(change.clause)}</small></li>`;
+    }
+    html += `</ul></article>`;
+  }
   el.factsList.innerHTML = html;
 }
 

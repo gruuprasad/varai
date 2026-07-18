@@ -178,7 +178,7 @@ function validateAdditionalPattern(p) {
     if (typeof sig.kind !== "string")
       throw new Error(`additional pattern "${p.name}": sig.kind (string) is required`);
     if (!(sig.nameRegex instanceof RegExp))
-      throw new Error(`additional pattern "${p.name}": sig.nameRegex (RegExp) is required`);
+      throw new Error(`additional pattern "${p.name}": sig.nameRegex (compiled RegExp) is required`);
     if (typeof sig.role !== "string")
       throw new Error(`additional pattern "${p.name}": sig.role (string) is required`);
     if (sig.pathRegex !== undefined && !(sig.pathRegex instanceof RegExp))

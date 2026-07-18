@@ -11,11 +11,10 @@ test("missing varai.config.json returns empty object", async () => {
   assert.deepEqual(cfg, {});
 });
 
-test("malformed varai.config.json returns empty object (does not throw)", async () => {
+test("malformed varai.config.json reports a precise error", async () => {
   const dir = await mkdtemp(join(tmpdir(), "varai-cfg-"));
   await writeFile(join(dir, "varai.config.json"), "{ this is not json");
-  const cfg = await loadRepoConfig(dir);
-  assert.deepEqual(cfg, {});
+  await assert.rejects(() => loadRepoConfig(dir), /varai\.config\.json: root: invalid JSON/);
 });
 
 test("loads include, stock.additional, stock.disabled", async () => {
@@ -23,7 +22,11 @@ test("loads include, stock.additional, stock.disabled", async () => {
   await writeFile(join(dir, "varai.config.json"), JSON.stringify({
     include: ["src"],
     stock: {
-      additional: [{ name: "audit", signatures: [{ kind: "api_route", nameRegex: /audit/i, role: "endpoint" }] }],
+      additional: [{ name: "audit", signatures: [{
+        kind: "api_route",
+        nameRegex: { pattern: "audit", flags: "i" },
+        role: "endpoint",
+      }] }],
       disabled: ["health"],
     },
   }));
@@ -31,6 +34,20 @@ test("loads include, stock.additional, stock.disabled", async () => {
   assert.deepEqual(cfg.include, ["src"]);
   assert.equal(cfg.stock.disabled[0], "health");
   assert.equal(cfg.stock.additional[0].name, "audit");
+  assert.equal(cfg.stock.additional[0].signatures[0].nameRegex.test("AUDIT"), true);
+});
+
+test("invalid stock regex identifies the exact field", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-cfg-"));
+  await writeFile(join(dir, "varai.config.json"), JSON.stringify({
+    stock: { additional: [{ name: "audit", signatures: [{
+      kind: "api_route", nameRegex: { pattern: "[" }, role: "endpoint",
+    }] }] },
+  }));
+  await assert.rejects(
+    () => loadRepoConfig(dir),
+    /stock\.additional\[0\]\.signatures\[0\]\.nameRegex: invalid regular expression/,
+  );
 });
 
 test("partial config: missing stock block is allowed", async () => {

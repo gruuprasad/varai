@@ -5,7 +5,7 @@ import path from "node:path";
 
 const workerPath = fileURLToPath(new URL("worker.js", import.meta.url));
 
-export function createWorkerPool({ concurrency, repoPath, files, stacks, prefixMap, cacheConfig, extractorNames, parser }) {
+export function createWorkerPool({ concurrency, repoPath, files, stacks, prefixMap, cacheConfig, extractorIds, parser }) {
   const N = Math.max(1, concurrency ?? Math.max(1, cpus().length - 2));
   const shards = shardFiles(files, N);
 
@@ -15,7 +15,7 @@ export function createWorkerPool({ concurrency, repoPath, files, stacks, prefixM
       let errors = [];
 
       const pending = shards.map((shard, i) => {
-        return runShard({ id: i, files: shard, repoPath, stacks, prefixMap, cacheConfig, extractorNames, parser })
+        return runShard({ id: i, files: shard, repoPath, stacks, prefixMap, cacheConfig, extractorIds, parser })
           .then((facts) => { results.push({ id: i, facts }); })
           .catch((err) => { errors.push({ id: i, err, files: shard }); });
       });
@@ -27,7 +27,7 @@ export function createWorkerPool({ concurrency, repoPath, files, stacks, prefixM
         process.stderr.write(`varai: worker ${err.id} failed, retrying serially\n`);
         try {
           const facts = await runShardSerial({
-            files: err.files, repoPath, stacks, prefixMap, cacheConfig, extractorNames, parser
+            files: err.files, repoPath, stacks, prefixMap, cacheConfig, extractorIds, parser
           });
           results.push({ id: err.id, facts });
         } catch (inner) {
@@ -55,8 +55,9 @@ function shardFiles(files, N) {
   return shards.filter((s) => s.length > 0);
 }
 
-function runShard({ id, files, repoPath, stacks, prefixMap, cacheConfig, extractorNames, parser }) {
+function runShard({ id, files, repoPath, stacks, prefixMap, cacheConfig, extractorIds, parser }) {
   return new Promise((resolve, reject) => {
+    let settled = false;
     const prefixEntries = prefixMap ? [...prefixMap.entries()] : null;
 
     const worker = new Worker(workerPath, {
@@ -66,29 +67,31 @@ function runShard({ id, files, repoPath, stacks, prefixMap, cacheConfig, extract
         stacks,
         prefixEntries,
         cacheConfig,
-        extractorNames,
+        extractorIds,
         parser,
       },
       type: "module",
     });
 
     worker.on("message", ({ facts }) => {
+      settled = true;
       resolve(facts);
+      void worker.terminate();
     });
 
     worker.on("error", (err) => {
-      reject(err);
+      if (!settled) reject(err);
     });
 
     worker.on("exit", (code) => {
-      if (code !== 0) {
+      if (!settled && code !== 0) {
         reject(new Error(`Worker exited with code ${code}`));
       }
     });
   });
 }
 
-async function runShardSerial({ files, repoPath, stacks, prefixMap, cacheConfig, extractorNames, parser }) {
+async function runShardSerial({ files, repoPath, stacks, prefixMap, cacheConfig, extractorIds, parser }) {
   const { createScanContext } = await import("./context.js");
   const { createFactCache } = await import("./cache.js");
   const { selectBackend } = await import("./treesitter.js");
@@ -98,45 +101,28 @@ async function runShardSerial({ files, repoPath, stacks, prefixMap, cacheConfig,
   const ctx = createScanContext(repoPath);
   ctx.prefixMap = prefixMap ?? null;
 
-  const extractors = await loadExtractors();
+  const { resolveExtractors } = await import("./extractor-registry.js");
+  const extractors = resolveExtractors(extractorIds);
   const cache = createFactCache({ ...cacheConfig, enabled: cacheConfig.enabled !== false });
 
   const facts = [];
   for (const file of files) {
-    facts.push(...await extractFileAllSerial(repoPath, file, ctx, extractorNames, extractors, cache));
+    facts.push(...await extractFileAllSerial(repoPath, file, ctx, extractors, cache));
   }
 
   return facts;
 }
 
-async function loadExtractors() {
-  const { extract: extractFastapi } = await import("./extractors/fastapi.js");
-  const { extract: extractSqlalchemy } = await import("./extractors/sqlalchemy.js");
-  const { extract: extractReactVite } = await import("./extractors/react-vite.js");
-  const { extract: extractPythonCommon } = await import("./extractors/python-common.js");
-  const { extract: extractNpm } = await import("./extractors/npm.js");
-  return { extractFastapi, extractSqlalchemy, extractReactVite, extractPythonCommon, extractNpm };
-}
-
-async function extractFileAllSerial(repoPath, file, ctx, extractorNames, extractors, cache) {
+async function extractFileAllSerial(repoPath, file, ctx, extractors, cache) {
   const content = await ctx.read(file);
   if (!content) return [];
 
   const cached = await cache.get(file, content);
   if (cached) return cached;
 
-  const map = {
-    "fastapi": extractors.extractFastapi,
-    "sqlalchemy": extractors.extractSqlalchemy,
-    "react-vite": extractors.extractReactVite,
-    "python-common": extractors.extractPythonCommon,
-    "npm": extractors.extractNpm,
-  };
-
   const facts = [];
-  for (const name of extractorNames) {
-    const fn = map[name];
-    if (fn) facts.push(...await fn(repoPath, [file], ctx));
+  for (const { extract } of extractors) {
+    facts.push(...await extract(repoPath, [file], ctx));
   }
 
   await cache.set(file, content, facts);

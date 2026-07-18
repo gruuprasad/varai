@@ -4,13 +4,7 @@ import { createHash } from "node:crypto";
 import { cpus } from "node:os";
 import { detectStacks } from "./stack-detect.js";
 import { createScanContext } from "./context.js";
-import { extract as extractFastapi } from "./extractors/fastapi.js";
-import { extract as extractSqlalchemy } from "./extractors/sqlalchemy.js";
-import { extract as extractReactVite } from "./extractors/react-vite.js";
-import { extract as extractPythonCommon } from "./extractors/python-common.js";
-import { extract as extractNpm } from "./extractors/npm.js";
-import { extract as extractRunnable } from "./extractors/runnable.js";
-import { extract as extractSchema } from "./extractors/schema.js";
+import { extractorFingerprint, selectExtractors } from "./extractor-registry.js";
 import { deriveIntegrations } from "./extractors/integration.js";
 import { tagStock } from "./extractors/stock-tagger.js";
 import { buildPrefixMap } from "./router-prefix.js";
@@ -18,6 +12,9 @@ import { dedupeFacts } from "./utils.js";
 import { createFactCache } from "./cache.js";
 import { selectBackend } from "./treesitter.js";
 import { traceBehaviors } from "./behaviors/index.js";
+import { createAnalysisIR } from "../ir/canonicalize.js";
+import { validateAnalysisIR } from "../ir/validate.js";
+import { stableId } from "../ir/identity.js";
 
 // ROOT_MARKERS are always included in the file list even when an --include
 // filter is active — they describe the whole project, not one service subdir.
@@ -44,16 +41,6 @@ function isInterestingName(name) {
     name.startsWith("Dockerfile.") ||
     name.startsWith(".env");
 }
-
-const EXTRACTOR_MAP = [
-  ["fastapi",       extractFastapi],
-  ["sqlalchemy",    extractSqlalchemy],
-  ["react-vite",    extractReactVite],
-  ["python-common", extractPythonCommon],
-  ["python-common", extractSchema],
-  ["npm",           extractNpm],
-  ["base",          extractRunnable]
-];
 
 const KIND_RANK = new Map([
   ["integration",        1],
@@ -117,17 +104,17 @@ export async function scanRepo(repoPath, options = {}) {
 
   const cacheDir = cacheDirOverride ?? path.join(repoPath, ".varai", "cache");
   const { EXTRACTOR_VERSION } = await import("./cache.js");
+  const activeExtractors = selectExtractors(stacks);
+  const extractorIds = activeExtractors.map(({ id }) => id);
   const cacheConfig = {
     cacheDir,
     extractorVersion: EXTRACTOR_VERSION,
     stacks: [...stacks],
     prefixFingerprint,
+    extractorFingerprint: extractorFingerprint(activeExtractors),
     enabled: useCache,
   };
   const cache = createFactCache(cacheConfig);
-
-  const activeExtractors = EXTRACTOR_MAP.filter(([stack]) => stacks.has(stack));
-  const extractorNames = activeExtractors.map(([name]) => name);
 
   // Auto-enable only for wasm on large repos; an explicit --jobs N>1 forces it on.
   const usePool = jobs > 1 &&
@@ -143,7 +130,7 @@ export async function scanRepo(repoPath, options = {}) {
       stacks: [...stacks],
       prefixMap,
       cacheConfig,
-      extractorNames,
+      extractorIds,
       parser,
     });
     allFacts = await pool.run();
@@ -161,16 +148,22 @@ export async function scanRepo(repoPath, options = {}) {
   // group correctly. Derived facts are deterministic, so this stays stable.
   const derivedFacts = deriveIntegrations(dedupedFacts);
   const merged = [...dedupedFacts, ...derivedFacts];
-  tagStock(merged, options.config ?? {});
+  const stock = tagStock(merged, options.config ?? {});
   const finalFacts = sortFacts(merged);
 
+  const diagnostics = [];
   let behaviors = { bundles: [] };
   if (stacks.has("fastapi")) {
     try {
       const traced = await traceBehaviors(repoPath, files, ctx, finalFacts);
       behaviors = { bundles: traced.bundles };
     } catch (err) {
-      process.stderr.write(`varai: behavior trace failed (${err.message})\n`);
+      diagnostics.push({
+        code: "behavior-trace-failed",
+        severity: "error",
+        message: err.message,
+        claimState: "unverified",
+      });
     }
   }
 
@@ -185,7 +178,37 @@ export async function scanRepo(repoPath, options = {}) {
     sectionCounts
   };
 
-  return { summary, stacks: displayStacks, files, facts: finalFacts, behaviors };
+  const flatBehaviors = behaviors.bundles.flatMap((bundle) => bundle.behaviors);
+  const patternInstances = [...stock.instances.entries()].map(([name, members]) => ({
+    id: stableId("pattern", name),
+    name,
+    members: members.map(({ fact, role }) => ({
+      factId: stableId("fact", factIdentityForScan(fact)),
+      role,
+    })).sort((a, b) => `${a.factId}:${a.role}`.localeCompare(`${b.factId}:${b.role}`)),
+  }));
+  const analysis = validateAnalysisIR(createAnalysisIR({
+    scanContext: {
+      activeExtractorIds: extractorIds,
+      include: [...include].sort(),
+      stacks: displayStacks,
+    },
+    facts: finalFacts,
+    patternInstances,
+    behaviors: flatBehaviors,
+    bundleViews: behaviors.bundles.map((bundle) => ({
+      ...bundle,
+      behaviors: bundle.behaviors.map((behavior) => stableId("behavior", ["http", behavior.door.method, behavior.door.path])),
+    })),
+    diagnostics,
+  }));
+  return { summary, stacks: displayStacks, files, facts: finalFacts, behaviors, diagnostics, analysis };
+}
+
+function factIdentityForScan(fact) {
+  if (["api_route", "webhook_route"].includes(fact.kind)) return [fact.kind, fact.name];
+  if (["env_var", "integration", "package", "script", "service"].includes(fact.kind)) return [fact.kind, fact.ecosystem ?? "", fact.name];
+  return [fact.kind, fact.evidence?.[0]?.file ?? "", fact.name];
 }
 
 async function extractFileAll(repoPath, file, ctx, activeExtractors, cache) {
@@ -196,8 +219,8 @@ async function extractFileAll(repoPath, file, ctx, activeExtractors, cache) {
   if (cached) return cached;
 
   const facts = [];
-  for (const [, extractFn] of activeExtractors) {
-    facts.push(...await extractFn(repoPath, [file], ctx));
+  for (const { extract } of activeExtractors) {
+    facts.push(...await extract(repoPath, [file], ctx));
   }
 
   await cache.set(file, content, facts);

@@ -1,4 +1,4 @@
-const FILE_WRITE_RE = /(?:dump|persist|save|write|snapshot)/i;
+import { classifyAttributeEffect, classifyNamedEffect, isFileWriteName } from "./effects.js";
 const STATUS_RE = /HTTP_(\d{3})\b/;
 
 export async function traceBody(fnNode, file, ctx, resolver, factIndex) {
@@ -32,22 +32,11 @@ async function walk(fnNode, file, ctx, resolver, factIndex, acc, depth, seen) {
       const receiver = callee.childForFieldName("object");
       const receiverText = receiver.text;
 
-      if (method === "query") {
-        const arg = firstArgIdent(call);
-        const target = arg && factIndex.modelNames.has(arg) ? arg : receiverText;
-        acc.reads.push({ target, kind: "db_model", medium: "db", via: `${receiverText}.query`, evidence: { file, line }, layer: "semantic" });
-      } else if (method === "delete") {
-        // May be direct db.delete(X) or chained db.query(X).filter(...).delete()
-        const target = receiver.type === "identifier"
-          ? (firstArgIdent(call) || null)
-          : extractChainedQueryTarget(receiver, factIndex.modelNames);
-        acc.writes.push({ target, kind: "db_model", medium: "db", via: `${receiverText}.delete`, evidence: { file, line }, layer: "semantic" });
-      } else if (method === "add" || method === "commit" || method === "refresh") {
-        // Only recognize session-like direct identifiers (db, session).
-        // Chained expressions like artifact_map.setdefault(...).add() are not DB writes.
-        if (receiver.type !== "identifier") { continue; }
-        const target = method === "add" ? firstArgModel(call, factIndex.modelNames) : null;
-        acc.writes.push({ target, kind: "db_model", medium: "db", via: `${receiverText}.${method}`, evidence: { file, line }, layer: "semantic" });
+      const effect = classifyAttributeEffect({ method, receiver, call, firstArgIdent, firstArgModel,
+        chainedTarget: extractChainedQueryTarget, modelNames: factIndex.modelNames });
+      if (effect) {
+        const { access, observationMethod, ...payload } = effect;
+        acc[access === "read" ? "reads" : "writes"].push({ ...payload, evidence: { file, line }, layer: observationMethod });
       }
       continue;
     }
@@ -55,8 +44,10 @@ async function walk(fnNode, file, ctx, resolver, factIndex, acc, depth, seen) {
     if (callee.type !== "identifier") continue;
     const name = callee.text;
 
-    if (FILE_WRITE_RE.test(name)) {
-      acc.writes.push({ target: "file", kind: "file", medium: "file", detail: name, evidence: { file, line }, layer: "heuristic" });
+    const namedEffect = classifyNamedEffect(name);
+    if (namedEffect) {
+      const { observationMethod, access, ...payload } = namedEffect;
+      acc.writes.push({ ...payload, evidence: { file, line }, layer: observationMethod });
     }
 
     const resolved = await resolver.resolveFunction(file, name);
@@ -68,14 +59,14 @@ async function walk(fnNode, file, ctx, resolver, factIndex, acc, depth, seen) {
         seen.add(key);
         await walk(resolved.node, resolved.file, ctx, resolver, factIndex, acc, depth + 1, seen);
       }
-    } else if (depth === 0 && !FILE_WRITE_RE.test(name) && !KNOWN_NOISE.has(name)
+    } else if (depth === 0 && !isFileWriteName(name) && !KNOWN_NOISE.has(name)
                && !factIndex.schemaNames.has(name) && !/Response$/.test(name)) {
       acc.untraced.push({ call: name, reason: "external package / depth limit", evidence: { file, line } });
     }
   }
 }
 
-const KNOWN_NOISE = new Set(["HTTPException", "len", "str", "int", "dict", "list", "print"]);
+const KNOWN_NOISE = new Set(["HTTPException", "len", "str", "int", "float", "bool", "dict", "list", "set", "tuple", "print", "range", "enumerate", "zip", "sorted", "min", "max", "sum", "any", "all", "isinstance", "getattr", "setattr", "hasattr"]);
 
 function firstArgIdent(call) {
   const args = call.childForFieldName("arguments");
