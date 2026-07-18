@@ -9,11 +9,13 @@ export function diffBehaviors(before, after) {
   const added = after.filter((item) => !oldMap.has(item.id));
   const removed = before.filter((item) => !newMap.has(item.id));
   const changed = [];
+  const evidenceChanged = [];
 
   for (const current of after) {
     const previous = oldMap.get(current.id);
     if (!previous) continue;
     const clauses = [];
+    const evidenceChanges = [];
     for (const kind of CLAUSE_KINDS) {
       const oldClauses = byId(previous[kind]);
       const newClauses = byId(current[kind]);
@@ -23,7 +25,7 @@ export function diffBehaviors(before, after) {
         else if (oldClause.claimState !== clause.claimState) {
           clauses.push({ change: "claim-state", kind, before: oldClause, after: clause });
         } else if (evidenceKey(oldClause.evidence) !== evidenceKey(clause.evidence)) {
-          clauses.push({ change: "evidence-moved", kind, before: oldClause, after: clause });
+          evidenceChanges.push({ change: "evidence-moved", kind, before: oldClause, after: clause });
         }
       }
       for (const clause of previous[kind]) {
@@ -31,9 +33,10 @@ export function diffBehaviors(before, after) {
       }
     }
     if (evidenceKey(previous.door.evidence) !== evidenceKey(current.door.evidence)) {
-      clauses.push({ change: "evidence-moved", kind: "door", before: previous.door, after: current.door });
+      evidenceChanges.push({ change: "evidence-moved", kind: "door", before: previous.door, after: current.door });
     }
     if (clauses.length) changed.push({ id: current.id, door: current.door, clauses });
+    if (evidenceChanges.length) evidenceChanged.push({ id: current.id, door: current.door, changes: evidenceChanges });
   }
-  return { added, removed, changed };
+  return { added, removed, changed, evidenceChanged };
 }

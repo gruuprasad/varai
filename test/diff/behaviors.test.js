@@ -23,7 +23,11 @@ test("new write and removed gate are prominent clause changes", () => {
 
 test("handler movement is evidence-only", () => {
   const diff = diffAnalyses(ir({ file: "a.py", requires: ["auth"] }), ir({ file: "b.py", requires: ["auth"] }));
-  assert.ok(diff.behaviors.changed[0].clauses.every((item) => item.change === "evidence-moved"));
+  assert.equal(diff.behaviors.changed.length, 0);
+  assert.ok(diff.behaviors.evidenceChanged[0].changes.every((item) => item.change === "evidence-moved"));
+  assert.equal(diff.summary.behaviorsChanged, 0);
+  assert.equal(diff.summary.hasChanges, false);
+  assert.equal(diff.summary.hasEvidenceChanges, true);
 });
 
 test("claim becoming unverified is classified", () => {

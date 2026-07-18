@@ -12,10 +12,10 @@ function usage() {
 
 Usage:
   varai map [<repo-path>] [--include <prefix>]... [options]
-  varai start [<repo-path>] [--port <N>] [--no-open]
+  varai start [<repo-path>] [--port <N>] [--no-open] [scan options]
   varai snapshot [<repo-path>] [scan options]
   varai log [<repo-path>]
-  varai diff [<repo-path>] [--from <selector>] [--to <selector|current>] [--json]
+  varai diff [<repo-path>] [--from <selector>] [--to <selector|current>] [--json] [--show-evidence-moves]
 
 Options (map):
   --include <prefix>   Scan only files under this path prefix (repeatable)
@@ -64,7 +64,7 @@ function parseMapOptions(argv) {
 }
 
 function parseStartOptions(argv) {
-  const opts = {};
+  const opts = { include: [] };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--port" && argv[i + 1]) {
       const p = parseInt(argv[++i], 10);
@@ -75,6 +75,14 @@ function parseStartOptions(argv) {
       opts.port = p;
     } else if (argv[i] === "--no-open") {
       opts.open = false;
+    } else if (argv[i] === "--include" && argv[i + 1]) {
+      opts.include.push(argv[++i]);
+    } else if (argv[i] === "--jobs" && argv[i + 1]) {
+      opts.jobs = parseInt(argv[++i], 10);
+    } else if (argv[i] === "--no-cache") {
+      opts.cache = false;
+    } else if (argv[i] === "--parser" && argv[i + 1]) {
+      opts.parser = argv[++i];
     } else if (!argv[i].startsWith("-")) {
       opts.repo = argv[i];
     } else {
@@ -96,6 +104,7 @@ function parseSemanticOptions(argv, allowDiff = false) {
     else if (allowDiff && arg === "--from" && argv[i + 1]) opts.from = argv[++i];
     else if (allowDiff && arg === "--to" && argv[i + 1]) opts.to = argv[++i];
     else if (allowDiff && arg === "--json") opts.json = true;
+    else if (allowDiff && arg === "--show-evidence-moves") opts.showEvidenceMoves = true;
     else if (!arg.startsWith("-")) opts.repo = arg;
     else throw new Error(`Unknown option: ${arg}`);
   }
@@ -119,6 +128,12 @@ async function main() {
       repoPath: opts.repo ?? ".",
       port: opts.port,
       open: opts.open,
+      scanOptions: {
+        include: opts.include,
+        jobs: opts.jobs,
+        cache: opts.cache,
+        parser: opts.parser,
+      },
     });
 
     process.on("SIGINT", () => {

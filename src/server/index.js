@@ -8,6 +8,7 @@ import { createWatcher } from "./watcher.js";
 import { analyzeCurrent, persistCurrentAnalysis } from "../snapshots/snapshot.js";
 import { createSnapshotStore } from "../snapshots/store.js";
 import { diffAnalyses } from "../diff/index.js";
+import { readGitState } from "../snapshots/git-state.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.resolve(__dirname, "..", "ui");
@@ -57,10 +58,15 @@ function openBrowser(url) {
   });
 }
 
-export async function startServer({ repoPath, port = 3847, open = true }) {
+export async function startServer({ repoPath, port = 3847, open = true, scanOptions: cliScanOptions = {} }) {
   const absRepo = path.resolve(repoPath);
   const config = await loadRepoConfig(absRepo);
-  const scanOptions = { include: config.include ?? [], config };
+  const scanOptions = {
+    ...cliScanOptions,
+    include: cliScanOptions.include?.length ? cliScanOptions.include : (config.include ?? []),
+    config,
+  };
+  for (const key of Object.keys(scanOptions)) if (scanOptions[key] === undefined) delete scanOptions[key];
 
   let latestScan = null;
   let latestDiff = null;
@@ -73,7 +79,7 @@ export async function startServer({ repoPath, port = 3847, open = true }) {
     try {
       const current = await analyzeCurrent(absRepo, scanOptions);
       latestScan = current.scan;
-      const store = createSnapshotStore(absRepo);
+      const store = createSnapshotStore(current.git.semanticStoreRoot);
       let ref = await store.getCommitRef(current.git.head);
       if (current.git.clean && !ref) {
         const created = await persistCurrentAnalysis(absRepo, current);
@@ -120,9 +126,11 @@ export async function startServer({ repoPath, port = 3847, open = true }) {
     }
 
     if (url.pathname === "/api/snapshots") {
-      createSnapshotStore(absRepo).listSnapshots().then((items) => serveJSON(res, items), (err) => {
-        res.writeHead(500); res.end(err.message);
-      });
+      readGitState(absRepo)
+        .then((git) => createSnapshotStore(git.semanticStoreRoot).listSnapshots())
+        .then((items) => serveJSON(res, items), (err) => {
+          res.writeHead(500); res.end(err.message);
+        });
       return;
     }
 

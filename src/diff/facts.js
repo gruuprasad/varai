@@ -1,5 +1,5 @@
 function semantic(item) {
-  const { evidence, observationMethod, claimState, ...rest } = item;
+  const { evidence, observationMethod, ...rest } = item;
   return JSON.stringify(rest);
 }
 
@@ -12,8 +12,13 @@ export function diffFacts(before, after) {
     const old = oldMap.get(item.id);
     if (!old) return [];
     if (semantic(old) !== semantic(item)) return [{ change: "semantic", before: old, after: item }];
-    if (JSON.stringify(old.evidence) !== JSON.stringify(item.evidence)) return [{ change: "evidence-moved", before: old, after: item }];
     return [];
   });
-  return { added, removed, changed };
+  const evidenceChanged = after.flatMap((item) => {
+    const old = oldMap.get(item.id);
+    return old && JSON.stringify(old.evidence) !== JSON.stringify(item.evidence)
+      ? [{ change: "evidence-moved", before: old, after: item }]
+      : [];
+  });
+  return { added, removed, changed, evidenceChanged };
 }

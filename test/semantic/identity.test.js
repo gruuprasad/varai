@@ -25,3 +25,17 @@ test("moving behavior evidence preserves behavior and clause identity", () => {
   assert.equal(a.behaviors[0].requires[0].id, b.behaviors[0].requires[0].id);
   assert.notDeepEqual(a.behaviors[0].door.evidence, b.behaviors[0].door.evidence);
 });
+
+test("duplicate semantic clauses merge evidence deterministically", () => {
+  const behavior = (requires) => ({
+    door: { method: "GET", path: "/items", evidence: { file: "route.py", line: 1 } }, bundle: null,
+    requires, takes: [], gives: [], reads: [], writes: [], fails: [], untraced: [], helperCalls: [], trunkCall: null,
+  });
+  const a = { name: "auth", kind: "dependency", evidence: { file: "a.py", line: 2 }, layer: "ast" };
+  const b = { name: "auth", kind: "dependency", evidence: { file: "b.py", line: 3 }, layer: "ast" };
+  const left = createAnalysisIR({ scanContext: context, facts: [], behaviors: [behavior([a, b])] });
+  const right = createAnalysisIR({ scanContext: context, facts: [], behaviors: [behavior([b, a])] });
+  assert.deepEqual(left, right);
+  assert.equal(left.behaviors[0].requires.length, 1);
+  assert.equal(left.behaviors[0].requires[0].evidence.length, 2);
+});

@@ -44,6 +44,23 @@ function normalizeClause(kind, clause) {
   return canonicalizeValue(normalized);
 }
 
+function normalizeClauses(kind, clauses) {
+  const merged = new Map();
+  for (const clause of clauses) {
+    const normalized = normalizeClause(kind, clause);
+    const current = merged.get(normalized.id);
+    if (!current) {
+      merged.set(normalized.id, normalized);
+      continue;
+    }
+    current.evidence = evidenceList([...current.evidence, ...normalized.evidence]);
+    // Keep the least-confident state when observations disagree.
+    const rank = { observed: 0, inferred: 1, unverified: 2, ambiguous: 3 };
+    if (rank[normalized.claimState] > rank[current.claimState]) current.claimState = normalized.claimState;
+  }
+  return [...merged.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+
 function normalizeBehavior(behavior) {
   const normalized = {
     ...behavior,
@@ -51,7 +68,7 @@ function normalizeBehavior(behavior) {
     door: { ...behavior.door, evidence: evidenceList(behavior.door?.evidence) },
   };
   for (const kind of ["requires", "takes", "gives", "reads", "writes", "fails", "untraced"]) {
-    normalized[kind] = (behavior[kind] ?? []).map((clause) => normalizeClause(kind, clause)).sort((a, b) => a.id.localeCompare(b.id));
+    normalized[kind] = normalizeClauses(kind, behavior[kind] ?? []);
   }
   return canonicalizeValue(normalized);
 }

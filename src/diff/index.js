@@ -3,13 +3,26 @@ import { diffBehaviors } from "./behaviors.js";
 import { diffFacts } from "./facts.js";
 import { summarizeDiff } from "./summary.js";
 
+function withoutEvidence(value) {
+  if (Array.isArray(value)) return value.map(withoutEvidence);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => key !== "evidence")
+    .map(([key, item]) => [key, withoutEvidence(item)]));
+}
+
 function setDiff(before, after) {
   const old = new Map(before.map((item) => [item.id, item]));
   const next = new Map(after.map((item) => [item.id, item]));
   return {
     added: after.filter((item) => !old.has(item.id)),
     removed: before.filter((item) => !next.has(item.id)),
-    changed: after.flatMap((item) => old.has(item.id) && JSON.stringify(old.get(item.id)) !== JSON.stringify(item)
+    changed: after.flatMap((item) => old.has(item.id) && JSON.stringify(withoutEvidence(old.get(item.id))) !== JSON.stringify(withoutEvidence(item))
+      ? [{ before: old.get(item.id), after: item }]
+      : []),
+    evidenceChanged: after.flatMap((item) => old.has(item.id) &&
+      JSON.stringify(withoutEvidence(old.get(item.id))) === JSON.stringify(withoutEvidence(item)) &&
+      JSON.stringify(old.get(item.id)) !== JSON.stringify(item)
       ? [{ before: old.get(item.id), after: item }]
       : []),
   };

@@ -294,7 +294,10 @@ function renderSemanticDiff() {
   const diff = diffData?.diff;
   if (!diff) return;
   if (!diff.summary.hasChanges) {
-    el.factsList.innerHTML = `<div class="empty-state"><span class="empty-icon">✓</span><span>No semantic changes from the HEAD baseline</span></div>`;
+    const evidenceHint = diff.summary.hasEvidenceChanges
+      ? `<small>${diff.summary.evidenceChanges} evidence locations moved</small>`
+      : "";
+    el.factsList.innerHTML = `<div class="empty-state"><span class="empty-icon">✓</span><span>No semantic changes from the HEAD baseline</span>${evidenceHint}</div>`;
     return;
   }
   let html = `<div class="diff-summary"><strong>Semantic progression</strong><span>+${diff.summary.behaviorsAdded} −${diff.summary.behaviorsRemoved} ~${diff.summary.behaviorsChanged} behaviors</span></div>`;
@@ -308,11 +311,11 @@ function renderSemanticDiff() {
     html += `<article class="diff-card changed"><h3>~ ${esc(behavior.door.method)} ${esc(behavior.door.path)}</h3><ul>`;
     for (const change of behavior.clauses) {
       if (change.change === "claim-state") html += `<li class="risk">! ${diffClause(change.kind, change.after)}: ${esc(change.before.claimState)} → ${esc(change.after.claimState)}</li>`;
-      else if (change.change === "evidence-moved") html += `<li class="muted">evidence moved: ${diffEvidence(change.before)} → ${diffEvidence(change.after)}</li>`;
       else html += `<li>${change.change === "added" ? "+" : "−"} ${diffClause(change.kind, change.clause)} <small>${diffEvidence(change.clause)}</small></li>`;
     }
     html += `</ul></article>`;
   }
+  if (diff.summary.hasEvidenceChanges) html += `<div class="diff-summary"><span>${diff.summary.evidenceChanges} evidence locations moved</span><span>Available in JSON or CLI detail</span></div>`;
   el.factsList.innerHTML = html;
 }
 

@@ -70,7 +70,7 @@ export async function createSnapshot(repoPath, options = {}) {
 }
 
 export async function persistCurrentAnalysis(repoPath, current) {
-  const store = createSnapshotStore(repoPath);
+  const store = createSnapshotStore(current.git.semanticStoreRoot ?? repoPath);
   const semanticObjectHash = await store.putObject(current.scan.analysis);
   const identity = {
     formatVersion: SNAPSHOT_FORMAT_VERSION,
