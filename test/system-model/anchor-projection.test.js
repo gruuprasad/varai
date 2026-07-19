@@ -43,3 +43,34 @@ test("anchor projections are deterministic under collection ordering", async () 
   assert.deepEqual(browseByThing(value), browseByThing(reversed));
   assert.deepEqual(browseByCapability(value), browseByCapability(reversed));
 });
+
+test("subjects are tier 0, screens nest surfaces, unplaced surfaces stay honest", async () => {
+  const value = await model();
+  const projection = browseByThing(value);
+  const byId = new Map(value.elements.map((item) => [item.id, item]));
+
+  for (const root of projection.roots) {
+    const kind = byId.get(root.elementId)?.kind;
+    if (["aggregate", "entity"].includes(kind)) assert.equal(root.tier, 0, `${kind} must be tier 0`);
+    if (["screen", "surface"].includes(kind)) assert.equal(root.tier, 1, `${kind} must be tier 1`);
+    if (["contract", "state"].includes(kind)) assert.equal(root.tier, 2, `${kind} must be tier 2`);
+  }
+
+  const screenRoot = projection.roots.find((item) => byId.get(item.elementId)?.name === "/plan");
+  assert.ok(screenRoot, "screen /plan is a root");
+  assert.ok(screenRoot.surfaceIds.some((id) => byId.get(id)?.name === "BuildingToolbar"));
+  assert.ok(screenRoot.behaviorIds.length >= 1, "screen inherits its surfaces' offered behaviors");
+  assert.ok(!projection.roots.some((item) => byId.get(item.elementId)?.name === "BuildingToolbar"),
+    "contained surfaces are not roots");
+
+  const orphanRoot = projection.roots.find((item) => byId.get(item.elementId)?.name === "OrphanPanel");
+  assert.ok(orphanRoot, "unplaced surfaces remain roots");
+  assert.equal(orphanRoot.tier, 1);
+  assert.ok(projection.diagnostics.some((item) =>
+    item.code === "surface-not-placed" && item.elementId === orphanRoot.elementId));
+
+  const tierOne = projection.roots.filter((item) => item.tier === 1);
+  const firstSurfaceIndex = tierOne.findIndex((item) => byId.get(item.elementId)?.kind === "surface");
+  const lastScreenIndex = tierOne.map((item) => byId.get(item.elementId)?.kind).lastIndexOf("screen");
+  if (firstSurfaceIndex >= 0) assert.ok(lastScreenIndex < firstSurfaceIndex, "screens sort before unplaced surfaces");
+});
