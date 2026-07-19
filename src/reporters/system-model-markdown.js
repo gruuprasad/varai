@@ -1,11 +1,5 @@
 import { browseByThing, browseByCapability } from "../system-model/projections/index.js";
-
-const RELATION_LABELS = Object.freeze({
-  contains: "contains", exposes: "exposes", offers: "offers", triggered_by: "is triggered by", invokes: "invokes",
-  accepts: "accepts", produces: "produces", requires: "requires", available_when: "is available when", reads: "reads",
-  changes: "changes", creates: "creates", removes: "removes", succeeds_with: "succeeds with", fails_with: "fails with",
-  navigates_to: "navigates to", emits: "emits", has_field: "has field", relates_to: "relates to", stored_in: "is stored in",
-});
+import { RELATION_LABELS, claimStateLabel } from "./display-language.js";
 
 function evidenceLabel(evidence) {
   const values = (evidence ?? []).map((item) => {
@@ -25,7 +19,8 @@ function qualifierLabel(qualifiers) {
 }
 
 function claimSentence(claim, sourceName, byId) {
-  const confidence = claim.claimState === "observed" ? "" : ` [${claim.claimState}]`;
+  const stateLabel = claimStateLabel(claim.claimState);
+  const confidence = stateLabel ? ` [${stateLabel}]` : "";
   let target = targetLabel(claim.target, byId);
   if (claim.relation === "offers" && target.startsWith(`${sourceName} `)) target = target.slice(sourceName.length + 1);
   return `${sourceName} ${RELATION_LABELS[claim.relation] ?? claim.relation} ${target}${qualifierLabel(claim.qualifiers)}.${confidence}`;

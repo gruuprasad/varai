@@ -1,11 +1,4 @@
-const RELATIONS = Object.freeze({
-  contains: "contains", exposes: "exposes", offers: "offers", triggered_by: "is triggered by",
-  invokes: "invokes", accepts: "accepts", produces: "produces", requires: "requires",
-  available_when: "is available when", reads: "reads", changes: "changes", creates: "creates",
-  removes: "removes", succeeds_with: "succeeds with", fails_with: "fails with",
-  navigates_to: "navigates to", emits: "emits", has_field: "has field",
-  relates_to: "relates to", stored_in: "is stored in",
-});
+import { RELATION_LABELS as RELATIONS } from "./display-language.js";
 
 function evidence(value) {
   return (value?.evidence ?? []).map((item) => `${item.file}${item.line ? `:${item.line}` : ""}`).join(", ") || "no evidence";
