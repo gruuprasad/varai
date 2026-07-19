@@ -44,7 +44,45 @@ function actionName(action) {
 
 function inverted(condition) {
   const value = String(condition ?? "unknown").trim();
-  return value.startsWith("!") ? value.slice(1).trim() : `not ${value}`;
+  if (value.startsWith("!")) return value.slice(1).trim();
+  return /&&|\|\|/.test(value) ? `not (${value})` : `not ${value}`;
+}
+
+function readableCondition(value) {
+  return String(value ?? "condition")
+    .replace(/\./g, " ")
+    .replace(/_/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function conditionalRequirement(condition) {
+  const match = String(condition ?? "").match(/^(.+?)\s*&&\s*!([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)$/);
+  if (!match) return null;
+  return `${readableCondition(match[2])} when ${readableCondition(match[1])}`;
+}
+
+function matchingApiBehavior(invocation, behaviors) {
+  const exactKey = normalizeHttpKey(invocation.method, invocation.path);
+  const candidates = behaviors.filter((candidate) => candidate.door?.kind !== "ui_action" &&
+    String(candidate.door?.method ?? "").toUpperCase() === String(invocation.method ?? "").toUpperCase());
+  const exact = candidates.find((candidate) => normalizeHttpKey(candidate.door?.method, candidate.door?.path) === exactKey);
+  if (exact) return exact;
+  if (!String(invocation.path).includes("*")) return null;
+  const staticSegments = String(invocation.path).split("/").filter((segment) => segment && segment !== "*");
+  const matches = candidates.filter((candidate) => {
+    const routeSegments = String(candidate.door?.path ?? "").split("/").filter(Boolean);
+    let cursor = 0;
+    for (const segment of staticSegments) {
+      const next = routeSegments.indexOf(segment, cursor);
+      if (next < 0) return false;
+      cursor = next + 1;
+    }
+    return true;
+  });
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function outcomeValue(clause) {
@@ -176,21 +214,33 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
       addClaim({ source: source("ui", "surface", surfaceKey), relation: "offers", target: reference("ui", "action", actionKey), slot: `action:${actionKey}`, evidence, capability: "ui.action", observationMethod: "ast" });
       addClaim({ source: source("ui", "action", actionKey), relation: "triggered_by", target: literal("event", door.event), slot: "trigger", qualifiers: { event: door.event }, evidence, capability: "ui.action", observationMethod: "ast" });
       for (const guard of behavior.guards ?? []) {
-        addClaim({ source: source("ui", "action", actionKey), relation: "available_when", target: literal("condition", inverted(guard.condition)), slot: "availability", evidence: guard.evidence, implementationPath: guard.implementationPath, observationMethod: methodFor(guard), claimState: stateFor(guard), capability: "ui.availability" });
+        const requirement = conditionalRequirement(guard.condition);
+        addClaim({
+          source: source("ui", "action", actionKey),
+          relation: requirement ? "requires" : "available_when",
+          target: literal("condition", requirement ?? inverted(guard.condition)),
+          slot: `${requirement ? "requirement" : "availability"}:${guard.condition}`,
+          evidence: guard.evidence,
+          implementationPath: guard.implementationPath,
+          observationMethod: methodFor(guard),
+          claimState: stateFor(guard),
+          capability: "ui.availability",
+        });
       }
       for (const invocation of behavior.invokes ?? []) {
-        const targetKey = normalizeHttpKey(invocation.method, invocation.path);
-        const targetExists = behaviors.some((candidate) => candidate.door?.kind !== "ui_action" &&
-          normalizeHttpKey(candidate.door?.method, candidate.door?.path) === targetKey);
+        const matchedBehavior = matchingApiBehavior(invocation, behaviors);
+        const targetKey = matchedBehavior
+          ? normalizeHttpKey(matchedBehavior.door?.method, matchedBehavior.door?.path)
+          : normalizeHttpKey(invocation.method, invocation.path);
         addClaim({
           source: source("ui", "action", actionKey),
           relation: "invokes",
-          target: targetExists ? reference("api", "operation", targetKey) : literal("operation", targetKey),
+          target: matchedBehavior ? reference("api", "operation", targetKey) : literal("operation", targetKey),
           slot: `invoke:${targetKey}`,
           evidence: [invocation.evidence].flat(),
           implementationPath: invocation.implementationPath,
           observationMethod: methodFor(invocation),
-          claimState: targetExists ? "observed" : "unverified",
+          claimState: matchedBehavior ? "observed" : "unverified",
           capability: "ui.api-link",
         });
       }

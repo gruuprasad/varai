@@ -2,7 +2,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, readFile, rename } from "node:fs/promises";
 
-export const EXTRACTOR_VERSION = 6; // Anchor-lift observation and trace set
+export const EXTRACTOR_VERSION = 7; // Inline UI actions, compound guards, and API wrapper reach
 
 const CACHE_FORMAT_VERSION = 1;
 
