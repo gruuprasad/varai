@@ -55,6 +55,7 @@ export function renderSystemModel({ model }) {
     if (!root.behaviorIds.length) lines.push(`${indent}- No connected behavior recovered within current coverage.`);
     for (const behaviorId of root.behaviorIds) {
       const behavior = byId.get(behaviorId);
+      if (!behavior) continue;
       const interfaces = root.interfaceIds.map((id) => byId.get(id)).filter(Boolean)
         .filter((item) => item.id === behavior.id ||
           (claimsBySource.get(item.id) ?? []).some((claim) => claim.relation === "offers" && claim.target.id === behavior.id));
@@ -91,6 +92,7 @@ export function renderSystemModel({ model }) {
     lines.push(`### ${element.name}`, "");
     for (const surfaceId of root.surfaceIds) {
       const surface = byId.get(surfaceId);
+      if (!surface) continue;
       lines.push(`- **${surface.name}** (${kindLabel(surface.kind)})`);
       for (const claim of claimsBySource.get(surfaceId) ?? []) {
         if (claim.relation !== "offers" || claim.target.kind !== "reference") continue;
@@ -118,6 +120,7 @@ export function renderSystemModel({ model }) {
   lines.push("## Capabilities", "");
   for (const item of capabilityView.capabilities) {
     const behavior = byId.get(item.behaviorId);
+    if (!behavior) continue;
     const resources = item.resourceIds.map((id) => byId.get(id)?.name).filter(Boolean);
     const interfaces = item.interfaceIds.map((id) => byId.get(id)?.name).filter(Boolean);
     lines.push(`- **${behavior.name}**${resources.length ? ` — acts on ${resources.join(", ")}` : ""}${interfaces.length ? ` — via ${interfaces.join(", ")}` : ""}`);

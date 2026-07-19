@@ -11,7 +11,7 @@ function tierRank(element) {
 
 // Within tier 1, screens come before unplaced surfaces.
 function kindRank(element) {
-  return element.kind === "surface" ? 1 : 0;
+  return element?.kind === "surface" ? 1 : 0;
 }
 
 export function browseByThing(model) {

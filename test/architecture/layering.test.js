@@ -20,7 +20,8 @@ test("core never imports from the server or UI layers", () => {
   for (const dir of CORE_DIRS) {
     for (const file of jsFiles(dir)) {
       const content = readFileSync(file, "utf8");
-      assert.ok(!/from\s+["'][^"']*\/(server|ui)\//.test(content), `${file} imports from server/ui`);
+      // Match both "from '../server/foo'" and bare "from '../server'" (index import)
+      assert.ok(!/from\s+["'][^"']*\/(server|ui)(\/|["'])/.test(content), `${file} imports from server/ui`);
     }
   }
 });
@@ -31,7 +32,8 @@ test("relation display labels are defined exactly once, in core display language
   for (const dir of ["src", "bin"]) {
     for (const file of jsFiles(dir)) {
       if (path.normalize(file) === owner) continue;
-      if (readFileSync(file, "utf8").includes('"is triggered by"')) offenders.push(file);
+      // Match the sentinel string in any quote style
+      if (/is triggered by/.test(readFileSync(file, "utf8"))) offenders.push(file);
     }
   }
   assert.deepEqual(offenders, []);

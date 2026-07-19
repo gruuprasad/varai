@@ -61,7 +61,7 @@ async function parseFrontendFiles(files, ctx) {
 
 export async function traceScreenContainment(files, ctx, pageObservations, surfaces) {
   const parsed = await parseFrontendFiles(files, ctx);
-  const surfaceIndex = new Map(surfaces.map((item) => [`${item.file} ${item.component}`, item]));
+  const surfaceIndex = new Map(surfaces.map((item) => [`${item.file}\0${item.component}`, item]));
   const found = new Map();
 
   for (const page of pageObservations) {
@@ -87,9 +87,9 @@ export async function traceScreenContainment(files, ctx, pageObservations, surfa
       if (!info) continue;
       for (const use of info.jsxUses) {
         const definingFile = info.imports.get(use.name) ?? current;
-        const surface = surfaceIndex.get(`${definingFile} ${use.name}`);
+        const surface = surfaceIndex.get(`${definingFile}\0${use.name}`);
         if (surface) {
-          const key = `${page.name} ${use.name}`;
+          const key = `${page.name}\0${use.name}`;
           const entry = found.get(key) ?? { screen: String(page.name), surfaceKey: use.name, evidence: [] };
           if (!entry.evidence.some((item) => item.file === current && item.line === use.line)) {
             entry.evidence.push({ file: current, line: use.line });

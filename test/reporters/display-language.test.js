@@ -4,14 +4,20 @@ import {
   RELATION_LABELS, KIND_LABELS, CLAIM_STATE_LABELS,
   kindLabel, claimStateLabel, displayLanguage,
 } from "../../src/reporters/display-language.js";
+import { RELATIONSHIPS } from "../../src/system-model/schema.js";
 
 test("display language covers every kernel relation and stays plain", () => {
-  for (const relation of ["contains", "exposes", "offers", "triggered_by", "invokes",
-    "accepts", "produces", "requires", "available_when", "reads", "changes", "creates",
-    "removes", "succeeds_with", "fails_with", "navigates_to", "emits", "has_field",
-    "relates_to", "stored_in"]) {
-    assert.equal(typeof RELATION_LABELS[relation], "string", relation);
+  // Verify against the canonical schema, not a hardcoded list
+  for (const relation of RELATIONSHIPS) {
+    assert.equal(typeof RELATION_LABELS[relation], "string", `missing label for ${relation}`);
+    assert.ok(RELATION_LABELS[relation].length > 0, `empty label for ${relation}`);
   }
+  // No extra keys beyond what the schema declares
+  assert.deepEqual(
+    Object.keys(RELATION_LABELS).sort(),
+    [...RELATIONSHIPS].sort(),
+    "RELATION_LABELS keys must exactly match schema RELATIONSHIPS",
+  );
   assert.equal(KIND_LABELS.aggregate, "in-memory model");
   assert.equal(KIND_LABELS.entity, "stored record");
   assert.equal(KIND_LABELS.contract, "data contract");

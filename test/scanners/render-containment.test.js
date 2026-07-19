@@ -18,6 +18,17 @@ test("screens contain the surfaces their render chain reaches", async () => {
     claim.sourceId === screen.id && claim.relation === "contains" && claim.target.kind === "reference");
   const targets = contains.map((claim) => byId.get(claim.target.id)?.name);
   assert.ok(targets.includes("BuildingToolbar"), `expected BuildingToolbar in ${JSON.stringify(targets)}`);
+  // Verify exact containment set — a bug that over-includes must fail
+  const surfaces = model.elements.filter((item) => item.kind === "surface");
+  const expectedContained = new Set(["BuildingToolbar"]);
+  for (const surface of surfaces) {
+    const isContained = targets.includes(surface.name);
+    if (expectedContained.has(surface.name)) {
+      assert.ok(isContained, `expected ${surface.name} to be contained`);
+    } else {
+      assert.ok(!isContained, `${surface.name} should NOT be contained by /plan`);
+    }
+  }
   assert.ok(contains.every((claim) => claim.claimState === "observed"));
   assert.ok(contains.every((claim) => claim.evidence.length > 0));
 });

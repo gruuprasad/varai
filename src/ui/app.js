@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
 (function setupTheme() {
   document.documentElement.dataset.theme = localStorage.getItem("varai-theme") || "dark";
@@ -36,7 +36,7 @@ events.addEventListener("error", () => setStatus("error", "Disconnected"));
 fetch("/api/model").then((response) => response.json()).then((data) => {
   if (data.model) { scanData = data; setStatus("live", "Live"); render(); }
 }).catch(() => setStatus("error", "Connection error"));
-fetch("/api/diff").then((response) => response.json()).then((data) => { diffData = data; render(); });
+fetch("/api/diff").then((response) => response.json()).then((data) => { diffData = data; render(); }).catch(() => {});
 
 function setStatus(kind, text) {
   el.statusDot.className = `status-dot ${kind}`;
@@ -375,4 +375,8 @@ function bindExpanders() {
 function renderEmpty(message) { el.list.innerHTML = emptyMarkup(message); }
 function emptyMarkup(message) { return `<div class="empty-state"><span class="empty-icon">◌</span><span>${esc(message)}</span></div>`; }
 
-el.search.addEventListener("input", render);
+let searchTimer = null;
+el.search.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(render, 120);
+});

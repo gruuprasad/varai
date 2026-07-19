@@ -19,11 +19,25 @@ test("clamps an out-of-range line instead of failing", () => {
   assert.ok(snippet.focusLine <= snippet.startLine + snippet.lines.length - 1);
 });
 
+test("non-numeric line defaults to line 1", () => {
+  const snippet = readSourceSnippet(repo, "src/components/BuildingToolbar.tsx", "abc");
+  assert.equal(snippet.focusLine, 1);
+});
+
 test("rejects paths that escape the repository root", () => {
-  assert.throws(() => readSourceSnippet(repo, "../../../package.json", 1));
-  assert.throws(() => readSourceSnippet(repo, "/etc/hostname", 1));
+  assert.throws(
+    () => readSourceSnippet(repo, "../../../package.json", 1),
+    { message: /Path escapes|ENOENT/ },
+  );
+  assert.throws(
+    () => readSourceSnippet(repo, "/etc/hostname", 1),
+    { message: /Path escapes|ENOENT/ },
+  );
 });
 
 test("rejects missing files", () => {
-  assert.throws(() => readSourceSnippet(repo, "src/nope.tsx", 1));
+  assert.throws(
+    () => readSourceSnippet(repo, "src/nope.tsx", 1),
+    { code: "ENOENT" },
+  );
 });
