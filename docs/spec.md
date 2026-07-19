@@ -2,79 +2,59 @@
 
 ## Product contract
 
-`varai map <repo>` builds and renders a local, deterministic, evidence-backed System Model. The user-facing result describes the system above implementation level while keeping every claim traceable to source and every analyzer limit explicit.
+`varai map <repo>` builds and renders a local, deterministic, evidence-backed System Model. It describes software above implementation level while keeping every statement traceable to repository evidence and every analyzer limit explicit.
 
-Varai does not require an intent file or an LLM. It does not upload repository contents silently.
+Varai does not require an intent file or an LLM and never uploads repository contents silently.
 
-## Pipeline
+## Canonical pipeline
 
 ```text
 local repository
   -> scope-aware file walk and stack detection
-  -> language/framework observations
-  -> Analysis IR v2 (migration evidence payload)
-  -> System Model v1
-       -> current-system Markdown
-       -> snapshots
-       -> later: semantic diff, checks, intent reconciliation
+  -> parser observations and behavior analysis (private)
+  -> System Model v1 (the only product IR)
+       -> current-system map
+       -> snapshots and semantic diff
+       -> later: checks, intent reconciliation, constrained explanation
 ```
 
-During the migration slice, existing FastAPI/UI behavior objects and facts are projected into System Model v1. Later semantic adapters will emit the same model contract directly.
+Private observations may be cached for performance. They are not exposed by the scanner, stored in semantic snapshots, or independently versioned. Pre-release snapshots from discarded models are intentionally ignored and regenerated.
 
 ## System Model v1
 
-The model contains:
+The model contains one System, registered Subsystems, stable Elements, typed Claims, analyzer Coverage, and Diagnostics. The vocabulary is defined in `docs/semantic-language.md`.
 
-- one System;
-- Subsystems identified by registered lenses;
-- stable Elements with lens-specific kinds and generic interface/behavior/resource roles;
-- typed Claims using the relationship vocabulary in `docs/semantic-language.md`;
-- evidence, observation method, and claim state;
-- analyzer capability coverage and diagnostics.
+Element identity derives from subsystem, kind, and semantic key. Claim identity derives from source, relationship, and semantic slot or target. Source paths, evidence, confidence, qualifiers, and analyzer versions do not define semantic identity.
 
-Element identity derives from subsystem, kind, and a semantic key. Claim identity derives from its source, relationship, and semantic slot or target. Source paths, evidence, confidence, qualifiers, and analyzer versions do not define semantic identity.
+Framework-specific analyzers may use private intermediate shapes, but they must translate them before the scanner boundary. Adding framework support must not require a new kernel object type, snapshot payload, or diff engine.
 
-## Current compatibility input
+## Honesty and coverage
 
-Analysis IR v2 remains the existing structured observation payload:
-
-- facts and stock-pattern instances;
-- HTTP and UI behavior cards;
-- state locations and bundle views;
-- diagnostics and intent-artifact hashes.
-
-It remains the payload consumed by the existing differ until System Model diff ships. Historical Analysis objects are never silently reinterpreted as System Models.
-
-## Coverage contract
-
-Coverage attaches to an analyzer capability and System/Subsystem/Element scope:
+Every Element and Claim declares evidence, observation method, claim state, and responsible capability. Coverage is one of:
 
 - `analyzed`: relevant constructs in scope were handled;
-- `partial`: known supported shapes were handled but gaps remain;
+- `partial`: supported shapes were handled but known gaps remain;
 - `unsupported`: the area was recognized without a supporting analyzer;
 - `failed`: an expected analyzer did not complete.
 
-Compatibility-projected capabilities are initially `partial`; today's extractors do not prove exhaustive syntax coverage. Absence may be stated only under analyzed coverage.
+Absence may be stated only under analyzed coverage. Analyzer-version changes and coverage changes are not silently presented as application changes.
 
 ## Parser and performance contract
 
-Parsing remains behind `src/scanners/treesitter.js` with native and WASM backends. Both satisfy the same node-shape contract. Cached and uncached, serial and worker, and native and WASM scans must produce canonical byte-identical model JSON.
+Parsing remains behind `src/scanners/treesitter.js` with native and WASM backends. Cached/uncached, serial/worker, and native/WASM scans must produce canonical byte-identical System Model JSON.
 
-The per-file cache key includes `EXTRACTOR_VERSION` in `src/scanners/cache.js`. Bump it whenever extractor logic changes. Projection/model-only changes do not require a cache bump.
+The per-file observation cache key includes `EXTRACTOR_VERSION` in `src/scanners/cache.js`. Bump it whenever extraction logic changes.
 
-## Snapshot contract
+## Snapshot and diff contract
 
-Snapshot manifests are Git-bound and content-addressed. Manifest v2 stores both:
+Snapshot manifest v1 stores one content-addressed `modelObjectHash`, its `modelSchemaVersion`, Git state, scanned-tree hash, and scan-configuration hash. The configuration hash covers include and exclude scope. Clean snapshots update the shared Git commit ref; linked worktrees share the model store at `.varai/model-v1/`.
 
-- `semanticObjectHash`: Analysis IR v2 for existing diff/dashboard compatibility;
-- `systemModelObjectHash`: System Model v1 for the current-system product and later model diff.
+Diff compares two validated System Models and separates semantic changes from evidence-only movement. It reports Element, Claim, Coverage, and confidence changes using stable semantic identities.
 
-Clean snapshots update the shared Git commit ref; linked worktrees share the semantic object store. Older manifest v1 files remain readable.
-
-## Non-goals for the current slice
+## Non-goals
 
 - exhaustive language/framework coverage;
-- runtime correctness or behavioral guarantees;
+- runtime correctness without runtime evidence;
 - intent recovery from implementation;
 - hosted repository analysis;
 - LLM-created findings;

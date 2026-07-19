@@ -1,36 +1,37 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+## Product shape
 
-Varai is a lean Node CLI with a small, justified dependency set (`ignore` for `.gitignore` handling and tree-sitter bindings for parsing). `bin/varai.js` parses commands and delegates to `src/index.js`. Core pipeline modules live under `src/`: `intent.js` extracts rough requirements, `scanners/repo.js` gathers local evidence, `matcher.js` compares requirements to evidence conservatively, and `reporters/markdown.js` renders the report. Product direction and architectural decisions live in `docs/`; golden audit scenarios live under `examples/golden/`.
+Varai is a local Node CLI that translates repository evidence into one canonical, versioned System Model:
 
-## Build, Test, and Development Commands
+```text
+repository -> parsers/analyzers -> System Model -> map/diff/checks/explanation
+```
 
-- `node ./bin/varai.js audit --intent ./examples/golden/todo-partial/intent.md --repo ./examples/golden/todo-partial/app --out ./.varai/report.md` runs the CLI locally.
-- `npm run audit:example` runs the same example through the package script.
-- `npm test` runs Node's built-in test runner. Add tests under `test/` using `node:test`.
+Parser observations and framework-specific traces are private analyzer details. Do not expose, persist, or version a second product IR beside the System Model.
 
-## Coding Style & Naming Conventions
+## Project structure
 
-Use ECMAScript modules and Node built-ins unless a dependency is clearly justified. Keep scanner output plain JSON-like objects with `kind`, `name`, and `evidence` fields so reports and matchers can share the same evidence model. Prefer conservative statuses over confident inference when evidence is weak.
+`bin/varai.js` owns CLI parsing. Scanning lives in `src/scanners/`; the framework-neutral kernel, identity, validation, coverage, and diff live in `src/system-model/`; snapshots live in `src/snapshots/`; renderers live in `src/reporters/`; the dashboard lives in `src/server/` and `src/ui/`. Product decisions are in `docs/adr/`; `docs/semantic-language.md` is normative.
 
-### Parser backend
+## Development
 
-Parsing runs through a swappable backend behind `src/scanners/treesitter.js` (`parseTree` / `queryTree` / `loadLanguage`). Two backends exist:
+- `node ./bin/varai.js map [repo]` renders the current System Model.
+- `node ./bin/varai.js snapshot [repo]` stores a Git-bound checkpoint.
+- `node ./bin/varai.js diff [repo]` compares a checkpoint with the current model.
+- `node ./bin/varai.js start [repo] --no-open` starts the dashboard.
+- `npm test` runs Node's built-in test runner.
 
-- **native** (default): `tree-sitter` with native grammar bindings (`tree-sitter-python`, `-typescript`, `-javascript`, `-toml`). Fastest; requires a `node-gyp` toolchain at install time and is ABI-bound to the Node version.
-- **wasm** (fallback): `web-tree-sitter` + `tree-sitter-wasms`. No native build; portable. Used automatically when the native backend fails to load.
+Use ECMAScript modules and Node built-ins unless a dependency is justified. Keep the System Model plain JSON. Framework names belong in analyzers and evidence details, not kernel vocabulary or semantic identity.
 
-Native bindings are an accepted, justified exception to the "built-ins first" rule because parse throughput is the tool's dominant cost. Select with `--parser native|wasm` or `VARAI_PARSER`. Keep the wasm backend working as a fallback — both must satisfy the node-shape contract extractors rely on (`childForFieldName`, `namedChildren`, `startPosition.row`, `.text`, `.type`).
+## Parser backends and cache
 
-### Cache invalidation
+Parsing is behind `src/scanners/treesitter.js`. Native and WASM backends must satisfy the same node-shape contract and produce identical canonical models. Select with `--parser native|wasm` or `VARAI_PARSER`.
 
-The per-file fact cache (`.varai/cache/`) keys on a `EXTRACTOR_VERSION` constant in `src/scanners/cache.js`. **Bump it in the same commit whenever you change extractor logic**, or stale facts will be served from cache.
+The per-file observation cache keys on `EXTRACTOR_VERSION` in `src/scanners/cache.js`. Bump it whenever extraction logic changes. Model-only rendering or diff changes do not require a bump.
 
-## Testing Guidelines
+## Testing and principles
 
-Golden scenario tests live in `test/golden.test.js` and compare `examples/golden/*/expected-findings.json` to actual audit output. When adding behavior, prefer a small golden scenario first, then focused unit tests for extraction, scanning, matching, or report rendering.
+Prefer a small concept fixture plus focused analyzer/model/diff tests. For every new analyzer capability, test canonical model output, coverage, evidence, and a meaningful before/after diff. Preserve serial/worker and native/WASM parity.
 
-## Project Principles
-
-Varai is local-first. Do not add silent repo upload behavior. Every user-facing claim should be grounded in deterministic evidence, an evidence-cited inference, or an explicit `unverified` state. Report-first is the current direction; do not prioritize diagrams before the evidence model is stable.
+Varai is local-first. Never add silent repository upload. Every user-facing statement must be a deterministic observation, an evidence-backed inference, or explicitly unverified/ambiguous. Absence claims require declared analyzer coverage.

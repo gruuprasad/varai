@@ -1,5 +1,7 @@
 # Semantic Progression — Implementation Plan
 
+> Status: Superseded. The Analysis IR implementation described here was deleted; semantic progression now compares canonical System Models.
+
 > **For agentic workers:** Execute this plan gate by gate. Do not start a later gate until the current gate's acceptance checks pass. Use failing tests first for correctness fixes and semantic regressions.
 
 **Goal:** Deliver Varai's first trustworthy “Git for semantic progression” vertical slice: a deterministic, versioned semantic analysis; snapshots tied to Git state; and a behavior-level diff that tells a developer what to inspect and manually test after a code change.

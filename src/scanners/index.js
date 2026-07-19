@@ -5,18 +5,17 @@ import { cpus } from "node:os";
 import { detectStacks } from "./stack-detect.js";
 import { createScanContext } from "./context.js";
 import { extractorFingerprint, selectExtractors } from "./extractor-registry.js";
-import { deriveIntegrations } from "./extractors/integration.js";
-import { tagStock } from "./extractors/stock-tagger.js";
 import { buildPrefixMap } from "./router-prefix.js";
-import { dedupeFacts } from "./utils.js";
-import { createFactCache } from "./cache.js";
+import { dedupeObservations } from "./utils.js";
+import { createObservationCache } from "./cache.js";
 import { selectBackend } from "./treesitter.js";
 import { traceBehaviors } from "./behaviors/index.js";
 import { traceFrontendInteractions } from "./frontend/interactions.js";
-import { createAnalysisIR } from "../ir/canonicalize.js";
-import { validateAnalysisIR } from "../ir/validate.js";
-import { behaviorIdentity, stableId } from "../ir/identity.js";
-import { projectAnalysisV2 } from "../system-model/projectors/analysis-v2.js";
+import { createResolver } from "./behaviors/resolver.js";
+import { createImplementationGraph } from "./lift/implementation-graph.js";
+import { createDeclarationRegistry } from "./lift/declarations.js";
+import { bindBehaviorReferents } from "./lift/bindings.js";
+import { liftSystemModel } from "./lift/index.js";
 
 // ROOT_MARKERS are always included in the file list even when an --include
 // filter is active — they describe the whole project, not one service subdir.
@@ -71,6 +70,7 @@ const POOL_MIN_FILES = 1500;
 
 export async function scanRepo(repoPath, options = {}) {
   const include = options.include ?? [];
+  const exclude = options.exclude ?? [];
   const gitignore = options.gitignore !== false;
   const useCache = options.cache !== false;
   const cacheDirOverride = options.cacheDir ?? null;
@@ -80,7 +80,7 @@ export async function scanRepo(repoPath, options = {}) {
 
   await selectBackend(parser);
 
-  const files = await walk(repoPath, include, gitignore);
+  const files = await walk(repoPath, include, exclude, gitignore);
 
   for (const marker of ROOT_MARKERS) {
     if (!files.includes(marker)) {
@@ -116,13 +116,13 @@ export async function scanRepo(repoPath, options = {}) {
     extractorFingerprint: extractorFingerprint(activeExtractors),
     enabled: useCache,
   };
-  const cache = createFactCache(cacheConfig);
+  const cache = createObservationCache(cacheConfig);
 
   // Auto-enable only for wasm on large repos; an explicit --jobs N>1 forces it on.
   const usePool = jobs > 1 &&
     (jobsExplicit || (parser === "wasm" && files.length >= POOL_MIN_FILES));
 
-  let allFacts;
+  let extractedObservations;
   if (usePool) {
     const { createWorkerPool } = await import("./pool.js");
     const pool = createWorkerPool({
@@ -135,31 +135,26 @@ export async function scanRepo(repoPath, options = {}) {
       extractorIds,
       parser,
     });
-    allFacts = await pool.run();
+    extractedObservations = await pool.run();
   } else {
-    allFacts = [];
+    extractedObservations = [];
     for (const file of files) {
-      allFacts.push(...await extractFileAll(repoPath, file, ctx, activeExtractors, cache));
+      extractedObservations.push(...await extractFileAll(repoPath, file, ctx, activeExtractors, cache));
     }
   }
 
-  const dedupedFacts = dedupeFacts(sortFacts(allFacts));
-
-  // Derive cross-cutting facts from the merged set (integrations are inferred
-  // from package/env_var facts, not from any single file), then re-sort so they
-  // group correctly. Derived facts are deterministic, so this stays stable.
-  const derivedFacts = deriveIntegrations(dedupedFacts);
-  const merged = [...dedupedFacts, ...derivedFacts];
-  const stock = tagStock(merged, options.config ?? {});
-  const finalFacts = sortFacts(merged);
+  // Observations are private analyzer input. Only the canonical System Model
+  // crosses the scanner interface.
+  const observations = dedupeObservations(sortObservations(extractedObservations));
 
   const diagnostics = [];
-  let behaviors = { bundles: [] };
+  const graph = createImplementationGraph();
+  const resolver = createResolver(files, ctx, { workBudget: 100_000 });
+  let apiBehaviors = [];
   let frontendBehaviors = [];
   if (stacks.has("fastapi")) {
     try {
-      const traced = await traceBehaviors(repoPath, files, ctx, finalFacts);
-      behaviors = { bundles: traced.bundles };
+      apiBehaviors = await traceBehaviors(repoPath, files, ctx, observations, { graph, resolver });
     } catch (err) {
       diagnostics.push({
         code: "behavior-trace-failed",
@@ -185,46 +180,63 @@ export async function scanRepo(repoPath, options = {}) {
   // "base" is an internal always-on stack; don't surface it to the report.
   const displayStacks = [...stacks].filter((s) => s !== "base");
 
-  const sectionCounts = countByKind(finalFacts);
-  const summary = {
-    fileCount: files.length,
-    factCount: finalFacts.length,
-    stacks: displayStacks,
-    sectionCounts
-  };
-
-  const flatBehaviors = [...behaviors.bundles.flatMap((bundle) => bundle.behaviors), ...frontendBehaviors];
-  const patternInstances = [...stock.instances.entries()].map(([name, members]) => ({
-    id: stableId("pattern", name),
-    name,
-    members: members.map(({ fact, role }) => ({
-      factId: stableId("fact", factIdentityForScan(fact)),
-      role,
-    })).sort((a, b) => `${a.factId}:${a.role}`.localeCompare(`${b.factId}:${b.role}`)),
-  }));
-  const analysis = validateAnalysisIR(createAnalysisIR({
-    scanContext: {
+  const behaviors = [...apiBehaviors, ...frontendBehaviors];
+  const registry = await createDeclarationRegistry({ observations, symbolIndex: resolver });
+  const bindings = bindBehaviorReferents(behaviors, registry);
+  diagnostics.push(...bindings.diagnostics, ...graph.diagnostics());
+  const untracedGroups = new Map();
+  for (const behavior of behaviors) {
+    for (const clause of behavior.untraced ?? []) {
+      const capability = behavior.door?.kind === "ui_action" ? "ui.action" : "api.effect";
+      const reason = clause.reason ?? "unsupported call";
+      const key = `${capability}\0${reason}`;
+      const group = untracedGroups.get(key) ?? { capability, reason, calls: new Set(), evidence: [] };
+      group.calls.add(clause.call ?? "call");
+      group.evidence.push(...[clause.evidence].flat().filter(Boolean));
+      untracedGroups.set(key, group);
+    }
+  }
+  for (const group of untracedGroups.values()) {
+    const calls = [...group.calls].sort();
+    const examples = calls.slice(0, 12).join(", ");
+    diagnostics.push({
+      code: "untraced-call",
+      severity: "warning",
+      message: `Could not trace ${calls.length} distinct calls (${group.reason})${examples ? `: ${examples}${calls.length > 12 ? ", …" : ""}` : ""}`,
+      claimState: "unverified",
+      capability: group.capability,
+      evidence: group.evidence,
+    });
+  }
+  if (resolver.stats().exhausted) diagnostics.push({
+    code: "symbol-resolution-budget-exhausted",
+    severity: "warning",
+    message: "Symbol-resolution work budget was exhausted",
+    claimState: "unverified",
+    capability: "implementation.trace",
+    evidence: [],
+  });
+  const scanContext = {
       activeExtractorIds: extractorIds,
       include: [...include].sort(),
+      exclude: [...exclude].sort(),
       stacks: displayStacks,
-    },
-    facts: finalFacts,
-    patternInstances,
-    behaviors: flatBehaviors,
-    bundleViews: behaviors.bundles.map((bundle) => ({
-      ...bundle,
-      behaviors: bundle.behaviors.map((behavior) => stableId("behavior", behaviorIdentity(behavior))),
-    })),
+  };
+  const model = liftSystemModel({
+    observations,
+    behaviors: bindings.behaviors,
+    registry,
+    convergence: bindings.convergence,
     diagnostics,
-  }));
-  const systemModel = projectAnalysisV2(analysis, { repoPath });
-  return { summary, stacks: displayStacks, files, facts: finalFacts, behaviors: { ...behaviors, frontend: frontendBehaviors }, diagnostics, analysis, systemModel };
-}
-
-function factIdentityForScan(fact) {
-  if (["api_route", "webhook_route"].includes(fact.kind)) return [fact.kind, fact.name];
-  if (["env_var", "integration", "package", "script", "service"].includes(fact.kind)) return [fact.kind, fact.ecosystem ?? "", fact.name];
-  return [fact.kind, fact.evidence?.[0]?.file ?? "", fact.name];
+    scanContext,
+  }, { repoPath, systemName: options.systemName });
+  const summary = {
+    fileCount: files.length,
+    elementCount: model.elements.length,
+    claimCount: model.claims.length,
+    stacks: displayStacks,
+  };
+  return { summary, stacks: displayStacks, files, model };
 }
 
 async function extractFileAll(repoPath, file, ctx, activeExtractors, cache) {
@@ -234,17 +246,17 @@ async function extractFileAll(repoPath, file, ctx, activeExtractors, cache) {
   const cached = await cache.get(file, content);
   if (cached) return cached;
 
-  const facts = [];
+  const observations = [];
   for (const { extract } of activeExtractors) {
-    facts.push(...await extract(repoPath, [file], ctx));
+    observations.push(...await extract(repoPath, [file], ctx));
   }
 
-  await cache.set(file, content, facts);
-  return facts;
+  await cache.set(file, content, observations);
+  return observations;
 }
 
-function sortFacts(facts) {
-  return [...facts].sort((a, b) => {
+function sortObservations(observations) {
+  return [...observations].sort((a, b) => {
     const ra = KIND_RANK.get(a.kind) ?? 99;
     const rb = KIND_RANK.get(b.kind) ?? 99;
     if (ra !== rb) return ra - rb;
@@ -260,15 +272,10 @@ function sortFacts(facts) {
   });
 }
 
-function countByKind(facts) {
-  const counts = {};
-  for (const f of facts) {
-    counts[f.kind] = (counts[f.kind] || 0) + 1;
-  }
-  return counts;
-}
-
-async function walk(root, include = [], gitignore = true) {
+async function walk(root, include = [], exclude = [], gitignore = true) {
+  const normalizedInclude = include.map((value) => path.normalize(value));
+  const normalizedExclude = exclude.map((value) => path.normalize(value));
+  const isExcluded = (value) => normalizedExclude.some((prefix) => value === prefix || value.startsWith(prefix + path.sep));
   let ig = null;
   if (gitignore) {
     try {
@@ -287,6 +294,7 @@ async function walk(root, include = [], gitignore = true) {
       if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) continue;
       const abs = path.join(dir, entry.name);
       const rel = path.relative(root, abs);
+      if (isExcluded(rel)) continue;
 
       if (ig) {
         const isDir = entry.isDirectory();
@@ -294,12 +302,12 @@ async function walk(root, include = [], gitignore = true) {
       }
 
       if (entry.isDirectory()) {
-        if (include.length === 0 ||
-            include.some((p) => rel.startsWith(p) || p.startsWith(rel + path.sep) || p === rel)) {
+        if (normalizedInclude.length === 0 ||
+            normalizedInclude.some((p) => rel.startsWith(p) || p.startsWith(rel + path.sep) || p === rel)) {
           await visit(abs);
         }
       } else if (entry.isFile()) {
-        if (include.length === 0 || include.some((p) => rel.startsWith(p))) {
+        if (normalizedInclude.length === 0 || normalizedInclude.some((p) => rel.startsWith(p))) {
           const ext = path.extname(entry.name);
           if (TEXT_FILE_EXTENSIONS.has(ext) || isInterestingName(entry.name)) {
             files.push(rel);

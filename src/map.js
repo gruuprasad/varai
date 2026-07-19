@@ -7,13 +7,14 @@ export async function runMap(options = {}) {
   const repoPath = path.resolve(options.repo ?? ".");
   const config = await loadRepoConfig(repoPath);
   const include = options.include?.length ? options.include : (config.include ?? []);
-  const scanOptions = { include, config };
+  const exclude = options.exclude?.length ? options.exclude : (config.exclude ?? []);
+  const scanOptions = { include, exclude };
   if (options.cache !== undefined) scanOptions.cache = options.cache;
   if (options.cacheDir !== undefined) scanOptions.cacheDir = options.cacheDir;
   if (options.jobs !== undefined) scanOptions.jobs = options.jobs;
   if (options.parser !== undefined) scanOptions.parser = options.parser;
   const scan = await scanRepo(repoPath, scanOptions);
-  const report = renderSystemModel({ model: scan.systemModel });
+  const report = renderSystemModel({ model: scan.model });
   process.stdout.write(report);
   return { repoPath, scan };
 }

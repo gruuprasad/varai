@@ -2,11 +2,11 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, readFile, rename } from "node:fs/promises";
 
-export const EXTRACTOR_VERSION = 4; // frontend interaction behavior extraction
+export const EXTRACTOR_VERSION = 6; // Anchor-lift observation and trace set
 
 const CACHE_FORMAT_VERSION = 1;
 
-export function createFactCache({
+export function createObservationCache({
   cacheDir,
   formatVersion = CACHE_FORMAT_VERSION,
   extractorVersion = EXTRACTOR_VERSION,
@@ -15,7 +15,7 @@ export function createFactCache({
   extractorFingerprint = "",
   enabled = true,
 }) {
-  const factsDir = path.join(cacheDir, "facts");
+  const observationsDir = path.join(cacheDir, "observations");
   const stacksKey = [...stacks].sort().join(",");
 
   function cacheHash(file, content) {
@@ -35,7 +35,7 @@ export function createFactCache({
 
   function entryPath(hash) {
     const prefix = hash.slice(0, 2);
-    return path.join(factsDir, prefix, `${hash}.json`);
+    return path.join(observationsDir, prefix, `${hash}.json`);
   }
 
   async function get(file, content) {
@@ -45,13 +45,13 @@ export function createFactCache({
       const raw = await readFile(entryPath(hash), "utf8");
       const entry = JSON.parse(raw);
       if (entry.v === formatVersion && entry.file === file && entry.hash === hash) {
-        return entry.facts;
+        return entry.observations;
       }
     } catch { /* cache miss or read failure */ }
     return null;
   }
 
-  async function set(file, content, facts) {
+  async function set(file, content, observations) {
     if (!enabled) return;
     try {
       const hash = cacheHash(file, content);
@@ -59,11 +59,11 @@ export function createFactCache({
       const dir = path.dirname(entryPath_);
       await mkdir(dir, { recursive: true });
       const tmpPath = `${entryPath_}.tmp-${process.pid}`;
-      const entry = { v: formatVersion, hash, file, facts };
+      const entry = { v: formatVersion, hash, file, observations };
       await writeFile(tmpPath, JSON.stringify(entry), "utf8");
       await rename(tmpPath, entryPath_);
     } catch { /* non-fatal on read-only FS / CI */ }
   }
 
-  return { keyFor, get, set, enabled, factsDir };
+  return { keyFor, get, set, enabled, observationsDir };
 }

@@ -67,6 +67,7 @@ export function validateSystemModel(model, options = {}) {
     if (typeof element.capability !== "string" || !element.capability) throw new Error(`Element ${element.id} requires a capability`);
     validateQualifiers(element.qualifiers, qualifiers, `Element ${element.id}`);
     validateEvidence(element.evidence, `Element ${element.id}`);
+    validateEvidence(element.implementationPath ?? [], `Element ${element.id} implementation path`);
     if (ids.has(element.id)) throw new Error(`Duplicate semantic ID: ${element.id}`);
     ids.add(element.id);
   }
@@ -87,6 +88,7 @@ export function validateSystemModel(model, options = {}) {
     if (typeof claim.capability !== "string" || !claim.capability) throw new Error(`Claim ${claim.id} requires a capability`);
     validateQualifiers(claim.qualifiers, qualifiers, `Claim ${claim.id}`);
     validateEvidence(claim.evidence, `Claim ${claim.id}`);
+    validateEvidence(claim.implementationPath ?? [], `Claim ${claim.id} implementation path`);
     if (ids.has(claim.id)) throw new Error(`Duplicate semantic ID: ${claim.id}`);
     ids.add(claim.id);
   }

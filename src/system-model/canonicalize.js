@@ -16,6 +16,8 @@ export function canonicalStringifySystemModel(value) {
   return JSON.stringify(canonicalizeValue(value), null, 2) + "\n";
 }
 
+export const canonicalStringify = canonicalStringifySystemModel;
+
 function normalizeEvidence(values) {
   const list = Array.isArray(values) ? values : values ? [values] : [];
   return mergeEvidence(list.map((evidence) => canonicalizeValue({
@@ -24,6 +26,33 @@ function normalizeEvidence(values) {
     ...(evidence.symbol == null ? {} : { symbol: evidence.symbol }),
     ...(evidence.manifestKey == null ? {} : { manifestKey: evidence.manifestKey }),
   })));
+}
+
+function normalizeImplementationPath(values) {
+  const result = [];
+  let previous = null;
+  for (const evidence of Array.isArray(values) ? values : []) {
+    const normalized = canonicalizeValue({
+      file: normalizeEvidencePath(evidence.file),
+      ...(evidence.line == null ? {} : { line: evidence.line }),
+      ...(evidence.symbol == null ? {} : { symbol: evidence.symbol }),
+      ...(evidence.manifestKey == null ? {} : { manifestKey: evidence.manifestKey }),
+    });
+    const key = JSON.stringify(normalized);
+    if (key === previous) continue;
+    previous = key;
+    result.push(normalized);
+  }
+  return result;
+}
+
+function mergeImplementationPath(a, b) {
+  const left = normalizeImplementationPath(a);
+  const right = normalizeImplementationPath(b);
+  if (!left.length) return right;
+  if (!right.length) return left;
+  if (left.length !== right.length) return left.length < right.length ? left : right;
+  return JSON.stringify(left) <= JSON.stringify(right) ? left : right;
 }
 
 function normalizeQualifiers(qualifiers = {}) {
@@ -63,6 +92,7 @@ function mergeElement(a, b, diagnostics) {
     ...a,
     roles: [...new Set([...a.roles, ...b.roles])].sort(),
     evidence: mergeEvidence(a.evidence, b.evidence),
+    implementationPath: mergeImplementationPath(a.implementationPath, b.implementationPath),
     claimState: leastConfident(a.claimState, b.claimState),
   });
 }
@@ -74,6 +104,7 @@ function mergeClaim(a, b, diagnostics) {
   return canonicalizeValue({
     ...a,
     evidence: mergeEvidence(a.evidence, b.evidence),
+    implementationPath: mergeImplementationPath(a.implementationPath, b.implementationPath),
     claimState: leastConfident(a.claimState, b.claimState),
   });
 }
@@ -115,6 +146,7 @@ export function createSystemModel({
       roles: [...new Set(element.roles ?? [])].sort(),
       qualifiers: normalizeQualifiers(element.qualifiers),
       evidence: normalizeEvidence(element.evidence),
+      implementationPath: normalizeImplementationPath(element.implementationPath),
       observationMethod: element.observationMethod ?? "semantic",
       claimState: element.claimState ?? "observed",
     };
@@ -150,6 +182,7 @@ export function createSystemModel({
       slot: claim.slot ?? null,
       qualifiers: normalizeQualifiers(claim.qualifiers),
       evidence: normalizeEvidence(claim.evidence),
+      implementationPath: normalizeImplementationPath(claim.implementationPath),
       observationMethod: claim.observationMethod ?? "semantic",
       claimState: claim.claimState ?? "observed",
     };

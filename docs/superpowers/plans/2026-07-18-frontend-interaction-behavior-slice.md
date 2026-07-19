@@ -1,5 +1,7 @@
 # Frontend Interaction Behavior Slice
 
+> Status: Superseded as an implementation plan. Its dogfood scenario remains a System Model acceptance test, but the Analysis IR path was removed.
+
 ## Goal
 
 Make Varai detect the semantic change exposed by the second Kalakar dogfood run: the `CreateProjectModal` dismissal action becomes unavailable while project creation is loading.

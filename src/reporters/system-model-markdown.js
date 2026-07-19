@@ -1,47 +1,27 @@
-import { lensLabel, DEFAULT_LENS_REGISTRY } from "../system-model/lenses.js";
+import { browseByThing, browseByCapability } from "../system-model/projections/index.js";
 
 const RELATION_LABELS = Object.freeze({
-  contains: "contains",
-  exposes: "exposes",
-  offers: "offers",
-  triggered_by: "is triggered by",
-  invokes: "invokes",
-  accepts: "accepts",
-  produces: "produces",
-  requires: "requires",
-  available_when: "is available when",
-  reads: "reads",
-  changes: "changes",
-  creates: "creates",
-  removes: "removes",
-  succeeds_with: "succeeds with",
-  fails_with: "fails with",
-  navigates_to: "navigates to",
-  emits: "emits",
-  has_field: "has field",
-  relates_to: "relates to",
-  stored_in: "is stored in",
+  contains: "contains", exposes: "exposes", offers: "offers", triggered_by: "is triggered by", invokes: "invokes",
+  accepts: "accepts", produces: "produces", requires: "requires", available_when: "is available when", reads: "reads",
+  changes: "changes", creates: "creates", removes: "removes", succeeds_with: "succeeds with", fails_with: "fails with",
+  navigates_to: "navigates to", emits: "emits", has_field: "has field", relates_to: "relates to", stored_in: "is stored in",
 });
 
 function evidenceLabel(evidence) {
   const values = (evidence ?? []).map((item) => {
     const location = `${item.file}${item.line ? `:${item.line}` : ""}`;
-    if (item.symbol) return `${location} (${item.symbol})`;
-    if (item.manifestKey) return `${location} (${item.manifestKey})`;
-    return location;
+    return item.symbol ? `${location} (${item.symbol})` : item.manifestKey ? `${location} (${item.manifestKey})` : location;
   });
   return values.length ? values.join(", ") : "no direct evidence";
 }
 
-function qualifierLabel(qualifiers) {
-  const entries = Object.entries(qualifiers ?? {});
-  if (!entries.length) return "";
-  return ` (${entries.map(([key, value]) => `${key.replaceAll("_", " ")}: ${Array.isArray(value) ? value.join(", ") : value}`).join("; ")})`;
+function targetLabel(target, byId) {
+  return target.kind === "reference" ? byId.get(target.id)?.name ?? target.id : String(target.value);
 }
 
-function targetLabel(target, byId) {
-  if (target.kind === "reference") return byId.get(target.id)?.name ?? target.id;
-  return String(target.value);
+function qualifierLabel(qualifiers) {
+  const entries = Object.entries(qualifiers ?? {});
+  return entries.length ? ` (${entries.map(([key, value]) => `${key.replaceAll("_", " ")}: ${Array.isArray(value) ? value.join(", ") : value}`).join("; ")})` : "";
 }
 
 function claimSentence(claim, sourceName, byId) {
@@ -51,31 +31,18 @@ function claimSentence(claim, sourceName, byId) {
   return `${sourceName} ${RELATION_LABELS[claim.relation] ?? claim.relation} ${target}${qualifierLabel(claim.qualifiers)}.${confidence}`;
 }
 
-export function renderSystemModel({ model, lensRegistry = DEFAULT_LENS_REGISTRY }) {
-  const lines = [`# ${model.system.name}`, "", "## System overview", ""];
-  const lensOrder = new Map([...lensRegistry.keys()].map((id, index) => [id, index]));
-  const subsystems = [...model.subsystems].sort((a, b) =>
-    (lensOrder.get(a.lens) ?? 999) - (lensOrder.get(b.lens) ?? 999) || a.name.localeCompare(b.name));
-  const elementsBySubsystem = new Map(subsystems.map((item) => [item.id, []]));
-  for (const element of model.elements) elementsBySubsystem.get(element.subsystemId)?.push(element);
-  for (const elements of elementsBySubsystem.values()) {
-    elements.sort((a, b) => Number(b.roles.includes("interface")) - Number(a.roles.includes("interface")) || a.name.localeCompare(b.name));
-  }
+function pathLabel(path) {
+  return (path ?? []).map((item) => `${item.symbol ? `${item.symbol} — ` : ""}${item.file}${item.line ? `:${item.line}` : ""}`).join(" → ");
+}
 
-  if (!subsystems.length) {
-    lines.push("No supported system-level elements were recovered.", "");
-  } else {
-    for (const subsystem of subsystems) {
-      const count = elementsBySubsystem.get(subsystem.id)?.length ?? 0;
-      lines.push(`- ${lensLabel(lensRegistry, subsystem.lens)}: ${count} ${count === 1 ? "element" : "elements"}`);
-    }
-    lines.push("");
-  }
-
+export function renderSystemModel({ model }) {
+  const thingView = browseByThing(model);
+  const capabilityView = browseByCapability(model);
   const byId = new Map([
     [model.system.id, model.system],
     ...model.subsystems.map((item) => [item.id, item]),
     ...model.elements.map((item) => [item.id, item]),
+    ...model.claims.map((item) => [item.id, item]),
   ]);
   const claimsBySource = new Map();
   for (const claim of model.claims) {
@@ -84,43 +51,65 @@ export function renderSystemModel({ model, lensRegistry = DEFAULT_LENS_REGISTRY 
     claimsBySource.set(claim.sourceId, list);
   }
 
-  for (const subsystem of subsystems) {
-    const elements = elementsBySubsystem.get(subsystem.id) ?? [];
-    if (!elements.length) continue;
-    lines.push(`## ${lensLabel(lensRegistry, subsystem.lens)}`, "");
-    for (const element of elements) {
-      const roleText = element.roles.length ? ` · ${element.roles.join(", ")}` : "";
-      lines.push(`### ${element.name}`, "", `_${element.kind}${roleText}_`, "");
-      const claims = claimsBySource.get(element.id) ?? [];
-      if (!claims.length) lines.push("- No additional behavior claims recovered.");
-      for (const claim of claims) {
-        lines.push(`- ${claimSentence(claim, element.name, byId)} — ${evidenceLabel(claim.evidence)}`);
+  const lines = [
+    `# ${model.system.name}`,
+    "",
+    "## System overview",
+    "",
+    `- ${thingView.roots.length} system subjects and surfaces`,
+    `- ${capabilityView.capabilities.length} behaviors`,
+    `- ${model.elements.length} total semantic elements · ${model.claims.length} claims`,
+    "",
+    "## Browse by thing",
+    "",
+  ];
+
+  if (!thingView.roots.length) lines.push("No supported system-level subjects or surfaces were recovered.", "");
+  const renderedRoots = thingView.roots.slice(0, 24);
+  for (const root of renderedRoots) {
+    const element = byId.get(root.elementId);
+    lines.push(`### ${element.name}`, "", `_${element.kind} · ${element.roles.join(", ")}_`, "");
+    if (!root.behaviorIds.length) lines.push("- No connected behavior recovered within current coverage.");
+    for (const behaviorId of root.behaviorIds) {
+      const behavior = byId.get(behaviorId);
+      const interfaces = root.interfaceIds.map((id) => byId.get(id)).filter(Boolean)
+        .filter((item) => item.id === behavior.id || (claimsBySource.get(item.id) ?? []).some((claim) => claim.relation === "offers" && claim.target.id === behavior.id));
+      lines.push(`- **${behavior.name}**${interfaces.length ? ` — reached through ${interfaces.map((item) => item.name).join(", ")}` : ""}`);
+      for (const claim of claimsBySource.get(behavior.id) ?? []) {
+        lines.push(`  - ${claimSentence(claim, behavior.name, byId)} — ${evidenceLabel(claim.evidence)}`);
+        const trace = pathLabel(claim.implementationPath);
+        if (trace) lines.push(`    - Implementation: ${trace}`);
       }
-      lines.push(`- Evidence: ${evidenceLabel(element.evidence)}`, "");
     }
+    for (const claim of claimsBySource.get(element.id) ?? []) {
+      if (claim.relation === "offers") lines.push(`- ${claimSentence(claim, element.name, byId)} — ${evidenceLabel(claim.evidence)}`);
+    }
+    lines.push(`- Evidence: ${evidenceLabel(element.evidence)}`, "");
+  }
+  if (thingView.roots.length > renderedRoots.length) {
+    lines.push(`_${thingView.roots.length - renderedRoots.length} additional Resources and surfaces remain available through structured model output and dashboard search._`, "");
   }
 
-  lines.push("## Analyzer coverage", "");
-  if (!model.coverage.length) {
-    lines.push("No semantic analyzer coverage was declared.", "");
-  } else {
-    const coverage = [...model.coverage].sort((a, b) => {
-      const aScope = byId.get(a.scopeId)?.name ?? a.scopeId;
-      const bScope = byId.get(b.scopeId)?.name ?? b.scopeId;
-      return aScope.localeCompare(bScope) || a.capability.localeCompare(b.capability);
-    });
-    for (const item of coverage) {
-      const scope = byId.get(item.scopeId)?.name ?? item.scopeId;
-      const detail = item.details.length ? ` — ${item.details.join("; ")}` : "";
-      lines.push(`- ${item.capability} (${scope}): **${item.state}**${detail}`);
-    }
-    lines.push("");
+  lines.push("## Browse by capability", "");
+  for (const item of capabilityView.capabilities) {
+    const behavior = byId.get(item.behaviorId);
+    const resources = item.resourceIds.map((id) => byId.get(id)?.name).filter(Boolean);
+    const interfaces = item.interfaceIds.map((id) => byId.get(id)?.name).filter(Boolean);
+    lines.push(`- **${behavior.name}**${resources.length ? ` — acts on ${resources.join(", ")}` : ""}${interfaces.length ? ` — via ${interfaces.join(", ")}` : ""}`);
+  }
+  if (!capabilityView.capabilities.length) lines.push("No supported behaviors were recovered.");
+  lines.push("", "## Analyzer coverage", "");
+
+  if (!model.coverage.length) lines.push("No semantic analyzer coverage was declared.", "");
+  else for (const item of model.coverage) {
+    const scope = byId.get(item.scopeId)?.name ?? item.scopeId;
+    const detail = item.details.length ? ` — ${item.details.join("; ")}` : "";
+    lines.push(`- ${item.capability} (${scope}): **${item.state}**${detail}`);
   }
 
   if (model.diagnostics.length) {
-    lines.push("## Analysis diagnostics", "");
+    lines.push("", "## Analysis diagnostics", "");
     for (const item of model.diagnostics) lines.push(`- **${item.severity}** ${item.message} — ${evidenceLabel(item.evidence)}`);
-    lines.push("");
   }
 
   return `${lines.join("\n").trimEnd()}\n`;

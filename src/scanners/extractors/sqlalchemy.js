@@ -7,10 +7,6 @@ const SUPERCLASSES_FIELD = "superclasses";
 export async function extract(repoPath, files, ctx = createScanContext(repoPath)) {
   const facts = [];
   for (const file of files) {
-    if (/(?:^|\/)alembic\/versions\//.test(file) && path.extname(file) === ".py") {
-      facts.push({ kind: "database_migration", name: path.basename(file), evidence: [{ file }], layer: "heuristic" });
-      continue;
-    }
     if (path.extname(file) !== ".py") continue;
 
     const content = await ctx.read(file);

@@ -31,8 +31,8 @@ test("linked worktrees resolve the main checkout semantic store", async () => {
 
     const store = createSnapshotStore(mainState.semanticStoreRoot);
     await store.putSnapshot({
-      id: "baseline", formatVersion: 1, semanticObjectHash: "object", scannedTreeHash: "tree",
-      scanConfigHash: "config", intentArtifacts: [], createdAt: "2026-01-01T00:00:00Z",
+      id: "baseline", formatVersion: 1, modelObjectHash: "object", modelSchemaVersion: 1,
+      scannedTreeHash: "tree", scanConfigHash: "config", createdAt: "2026-01-01T00:00:00Z",
       git: { head: mainState.head, clean: true },
     });
     assert.deepEqual(await createSnapshotStore(linkedState.semanticStoreRoot).getCommitRef(mainState.head), { snapshotId: "baseline" });

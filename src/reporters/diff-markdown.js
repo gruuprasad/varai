@@ -1,85 +1,73 @@
-import { clauseLabel, doorLabel } from "../ir/behavior-schema.js";
+const RELATIONS = Object.freeze({
+  contains: "contains", exposes: "exposes", offers: "offers", triggered_by: "is triggered by",
+  invokes: "invokes", accepts: "accepts", produces: "produces", requires: "requires",
+  available_when: "is available when", reads: "reads", changes: "changes", creates: "creates",
+  removes: "removes", succeeds_with: "succeeds with", fails_with: "fails with",
+  navigates_to: "navigates to", emits: "emits", has_field: "has field",
+  relates_to: "relates to", stored_in: "is stored in",
+});
 
 function evidence(value) {
-  const list = value?.evidence ?? [];
-  return list.map((ev) => `${ev.file}${ev.line ? `:${ev.line}` : ""}`).join(", ") || "no evidence";
+  return (value?.evidence ?? []).map((item) => `${item.file}${item.line ? `:${item.line}` : ""}`).join(", ") || "no evidence";
 }
 
-export function renderSemanticDiff(diff, context = {}) {
-  const lines = ["# Semantic Diff", ""];
-  if (context.from || context.to) lines.push(`From: ${context.from ?? "unknown"}  `, `To: ${context.to ?? "current"}`, "");
+function target(claim, labels) {
+  return claim.target.kind === "reference" ? (labels[claim.target.id] ?? claim.target.id) : String(claim.target.value);
+}
+
+function qualifiers(value) {
+  const entries = Object.entries(value ?? {});
+  return entries.length ? ` (${entries.map(([key, item]) => `${key}: ${Array.isArray(item) ? item.join(", ") : item}`).join("; ")})` : "";
+}
+
+function claimText(claim, labels) {
+  return `${labels[claim.sourceId] ?? claim.sourceId} ${RELATIONS[claim.relation] ?? claim.relation} ${target(claim, labels)}${qualifiers(claim.qualifiers)}`;
+}
+
+export function renderSemanticDiff(diff, options = {}) {
+  const lines = ["# Semantic progression", "", `From: ${options.from ?? "before"}`, `To: ${options.to ?? "after"}`, ""];
   for (const warning of diff.warnings) lines.push(`> Warning: ${warning}`, "");
-  if (!diff.summary.hasChanges) {
-    lines.push("No semantic changes.", "");
-    if (diff.summary.hasEvidenceChanges && !context.showEvidenceMoves) {
-      lines.push(`_${diff.summary.evidenceChanges} evidence locations moved; use --show-evidence-moves to inspect._`, "");
-    }
-    if (context.showEvidenceMoves) renderEvidenceChanges(lines, diff);
-    return lines.join("\n");
-  }
-  lines.push(`Behaviors: +${diff.summary.behaviorsAdded} -${diff.summary.behaviorsRemoved} ~${diff.summary.behaviorsChanged}`, "");
-  for (const behavior of diff.behaviors.added) lines.push(`## + ${doorLabel(behavior.door)}`, "", `Evidence: ${evidence(behavior.door)}`, "");
-  for (const behavior of diff.behaviors.removed) lines.push(`## - ${doorLabel(behavior.door)}`, "", `Evidence: ${evidence(behavior.door)}`, "");
-  for (const behavior of diff.behaviors.changed) {
-    lines.push(`## ~ ${doorLabel(behavior.door)}`, "");
-    const rank = { "claim-state": 0, added: 1, removed: 2 };
-    for (const change of [...behavior.clauses].sort((a, b) => rank[a.change] - rank[b.change])) {
-      if (change.change === "claim-state") {
-        lines.push(`- ! ${clauseLabel(change.kind, change.after)}: ${change.before.claimState} -> ${change.after.claimState} (${evidence(change.after)})`);
-      } else {
-        const marker = change.change === "added" ? "+" : "-";
-        lines.push(`- ${marker} ${clauseLabel(change.kind, change.clause)} (${evidence(change.clause)})`);
-      }
-    }
-    lines.push("");
-  }
-  if (diff.states.added.length || diff.states.removed.length || diff.states.changed.length) {
-    lines.push("## State locations", "");
-    for (const state of diff.states.added) lines.push(`- + ${state.medium}:${state.target}`);
-    for (const state of diff.states.removed) lines.push(`- - ${state.medium}:${state.target}`);
-    for (const state of diff.states.changed) lines.push(`- ~ ${state.after.medium}:${state.after.target}`);
-    lines.push("");
-  }
-  if (diff.patterns.added.length || diff.patterns.removed.length || diff.patterns.changed.length) {
-    lines.push("## Standard patterns", "");
-    for (const item of diff.patterns.added) lines.push(`- + ${item.name}`);
-    for (const item of diff.patterns.removed) lines.push(`- - ${item.name}`);
-    for (const item of diff.patterns.changed) lines.push(`- ~ ${item.after.name}`);
-    lines.push("");
-  }
-  if (diff.facts.added.length || diff.facts.removed.length || diff.facts.changed.length) {
-    lines.push("## Supporting facts", "");
-    for (const fact of diff.facts.added) lines.push(`- + ${fact.kind}: ${fact.name} (${evidence(fact)})`);
-    for (const fact of diff.facts.removed) lines.push(`- - ${fact.kind}: ${fact.name} (${evidence(fact)})`);
-    for (const fact of diff.facts.changed) lines.push(`- ~ ${fact.after.kind}: ${fact.after.name} (${evidence(fact.after)})`);
-    lines.push("");
-  }
-  if (diff.intentArtifacts.added.length || diff.intentArtifacts.removed.length || diff.intentArtifacts.changed.length) {
-    lines.push("## Intent artifacts", "");
-    for (const item of diff.intentArtifacts.added) lines.push(`- + ${item.path}`);
-    for (const item of diff.intentArtifacts.removed) lines.push(`- - ${item.path}`);
-    for (const item of diff.intentArtifacts.changed) lines.push(`- ~ ${item.after.path}`);
-    lines.push("");
-  }
-  if (diff.summary.hasEvidenceChanges && context.showEvidenceMoves) renderEvidenceChanges(lines, diff);
-  else if (diff.summary.hasEvidenceChanges) lines.push(`_${diff.summary.evidenceChanges} evidence locations moved; use --show-evidence-moves to inspect._`, "");
-  return lines.join("\n");
-}
 
-function renderEvidenceChanges(lines, diff) {
-  lines.push("## Evidence movement", "");
-  for (const behavior of diff.behaviors.evidenceChanged) {
-    lines.push(`### ${doorLabel(behavior.door)}`, "");
-    for (const change of behavior.changes) {
-      lines.push(`- ${change.kind}: ${evidence(change.before)} -> ${evidence(change.after)}`);
+  lines.push("## Summary", "",
+    `- Elements: +${diff.summary.elementsAdded} -${diff.summary.elementsRemoved} ~${diff.summary.elementsChanged}`,
+    `- Claims: +${diff.summary.claimsAdded} -${diff.summary.claimsRemoved} ~${diff.summary.claimsChanged}`,
+    `- Coverage changes: ${diff.summary.coverageChanges}`,
+    "");
+
+  if (!diff.summary.hasChanges) lines.push("No semantic changes within declared analyzer coverage.", "");
+
+  if (diff.elements.added.length || diff.elements.removed.length || diff.elements.changed.length) {
+    lines.push("## Elements", "");
+    for (const item of diff.elements.added) lines.push(`- + ${item.name} (${item.kind}) — ${evidence(item)}`);
+    for (const item of diff.elements.removed) lines.push(`- - ${item.name} (${item.kind}) — ${evidence(item)}`);
+    for (const item of diff.elements.changed) lines.push(`- ~ ${item.before.name} → ${item.after.name} — ${evidence(item.after)}`);
+    lines.push("");
+  }
+
+  if (diff.claims.added.length || diff.claims.removed.length || diff.claims.changed.length) {
+    lines.push("## Behavior and relationship changes", "");
+    for (const item of diff.claims.added) lines.push(`- + ${claimText(item, diff.labels)} — ${evidence(item)}`);
+    for (const item of diff.claims.removed) lines.push(`- - ${claimText(item, diff.labels)} — ${evidence(item)}`);
+    for (const item of diff.claims.changed) {
+      lines.push(`- ~ ${claimText(item.before, diff.labels)} → ${claimText(item.after, diff.labels)} — ${evidence(item.after)}`);
     }
     lines.push("");
   }
-  for (const fact of diff.facts.evidenceChanged) {
-    lines.push(`- fact ${fact.after.kind}:${fact.after.name}: ${evidence(fact.before)} -> ${evidence(fact.after)}`);
+
+  if (diff.coverage.added.length || diff.coverage.removed.length || diff.coverage.changed.length) {
+    lines.push("## Analyzer coverage", "");
+    for (const item of diff.coverage.added) lines.push(`- + ${item.capability}: ${item.state}`);
+    for (const item of diff.coverage.removed) lines.push(`- - ${item.capability}: ${item.state}`);
+    for (const item of diff.coverage.changed) lines.push(`- ~ ${item.after.capability}: ${item.before.state} → ${item.after.state}`);
+    lines.push("");
   }
-  for (const state of diff.states.evidenceChanged) {
-    lines.push(`- state ${state.after.medium}:${state.after.target}: ${evidence(state.before)} -> ${evidence(state.after)}`);
+
+  if (options.showEvidenceMoves && diff.summary.hasEvidenceChanges) {
+    lines.push("## Evidence movement", "");
+    for (const key of ["elements", "claims", "coverage"]) {
+      for (const item of diff[key].evidenceChanged) lines.push(`- ${key.slice(0, -1)} ${item.after.id}: ${evidence(item.before)} → ${evidence(item.after)}`);
+    }
+    lines.push("");
   }
-  if (diff.facts.evidenceChanged.length || diff.states.evidenceChanged.length) lines.push("");
+  return `${lines.join("\n").trimEnd()}\n`;
 }

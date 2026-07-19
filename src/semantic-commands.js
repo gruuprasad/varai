@@ -2,14 +2,21 @@ import path from "node:path";
 import { createSnapshot, analyzeCurrent } from "./snapshots/snapshot.js";
 import { createSnapshotStore } from "./snapshots/store.js";
 import { resolveSnapshotSelector } from "./snapshots/selectors.js";
-import { diffAnalyses } from "./diff/index.js";
+import { diffSystemModels } from "./system-model/diff.js";
 import { renderSemanticDiff } from "./reporters/diff-markdown.js";
 import { readGitState } from "./snapshots/git-state.js";
+import { SYSTEM_MODEL_SCHEMA_VERSION } from "./system-model/version.js";
+
+function requireCurrentModelSchema(manifest) {
+  if (manifest.modelSchemaVersion !== SYSTEM_MODEL_SCHEMA_VERSION) {
+    throw new Error(`Semantic snapshot uses System Model schema ${manifest.modelSchemaVersion}; current schema is ${SYSTEM_MODEL_SCHEMA_VERSION}. Recreate the baseline with \`varai snapshot\`.`);
+  }
+}
 
 export async function runSnapshot(options = {}) {
   const repoPath = path.resolve(options.repo ?? ".");
   const { manifest } = await createSnapshot(repoPath, options);
-  process.stdout.write(`Created semantic snapshot ${manifest.id}\nAnalysis object ${manifest.semanticObjectHash}\nSystem Model object ${manifest.systemModelObjectHash}\nGit ${manifest.git.head}${manifest.git.clean ? " (clean)" : " (dirty)"}\n`);
+  process.stdout.write(`Created semantic snapshot ${manifest.id}\nModel object ${manifest.modelObjectHash}\nGit ${manifest.git.head}${manifest.git.clean ? " (clean)" : " (dirty)"}\n`);
   return manifest;
 }
 
@@ -37,22 +44,24 @@ export async function runDiff(options = {}) {
     if (!ref) throw new Error("No clean semantic baseline exists for HEAD. Run `varai snapshot` on a clean worktree first.");
     fromManifest = await store.getSnapshot(ref.snapshotId);
   }
-  before = await store.getObject(fromManifest.semanticObjectHash);
+  requireCurrentModelSchema(fromManifest);
+  before = await store.getObject(fromManifest.modelObjectHash);
 
   let after;
   let toLabel = options.to ?? "current";
   let toConfigHash;
   if (options.to && options.to !== "current") {
     const manifest = await resolveSnapshotSelector(store, options.to);
-    after = await store.getObject(manifest.semanticObjectHash);
+    requireCurrentModelSchema(manifest);
+    after = await store.getObject(manifest.modelObjectHash);
     toConfigHash = manifest.scanConfigHash;
   } else {
     current ??= await analyzeCurrent(repoPath, options);
-    after = current.scan.analysis;
+    after = current.scan.model;
     toConfigHash = current.scanConfigHash;
   }
   if (fromManifest.scanConfigHash !== toConfigHash) throw new Error("Cannot compare analyses made with different scan configurations");
-  const diff = diffAnalyses(before, after);
+  const diff = diffSystemModels(before, after);
   if (options.json) process.stdout.write(JSON.stringify(diff, null, 2) + "\n");
   else process.stdout.write(renderSemanticDiff(diff, {
     from: fromManifest.id,

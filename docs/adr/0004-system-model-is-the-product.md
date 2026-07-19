@@ -18,7 +18,9 @@ Current-system maps, semantic progression, checks, intent reconciliation, and op
 
 Analysis remains local-first. An optional LLM may interpret already-proven model claims, but it does not discover or authorize claims and is never required for deterministic output.
 
-During migration, Analysis IR v2 remains a compatibility payload for existing snapshot and diff surfaces. The System Model is introduced beside it rather than by reinterpreting historical objects.
+The System Model is the only public, persisted, and versioned product model. Parser observations and framework-specific traces may exist privately inside analyzers, but they do not form a second IR or compatibility payload.
+
+Varai is pre-release, so the earlier Analysis IR, intent matcher, stock catalog, inventory renderer, framework-shaped diff, and dual-payload snapshots are removed rather than migrated. Existing local snapshots are rebuilt in the versioned System Model store.
 
 ## Consequences
 
@@ -28,6 +30,7 @@ During migration, Analysis IR v2 remains a compatibility payload for existing sn
 - Kalakar remains the first serious acceptance project but cannot define core vocabulary.
 - Git supplies neutral checkpoints; semantic diff becomes an operation over two System Models.
 - The map becomes the current-system projection rather than a fact inventory.
+- Scanner, snapshot, diff, server, and dashboard boundaries expose the same model.
 
 ## Relationship to earlier decisions
 

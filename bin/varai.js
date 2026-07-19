@@ -19,8 +19,9 @@ Usage:
 
 Options (map):
   --include <prefix>   Scan only files under this path prefix (repeatable)
+  --exclude <prefix>   Exclude a file or directory prefix (repeatable)
   --jobs <N>           Number of worker threads (default: cpus-2, min 1)
-  --no-cache           Disable persistent fact cache
+  --no-cache           Disable persistent observation cache
   --cache-dir <path>   Override cache directory (default: .varai/cache)
   --parser <backend>   Parser backend: native (default) or wasm
 
@@ -41,10 +42,12 @@ Examples:
 }
 
 function parseMapOptions(argv) {
-  const opts = { include: [] };
+  const opts = { include: [], exclude: [] };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--include" && argv[i + 1]) {
       opts.include.push(argv[++i]);
+    } else if (argv[i] === "--exclude" && argv[i + 1]) {
+      opts.exclude.push(argv[++i]);
     } else if (argv[i] === "--jobs" && argv[i + 1]) {
       opts.jobs = parseInt(argv[++i], 10);
     } else if (argv[i] === "--no-cache") {
@@ -64,7 +67,7 @@ function parseMapOptions(argv) {
 }
 
 function parseStartOptions(argv) {
-  const opts = { include: [] };
+  const opts = { include: [], exclude: [] };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--port" && argv[i + 1]) {
       const p = parseInt(argv[++i], 10);
@@ -77,6 +80,8 @@ function parseStartOptions(argv) {
       opts.open = false;
     } else if (argv[i] === "--include" && argv[i + 1]) {
       opts.include.push(argv[++i]);
+    } else if (argv[i] === "--exclude" && argv[i + 1]) {
+      opts.exclude.push(argv[++i]);
     } else if (argv[i] === "--jobs" && argv[i + 1]) {
       opts.jobs = parseInt(argv[++i], 10);
     } else if (argv[i] === "--no-cache") {
@@ -94,10 +99,11 @@ function parseStartOptions(argv) {
 }
 
 function parseSemanticOptions(argv, allowDiff = false) {
-  const opts = { include: [] };
+  const opts = { include: [], exclude: [] };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--include" && argv[i + 1]) opts.include.push(argv[++i]);
+    else if (arg === "--exclude" && argv[i + 1]) opts.exclude.push(argv[++i]);
     else if (arg === "--jobs" && argv[i + 1]) opts.jobs = parseInt(argv[++i], 10);
     else if (arg === "--no-cache") opts.cache = false;
     else if (arg === "--parser" && argv[i + 1]) opts.parser = argv[++i];
@@ -130,6 +136,7 @@ async function main() {
       open: opts.open,
       scanOptions: {
         include: opts.include,
+        exclude: opts.exclude,
         jobs: opts.jobs,
         cache: opts.cache,
         parser: opts.parser,

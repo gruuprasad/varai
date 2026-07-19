@@ -29,13 +29,26 @@ test("no include option walks whole repo", async () => {
   assert.ok(scan.files.includes("other/file.js"));
 });
 
+test("--exclude removes exact files and directory prefixes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-scanner-"));
+  await mkdir(join(dir, "src/generated"), { recursive: true });
+  await writeFile(join(dir, "src/keep.js"), "");
+  await writeFile(join(dir, "src/generated/client.js"), "");
+  await writeFile(join(dir, "src/generated.ts"), "");
+
+  const scan = await scanRepo(dir, { include: ["src"], exclude: ["src/generated", "src/generated.ts"] });
+  assert.ok(scan.files.includes("src/keep.js"));
+  assert.ok(!scan.files.includes("src/generated/client.js"));
+  assert.ok(!scan.files.includes("src/generated.ts"));
+});
+
 test("fastapi routes appear when pyproject.toml declares fastapi", async () => {
   const dir = await mkdtemp(join(tmpdir(), "varai-scanner-"));
   await writeFile(join(dir, "pyproject.toml"), `[tool.poetry.dependencies]\nfastapi = "^0.100.0"\n`);
   await writeFile(join(dir, "routes.py"), `@router.get("/api/items")\nasync def list_items(): pass\n`);
 
   const scan = await scanRepo(dir);
-  assert.ok(scan.facts.some((f) => f.kind === "api_route" && f.name === "GET /api/items"));
+  assert.ok(scan.model.elements.some((element) => element.kind === "operation" && element.name === "GET /api/items"));
 });
 
 test("python cache directories are skipped", async () => {

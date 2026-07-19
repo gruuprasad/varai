@@ -1,0 +1,3 @@
+[project]
+name = "anchor-lift-fixture"
+dependencies = ["fastapi", "pydantic", "sqlalchemy"]

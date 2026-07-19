@@ -1,4 +1,16 @@
-import { normalizePath, stableId } from "../ir/identity.js";
+import { createHash } from "node:crypto";
+
+export function semanticHash(value) {
+  return createHash("sha256").update(typeof value === "string" ? value : JSON.stringify(value)).digest("hex");
+}
+
+export function stableId(type, identity) {
+  return `${type}:${semanticHash(identity).slice(0, 20)}`;
+}
+
+export function normalizePath(value) {
+  return String(value ?? "").replaceAll("\\", "/").replace(/\/+/g, "/");
+}
 
 export function systemId(key = "repository-root") {
   return stableId("system", key);

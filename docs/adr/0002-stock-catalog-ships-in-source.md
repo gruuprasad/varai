@@ -1,6 +1,8 @@
 # ADR 0002: Stock catalog ships in source with per-repo override
 
-Status: Accepted
+Status: Superseded by ADR 0004
+
+The stock catalog and its configuration were removed during the one-model consolidation. Common-pattern classification may return later only as evidence-backed System Model Claims or an explicitly separate overlay; it is not a parallel fact product.
 
 ## Context
 

@@ -8,10 +8,6 @@ const LANG_FOR_EXT = {
 };
 
 const ROUTE_PATH_RE = /\bpath\s*=\s*["']([^"']+)["']/;
-const FETCH_RE = /fetch\s*\(\s*(["'][^"']+["'])/;
-const AXIOS_RE = /axios\s*\(\s*(["'][^"']+["'])/;
-const AXIOS_METHOD_RE = /axios\.(get|post|put|patch|delete|head)\s*\(\s*(["'][^"']+["'])/;
-const VITE_ENV_RE = /\bimport\.meta\.env\.(VITE_[A-Z][A-Z0-9_]*)\b/;
 
 export async function extract(repoPath, files, ctx = createScanContext(repoPath)) {
   const facts = [];
@@ -21,38 +17,6 @@ export async function extract(repoPath, files, ctx = createScanContext(repoPath)
 
     const content = await ctx.read(file);
     if (!content) continue;
-
-    for (const line of content.split("\n")) {
-      const trimmed = line.trim();
-
-      let apiCallM;
-      if ((apiCallM = trimmed.match(AXIOS_METHOD_RE))) {
-        facts.push({
-          kind: "api_call", name: `${apiCallM[1].toUpperCase()} ${apiCallM[2].slice(1, -1)}`,
-          evidence: [{ file }], layer: "heuristic"
-        });
-      } else if ((apiCallM = trimmed.match(AXIOS_RE)) && !trimmed.includes(".")) {
-        facts.push({
-          kind: "api_call", name: `GET ${apiCallM[1].slice(1, -1)}`,
-          evidence: [{ file }], layer: "heuristic"
-        });
-      } else if ((apiCallM = trimmed.match(FETCH_RE))) {
-        facts.push({
-          kind: "api_call", name: `GET ${apiCallM[1].slice(1, -1)}`,
-          evidence: [{ file }], layer: "heuristic"
-        });
-      }
-    }
-
-    for (const line of content.split("\n")) {
-      const m = line.match(VITE_ENV_RE);
-      if (m) {
-        facts.push({
-          kind: "env_var", name: m[1],
-          evidence: [{ file }], layer: "heuristic"
-        });
-      }
-    }
 
     if (isComponentScope(file)) {
       extractComponentsAndHooks(content, file, facts);
@@ -121,8 +85,5 @@ function extractComponentsAndHooks(content, file, facts) {
 function classifyAndPush(name, line, file, facts) {
   if (/^[A-Z]/.test(name) && !/^[A-Z]+$/.test(name)) {
     facts.push({ kind: "component", name, evidence: [{ file, line }], layer: "ast" });
-  }
-  if (/^use[A-Z]/.test(name)) {
-    facts.push({ kind: "hook", name, evidence: [{ file, line }], layer: "ast" });
   }
 }

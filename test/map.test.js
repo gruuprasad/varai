@@ -20,6 +20,18 @@ test("varai.config.json include paths are used when no CLI --include", async () 
   assert.ok(!scan.files.some((f) => f.startsWith("not_this")));
 });
 
+test("varai.config.json exclusions are applied", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-map-"));
+  await writeFile(join(dir, "varai.config.json"), JSON.stringify({ include: ["src"], exclude: ["src/generated.js"] }));
+  await mkdir(join(dir, "src"), { recursive: true });
+  await writeFile(join(dir, "src/keep.js"), "");
+  await writeFile(join(dir, "src/generated.js"), "");
+
+  const { scan } = await runMap({ repo: dir });
+  assert.ok(scan.files.includes("src/keep.js"));
+  assert.ok(!scan.files.includes("src/generated.js"));
+});
+
 test("CLI --include overrides varai.config.json include", async () => {
   const dir = await mkdtemp(join(tmpdir(), "varai-map-"));
   await writeFile(join(dir, "varai.config.json"), JSON.stringify({

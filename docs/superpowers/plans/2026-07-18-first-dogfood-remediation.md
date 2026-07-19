@@ -1,5 +1,7 @@
 # First Dogfood Remediation — Implementation Plan
 
+> Status: Superseded as an implementation plan. Relevant scenarios were retained as System Model tests; the Analysis IR architecture was removed.
+
 **Goal:** Make Varai usable in Kalakar's real session-workflow: linked Git worktrees share one semantic history, and the default diff shows semantic contract changes without line-shift noise.
 
 **Dogfood evidence:** The `fix-current-job-response-contract` worktree correctly produced `+ gives CurrentJobResponse` and `+ schema CurrentJobResponse`, but required a one-off cross-store bridge and rendered 17 unrelated evidence-only behavior changes (147 clause entries).

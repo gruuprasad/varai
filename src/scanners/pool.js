@@ -16,7 +16,7 @@ export function createWorkerPool({ concurrency, repoPath, files, stacks, prefixM
 
       const pending = shards.map((shard, i) => {
         return runShard({ id: i, files: shard, repoPath, stacks, prefixMap, cacheConfig, extractorIds, parser })
-          .then((facts) => { results.push({ id: i, facts }); })
+          .then((observations) => { results.push({ id: i, observations }); })
           .catch((err) => { errors.push({ id: i, err, files: shard }); });
       });
 
@@ -26,23 +26,23 @@ export function createWorkerPool({ concurrency, repoPath, files, stacks, prefixM
       for (const err of errors) {
         process.stderr.write(`varai: worker ${err.id} failed, retrying serially\n`);
         try {
-          const facts = await runShardSerial({
+          const observations = await runShardSerial({
             files: err.files, repoPath, stacks, prefixMap, cacheConfig, extractorIds, parser
           });
-          results.push({ id: err.id, facts });
+          results.push({ id: err.id, observations });
         } catch (inner) {
           process.stderr.write(`varai: serial fallback for shard ${err.id} failed: ${inner.message}\n`);
           serialFallback.push(err.files);
         }
       }
 
-      const byId = new Map(results.map((r) => [r.id, r.facts]));
-      const allFacts = [];
+      const byId = new Map(results.map((r) => [r.id, r.observations]));
+      const observations = [];
       for (let i = 0; i < shards.length; i++) {
-        if (byId.has(i)) allFacts.push(...byId.get(i));
+        if (byId.has(i)) observations.push(...byId.get(i));
       }
 
-      return allFacts;
+      return observations;
     }
   };
 }
@@ -73,9 +73,9 @@ function runShard({ id, files, repoPath, stacks, prefixMap, cacheConfig, extract
       type: "module",
     });
 
-    worker.on("message", ({ facts }) => {
+    worker.on("message", ({ observations }) => {
       settled = true;
-      resolve(facts);
+      resolve(observations);
       void worker.terminate();
     });
 
@@ -93,7 +93,7 @@ function runShard({ id, files, repoPath, stacks, prefixMap, cacheConfig, extract
 
 async function runShardSerial({ files, repoPath, stacks, prefixMap, cacheConfig, extractorIds, parser }) {
   const { createScanContext } = await import("./context.js");
-  const { createFactCache } = await import("./cache.js");
+  const { createObservationCache } = await import("./cache.js");
   const { selectBackend } = await import("./treesitter.js");
 
   await selectBackend(parser ?? "native");
@@ -103,14 +103,14 @@ async function runShardSerial({ files, repoPath, stacks, prefixMap, cacheConfig,
 
   const { resolveExtractors } = await import("./extractor-registry.js");
   const extractors = resolveExtractors(extractorIds);
-  const cache = createFactCache({ ...cacheConfig, enabled: cacheConfig.enabled !== false });
+  const cache = createObservationCache({ ...cacheConfig, enabled: cacheConfig.enabled !== false });
 
-  const facts = [];
+  const observations = [];
   for (const file of files) {
-    facts.push(...await extractFileAllSerial(repoPath, file, ctx, extractors, cache));
+    observations.push(...await extractFileAllSerial(repoPath, file, ctx, extractors, cache));
   }
 
-  return facts;
+  return observations;
 }
 
 async function extractFileAllSerial(repoPath, file, ctx, extractors, cache) {
@@ -120,11 +120,11 @@ async function extractFileAllSerial(repoPath, file, ctx, extractors, cache) {
   const cached = await cache.get(file, content);
   if (cached) return cached;
 
-  const facts = [];
+  const observations = [];
   for (const { extract } of extractors) {
-    facts.push(...await extract(repoPath, [file], ctx));
+    observations.push(...await extract(repoPath, [file], ctx));
   }
 
-  await cache.set(file, content, facts);
-  return facts;
+  await cache.set(file, content, observations);
+  return observations;
 }

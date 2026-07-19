@@ -1,9 +1,9 @@
 const BUILTIN_LENSES = Object.freeze([
   { id: "api", label: "API", elementKinds: ["operation"] },
-  { id: "ui", label: "UI", elementKinds: ["screen", "component", "action"] },
+  { id: "ui", label: "UI", elementKinds: ["screen", "surface", "component", "action"] },
   { id: "worker", label: "Workers", elementKinds: ["job", "workflow", "schedule"] },
   { id: "cli", label: "CLI", elementKinds: ["command"] },
-  { id: "data", label: "Data", elementKinds: ["contract", "entity", "state", "artifact", "dataset"] },
+  { id: "data", label: "Data", elementKinds: ["contract", "entity", "aggregate", "state", "artifact", "dataset"] },
   { id: "service", label: "Services", elementKinds: ["process", "external_system", "port"] },
   { id: "library", label: "Libraries", elementKinds: ["function", "type"] },
   { id: "application", label: "Application", elementKinds: ["use_case", "workflow", "operation", "decision"] },

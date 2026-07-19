@@ -29,7 +29,7 @@ def login(data: LoginRequest, db = Depends(get_db)):
     { kind: "schema", name: "LoginResponse", evidence: [{ file: "routes/auth.py", line: 5 }], layer: "ast" },
     { kind: "db_model", name: "User", evidence: [{ file: "routes/auth.py", line: 1 }], layer: "ast" },
   ];
-  const { behaviors } = await traceBehaviors(dir, ["routes/auth.py"], ctx, facts);
+  const behaviors = await traceBehaviors(dir, ["routes/auth.py"], ctx, facts);
 
   assert.equal(behaviors.length, 1);
   const b = behaviors[0];

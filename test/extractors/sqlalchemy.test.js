@@ -37,17 +37,6 @@ test("does not extract Base class itself", async () => {
   assert.equal(facts.filter((f) => f.kind === "db_model").length, 0);
 });
 
-test("detects alembic migrations from versions directory path", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "varai-sqla-"));
-  const facts = await extract(dir, [
-    "alembic/versions/001_initial.py",
-    "alembic/versions/002_add_projects.py"
-  ]);
-  const migrations = facts.filter((f) => f.kind === "database_migration");
-  assert.equal(migrations.length, 2);
-  assert.equal(migrations[0].layer, "heuristic");
-});
-
 test("ignores non-python files", async () => {
   const dir = await mkdtemp(join(tmpdir(), "varai-sqla-"));
   await writeFile(join(dir, "schema.json"), `{"note": "class User(Base): pass"}`);

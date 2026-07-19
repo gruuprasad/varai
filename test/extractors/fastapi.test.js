@@ -55,14 +55,6 @@ async def delete_item(item_id: int):
   assert.equal(facts.find((f) => f.kind === "api_route").name, "DELETE /api/items/{item_id}");
 });
 
-test("emits webhook_route for paths containing 'webhook'", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "varai-fastapi-"));
-  await writeFile(join(dir, "webhooks.py"), `@app.post("/webhooks/stripe")\nasync def stripe_webhook(): pass\n`);
-  const facts = await extract(dir, ["webhooks.py"]);
-  assert.ok(facts.some((f) => f.kind === "webhook_route" && f.name === "POST /webhooks/stripe"));
-  assert.ok(facts.some((f) => f.kind === "api_route" && f.name === "POST /webhooks/stripe"));
-});
-
 test("ignores non-python files", async () => {
   const dir = await mkdtemp(join(tmpdir(), "varai-fastapi-"));
   await writeFile(join(dir, "README.md"), "@app.get('/foo')");

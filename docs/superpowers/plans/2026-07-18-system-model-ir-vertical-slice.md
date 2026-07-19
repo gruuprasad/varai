@@ -1,5 +1,7 @@
 # System Model IR Vertical Slice Plan
 
+> Status: Superseded. This temporary parallel-model implementation was removed in favor of the single System Model architecture recorded in ADR 0004 and `docs/spec.md`.
+
 Status: Ready for implementation  
 Date: 2026-07-18
 

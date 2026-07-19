@@ -24,7 +24,7 @@ export async function traceFrontendInteractions(files, ctx) {
               event: "click", action: event.name, evidence: [],
             },
             bundle: null, requires: [], takes: [], gives: [], reads: [], writes: [],
-            fails: [], untraced: [], guards: [], helperCalls: [], trunkCall: null,
+            fails: [], untraced: [], guards: [], invokes: [], helperCalls: [], trunkCall: null,
           };
           grouped.set(key, behavior);
         }
@@ -38,10 +38,59 @@ export async function traceFrontendInteractions(files, ctx) {
           }
           guard.evidence.push({ file, line: disabled.line });
         }
+        const handler = localHandler(component.node, event.name);
+        for (const invocation of handler ? apiInvocations(handler, file, { file, line: event.line }) : []) {
+          if (!behavior.invokes.some((item) => item.method === invocation.method && item.path === invocation.path)) {
+            behavior.invokes.push(invocation);
+          }
+        }
       });
     }
   }
   return [...grouped.values()];
+}
+
+function localHandler(componentNode, name) {
+  let found = null;
+  walk(componentNode, (node) => {
+    if (found) return;
+    if (node.type === "function_declaration" && node.childForFieldName("name")?.text === name) found = node;
+    if (node.type === "variable_declarator" && node.childForFieldName("name")?.text === name) {
+      const value = node.childForFieldName("value");
+      if (["arrow_function", "function_expression"].includes(value?.type)) found = value;
+    }
+  });
+  return found;
+}
+
+function apiInvocations(handler, file, rootEvidence) {
+  const result = [];
+  walk(handler, (node) => {
+    if (node.type !== "call_expression") return;
+    const fn = node.childForFieldName("function");
+    const args = node.childForFieldName("arguments")?.namedChildren ?? [];
+    if (!fn || !args.length) return;
+    let method = null;
+    if (fn.type === "identifier" && fn.text === "fetch") {
+      method = (args[1]?.text.match(/\bmethod\s*:\s*["']([A-Za-z]+)["']/)?.[1] ?? "GET").toUpperCase();
+    } else if (fn.type === "member_expression") {
+      const property = fn.childForFieldName("property")?.text;
+      if (["get", "post", "put", "patch", "delete"].includes(property?.toLowerCase())) method = property.toUpperCase();
+    }
+    if (!method) return;
+    const routePath = stringLiteral(args[0]);
+    if (!routePath) return;
+    const evidence = { file, line: node.startPosition.row + 1 };
+    result.push({ method, path: routePath, evidence, implementationPath: [rootEvidence, evidence], layer: "ast" });
+  });
+  return result;
+}
+
+function stringLiteral(node) {
+  if (!node || !["string", "string_fragment", "template_string"].includes(node.type)) return null;
+  const text = node.text;
+  if (node.type === "template_string" && text.includes("${")) return null;
+  return text.replace(/^["'`]|["'`]$/g, "");
 }
 
 function isComponentScope(file) {

@@ -3,8 +3,8 @@ import test from "node:test";
 import { resolveSnapshotSelector } from "../../src/snapshots/selectors.js";
 
 const snapshots = [
-  { id: "abcdef111", semanticObjectHash: "111111", systemModelObjectHash: "333333", createdAt: "2026-01-02" },
-  { id: "abcdef222", semanticObjectHash: "222222", createdAt: "2026-01-01" },
+  { id: "abcdef111", modelObjectHash: "333333", createdAt: "2026-01-02" },
+  { id: "abcdef222", modelObjectHash: "222222", createdAt: "2026-01-01" },
 ];
 const store = {
   listSnapshots: async () => snapshots,
@@ -17,7 +17,7 @@ test("resolves last and commit selectors", async () => {
   assert.equal((await resolveSnapshotSelector(store, "deadbeef")).id, "abcdef111");
 });
 
-test("resolves a System Model object hash", async () => {
+test("resolves a model object hash", async () => {
   assert.equal((await resolveSnapshotSelector(store, "333333")).id, "abcdef111");
 });
 

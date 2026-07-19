@@ -1,9 +1,9 @@
 import path from "node:path";
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
-import { canonicalStringify } from "../ir/canonicalize.js";
-import { semanticHash } from "../ir/identity.js";
+import { canonicalStringify } from "../system-model/canonicalize.js";
+import { semanticHash } from "../system-model/identity.js";
 
-export const SNAPSHOT_FORMAT_VERSION = 2;
+export const SNAPSHOT_FORMAT_VERSION = 1;
 
 async function atomicWrite(file, content) {
   await mkdir(path.dirname(file), { recursive: true });
@@ -13,7 +13,9 @@ async function atomicWrite(file, content) {
 }
 
 export function createSnapshotStore(repoPath) {
-  const root = path.join(repoPath, ".varai");
+  // A versioned namespace intentionally ignores pre-release snapshots from the
+  // discarded product shape. Local snapshots are regenerated, not migrated.
+  const root = path.join(repoPath, ".varai", "model-v1");
   const objectPath = (hash) => path.join(root, "objects", hash.slice(0, 2), `${hash}.json`);
   const snapshotPath = (id) => path.join(root, "snapshots", `${id}.json`);
   const refPath = (sha) => path.join(root, "refs", "commits", `${sha}.json`);

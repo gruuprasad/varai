@@ -1,8 +1,12 @@
 # Varai
 
-A lens for your codebase, built for people who delegate implementation to AI coding tools — any of them — and want to see and steer what's happening without reading every line. Vendor-neutral, local-first.
+Varai translates a codebase into a local, evidence-backed System Model so builders can reason about AI-written software above the code level.
 
-Run `varai map` and get a clean inventory of what your repo contains — routes, models, stores, packages, env vars — each traced to a source file. Direction and upcoming work: `docs/roadmap.md`, `docs/adr/0003`.
+```text
+repository -> analyzers -> System Model -> map and semantic progression
+```
+
+The model describes system elements—API operations, UI screens and actions, data contracts, commands, and services—and atomic claims about what they accept, produce, require, read, or change. Every claim points to source evidence and carries analyzer coverage.
 
 ## Install
 
@@ -13,48 +17,47 @@ npm install -g .
 ## Usage
 
 ```bash
-varai map                           # map current directory
-varai map ../kalakar                # map another repo
+varai map                           # current system view
+varai map ../kalakar                # another repository
+varai snapshot ../kalakar           # create a Git-bound checkpoint
+varai diff ../kalakar               # compare checkpoint with current code
+varai start ../kalakar              # live dashboard
+```
+
+Limit a scan when needed:
+
+```bash
 varai map ../kalakar --include services/backend --include services/frontend/src
 ```
 
-## Output
+Example model language:
 
-```
-# App Map — kalakar
+```text
+## API
 
-## API Routes (12)
-  POST /api/auth/login              services/backend/routes/auth.py:24
-  GET  /api/projects                services/backend/routes/projects.py:8
+### GET /projects/{slug}/current-job
+- GET /projects/{slug}/current-job produces CurrentJobResponse. — services/backend/routes/projects.py:42
+- GET /projects/{slug}/current-job requires current_user. — services/backend/routes/projects.py:40
 
-## Data Models (8)
-  User                              services/backend/models/user.py:12
+## UI
 
-## Frontend Stores (3)
-  planStore                         services/frontend/src/store/planStore.js
-
-## Packages
-  fastapi, sqlalchemy, alembic, python-jose, react, vite, zustand
-
-## Env Vars
-  DATABASE_URL, JWT_SECRET, VITE_API_BASE
+### CreateProjectModal Cancel
+- CreateProjectModal Cancel is available when not isCreating. — services/frontend/src/components/CreateProjectModal.tsx:71
 ```
 
-## Stacks detected
+## Current analyzer coverage
 
-| Stack | What's extracted |
-|---|---|
-| FastAPI | decorator routes (`@router.get`, `@app.post`, etc.) via tree-sitter |
-| SQLAlchemy | `class X(Base)` model classes via tree-sitter; Alembic migration files |
-| React/Vite | `<Route path=...>` pages, Zustand `create()` stores via tree-sitter |
-| Python | pyproject.toml packages, `os.environ`/`os.getenv` vars via tree-sitter |
+- FastAPI operations and selected request/response, requirement, effect, and failure shapes.
+- React/Vite screens, components, direct UI actions, and simple availability guards.
+- SQLAlchemy entities and Pydantic contracts.
+- npm/Python/Make commands and Docker/Compose services.
 
-## Evidence layers
-
-Every fact is tagged `"ast"` — produced from a tree-sitter parse tree. Comments, strings, and multiline formatting are excluded at the parser level, not by regex.
+Coverage is intentionally explicit and partial. Unsupported syntax is not treated as proof that behavior is absent.
 
 ## Development
 
 ```bash
 npm test
 ```
+
+Product direction: [docs/roadmap.md](docs/roadmap.md). Normative language: [docs/semantic-language.md](docs/semantic-language.md).

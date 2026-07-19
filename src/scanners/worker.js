@@ -1,6 +1,6 @@
 import { createScanContext } from "./context.js";
 import { selectBackend } from "./treesitter.js";
-import { createFactCache } from "./cache.js";
+import { createObservationCache } from "./cache.js";
 import { resolveExtractors } from "./extractor-registry.js";
 
 async function extractFileAll(repoPath, file, ctx, extractorFns, cache) {
@@ -10,13 +10,13 @@ async function extractFileAll(repoPath, file, ctx, extractorFns, cache) {
   const cached = await cache.get(file, content);
   if (cached) return cached;
 
-  const facts = [];
+  const observations = [];
   for (const { extract } of extractorFns) {
-    facts.push(...await extract(repoPath, [file], ctx));
+    observations.push(...await extract(repoPath, [file], ctx));
   }
 
-  await cache.set(file, content, facts);
-  return facts;
+  await cache.set(file, content, observations);
+  return observations;
 }
 
 const { parentPort, workerData } = await import("node:worker_threads");
@@ -38,11 +38,11 @@ ctx.prefixMap = prefixEntries ? new Map(prefixEntries) : null;
 
 const activeExtractorFns = resolveExtractors(extractorIds);
 
-const cache = createFactCache({ ...cacheConfig, enabled: cacheConfig.enabled !== false });
+const cache = createObservationCache({ ...cacheConfig, enabled: cacheConfig.enabled !== false });
 
-const allFacts = [];
+const observations = [];
 for (const file of files) {
-  allFacts.push(...await extractFileAll(repoPath, file, ctx, activeExtractorFns, cache));
+  observations.push(...await extractFileAll(repoPath, file, ctx, activeExtractorFns, cache));
 }
 
-parentPort.postMessage({ facts: allFacts });
+parentPort.postMessage({ observations });

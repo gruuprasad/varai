@@ -6,7 +6,7 @@ import { renderSystemModel } from "../../src/reporters/system-model-markdown.js"
 
 test("renderer uses system language and exposes partial coverage", async () => {
   const scan = await scanRepo(path.resolve("test/fixtures/frontend-interaction/after"), { jobs: 1, cache: false });
-  const output = renderSystemModel({ model: scan.systemModel });
+  const output = renderSystemModel({ model: scan.model });
   assert.match(output, /CreateProjectModal offers Dismiss/);
   assert.match(output, /CreateProjectModal Dismiss is available when not loading/);
   assert.match(output, /ui\.availability \(UI\): \*\*partial\*\*/);

@@ -17,7 +17,7 @@ A second decision: Varai must not depend on any specific AI coding tool. The use
 
 ## Decision
 
-- Varai targets **technical builders supervising AI-written code**, on whatever stack they actually use. The stock catalog and checks grow from real dogfooded codebases (kalakar first), not from a presumed market stack.
+- Varai targets **technical builders supervising AI-written code**, on whatever stack they actually use. Model capabilities and later checks grow from real dogfooded codebases (kalakar first), not from a presumed market stack.
 - Varai stays **vendor-neutral**: no coupling to Claude Code, Cursor, or any agent. Change boundaries anchor to neutral events — git commits, watcher-detected change bursts, explicit CLI invocation — never to a vendor's session concept.
 - The wedge feature is the **concept-level diff**: "what changed in this codebase, expressed in facts and stock patterns, between two points in time." It exercises the always-on property of the lens and answers the question an AI-supervising builder faces daily.
 - Steering output (fix instructions generated from findings) is **plain text/markdown** a user can paste into any agent.

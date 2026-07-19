@@ -1,9 +1,11 @@
+import { implementationPath } from "../lift/provenance.js";
+
 const DEPENDS_RE = /Depends\(\s*([A-Za-z_]\w*)/;
 
 // requires: gates (Depends(...)) + config (env-var identifiers referenced in body).
 // takes: a parameter whose type annotation matches a known schema name.
 // gives: response_model= from the decorator, else a returned *Response constructor.
-export function traceSignature(fnNode, decoratorText, file, factIndex) {
+export function traceSignature(fnNode, decoratorText, file, factIndex, options = {}) {
   const requires = [];
   const takes = [];
   const gives = [];
@@ -26,19 +28,20 @@ export function traceSignature(fnNode, decoratorText, file, factIndex) {
           name: depsText.match(DEPENDS_RE)[1],
           kind: "dependency",
           evidence: { file, line: line(p) },
+          implementationPath: implementationPath(options.rootEvidence, { file, line: line(p) }),
           layer: "ast",
         });
         continue;
       }
       if (typeText && factIndex.schemaNames.has(typeText)) {
-        takes.push({ schema: typeText, evidence: { file, line: line(p) }, layer: "ast" });
+        takes.push({ schema: typeText, evidence: { file, line: line(p) }, implementationPath: implementationPath(options.rootEvidence, { file, line: line(p) }), layer: "ast" });
       }
     }
   }
 
   const rm = decoratorText ? decoratorText.match(/response_model\s*=\s*([A-Za-z_]\w*)/) : null;
   if (rm && factIndex.schemaNames.has(rm[1])) {
-    gives.push({ schema: rm[1], evidence: { file, line: line(fnNode) }, layer: "ast" });
+    gives.push({ schema: rm[1], evidence: { file, line: line(fnNode) }, implementationPath: implementationPath(options.rootEvidence, { file, line: line(fnNode) }), layer: "ast" });
   } else {
     // No response_model: look for a returned constructor (XxxResponse / StreamingResponse).
     const body = fnNode.childForFieldName("body");
@@ -47,7 +50,7 @@ export function traceSignature(fnNode, decoratorText, file, factIndex) {
         const callee = call.childForFieldName("function");
         const nm = callee ? callee.text : "";
         if (/Response$/.test(nm) || nm === "StreamingResponse") {
-          gives.push({ schema: nm, evidence: { file, line: line(call) }, layer: "heuristic" });
+          gives.push({ schema: nm, evidence: { file, line: line(call) }, implementationPath: implementationPath(options.rootEvidence, { file, line: line(call) }), layer: "heuristic" });
           break;
         }
       }
@@ -60,7 +63,7 @@ export function traceSignature(fnNode, decoratorText, file, factIndex) {
   for (const id of fnNode.descendantsOfType("identifier")) {
     if (factIndex.envNames.has(id.text) && !seen.has(id.text)) {
       seen.add(id.text);
-      requires.push({ name: id.text, kind: "config", evidence: { file, line: line(id) }, layer: "semantic" });
+      requires.push({ name: id.text, kind: "config", evidence: { file, line: line(id) }, implementationPath: implementationPath(options.rootEvidence, { file, line: line(id) }), layer: "semantic" });
     }
   }
 

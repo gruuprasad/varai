@@ -17,43 +17,15 @@ test("malformed varai.config.json reports a precise error", async () => {
   await assert.rejects(() => loadRepoConfig(dir), /varai\.config\.json: root: invalid JSON/);
 });
 
-test("loads include, stock.additional, stock.disabled", async () => {
+test("loads include and exclude paths", async () => {
   const dir = await mkdtemp(join(tmpdir(), "varai-cfg-"));
-  await writeFile(join(dir, "varai.config.json"), JSON.stringify({
-    include: ["src"],
-    stock: {
-      additional: [{ name: "audit", signatures: [{
-        kind: "api_route",
-        nameRegex: { pattern: "audit", flags: "i" },
-        role: "endpoint",
-      }] }],
-      disabled: ["health"],
-    },
-  }));
+  await writeFile(join(dir, "varai.config.json"), JSON.stringify({ include: ["src"], exclude: ["src/generated.ts"] }));
   const cfg = await loadRepoConfig(dir);
-  assert.deepEqual(cfg.include, ["src"]);
-  assert.equal(cfg.stock.disabled[0], "health");
-  assert.equal(cfg.stock.additional[0].name, "audit");
-  assert.equal(cfg.stock.additional[0].signatures[0].nameRegex.test("AUDIT"), true);
+  assert.deepEqual(cfg, { include: ["src"], exclude: ["src/generated.ts"] });
 });
 
-test("invalid stock regex identifies the exact field", async () => {
+test("unknown fields are rejected instead of silently ignored", async () => {
   const dir = await mkdtemp(join(tmpdir(), "varai-cfg-"));
-  await writeFile(join(dir, "varai.config.json"), JSON.stringify({
-    stock: { additional: [{ name: "audit", signatures: [{
-      kind: "api_route", nameRegex: { pattern: "[" }, role: "endpoint",
-    }] }] },
-  }));
-  await assert.rejects(
-    () => loadRepoConfig(dir),
-    /stock\.additional\[0\]\.signatures\[0\]\.nameRegex: invalid regular expression/,
-  );
-});
-
-test("partial config: missing stock block is allowed", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "varai-cfg-"));
-  await writeFile(join(dir, "varai.config.json"), JSON.stringify({ include: ["x"] }));
-  const cfg = await loadRepoConfig(dir);
-  assert.deepEqual(cfg.include, ["x"]);
-  assert.equal(cfg.stock, undefined);
+  await writeFile(join(dir, "varai.config.json"), JSON.stringify({ stock: {} }));
+  await assert.rejects(() => loadRepoConfig(dir), /varai\.config\.json: stock: unknown field/);
 });

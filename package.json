@@ -1,15 +1,15 @@
 {
   "name": "varai",
   "version": "0.0.0",
-  "description": "Local-first build-state reports for AI-assisted software projects.",
+  "description": "A local, evidence-backed system-level model of a software repository.",
   "type": "module",
   "private": true,
   "bin": {
     "varai": "./bin/varai.js"
   },
   "scripts": {
-    "map:example": "node ./bin/varai.js map ./examples/golden/todo-partial/app",
-    "start:example": "node ./bin/varai.js start ./examples/golden/todo-partial/app --no-open",
+    "map:example": "node ./bin/varai.js map ./test/fixtures/system-model-app",
+    "start:example": "node ./bin/varai.js start ./test/fixtures/system-model-app --no-open",
     "test": "node --test"
   },
   "engines": {

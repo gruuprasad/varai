@@ -5,10 +5,12 @@ import { exec } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { loadRepoConfig } from "../scanners/config.js";
 import { createWatcher } from "./watcher.js";
-import { analyzeCurrent, persistCurrentAnalysis } from "../snapshots/snapshot.js";
+import { analyzeCurrent, persistCurrentModel } from "../snapshots/snapshot.js";
 import { createSnapshotStore } from "../snapshots/store.js";
-import { diffAnalyses } from "../diff/index.js";
+import { diffSystemModels } from "../system-model/diff.js";
 import { readGitState } from "../snapshots/git-state.js";
+import { browseByThing, browseByCapability } from "../system-model/projections/index.js";
+import { SYSTEM_MODEL_SCHEMA_VERSION } from "../system-model/version.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.resolve(__dirname, "..", "ui");
@@ -64,7 +66,7 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
   const scanOptions = {
     ...cliScanOptions,
     include: cliScanOptions.include?.length ? cliScanOptions.include : (config.include ?? []),
-    config,
+    exclude: cliScanOptions.exclude?.length ? cliScanOptions.exclude : (config.exclude ?? []),
   };
   for (const key of Object.keys(scanOptions)) if (scanOptions[key] === undefined) delete scanOptions[key];
 
@@ -78,17 +80,25 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
     scanning = true;
     try {
       const current = await analyzeCurrent(absRepo, scanOptions);
-      latestScan = current.scan;
+      latestScan = {
+        ...current.scan,
+        projections: {
+          things: browseByThing(current.scan.model),
+          capabilities: browseByCapability(current.scan.model),
+        },
+      };
       const store = createSnapshotStore(current.git.semanticStoreRoot);
       let ref = await store.getCommitRef(current.git.head);
       if (current.git.clean && !ref) {
-        const created = await persistCurrentAnalysis(absRepo, current);
+        const created = await persistCurrentModel(absRepo, current);
         ref = { snapshotId: created.manifest.id };
       }
       if (ref) {
         const baseline = await store.getSnapshot(ref.snapshotId);
-        if (baseline.scanConfigHash === current.scanConfigHash) {
-          latestDiff = { baseline, diff: diffAnalyses(await store.getObject(baseline.semanticObjectHash), latestScan.analysis) };
+        if (baseline.modelSchemaVersion !== SYSTEM_MODEL_SCHEMA_VERSION) {
+          latestDiff = { error: `Baseline uses System Model schema ${baseline.modelSchemaVersion}; recreate it with varai snapshot.` };
+        } else if (baseline.scanConfigHash === current.scanConfigHash) {
+          latestDiff = { baseline, diff: diffSystemModels(await store.getObject(baseline.modelObjectHash), latestScan.model) };
           broadcast({ type: "semantic-diff", data: latestDiff });
         } else {
           latestDiff = { error: "Baseline uses a different scan configuration" };
@@ -96,7 +106,7 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
       } else {
         latestDiff = { error: "No clean semantic baseline exists for HEAD" };
       }
-      broadcast({ type: "scan", data: latestScan });
+      broadcast({ type: "model", data: latestScan });
     } catch (err) {
       console.error("[server] scan error:", err.message);
       broadcast({ type: "error", message: err.message });
@@ -120,8 +130,8 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
 
-    if (url.pathname === "/api/scan") {
-      serveJSON(res, latestScan || { summary: null, stacks: [], files: [], facts: [] });
+    if (url.pathname === "/api/model") {
+      serveJSON(res, latestScan || { summary: null, model: null });
       return;
     }
 
@@ -149,7 +159,7 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
       sseClients.add(res);
 
       if (latestScan) {
-        res.write(`data: ${JSON.stringify({ type: "scan", data: latestScan })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: "model", data: latestScan })}\n\n`);
       }
       if (latestDiff) res.write(`data: ${JSON.stringify({ type: "semantic-diff", data: latestDiff })}\n\n`);
 

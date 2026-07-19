@@ -10,6 +10,7 @@ export function createSymbolIndex(files, ctx, { workBudget = 10_000 } = {}) {
   const fileSet = new Set(files.filter((file) => file.endsWith(".py")));
   const modToFile = buildModuleMap(fileSet);
   const fnCache = new Map();
+  const classCache = new Map();
   const importCache = new Map();
   let work = 0;
 
@@ -23,6 +24,29 @@ export function createSymbolIndex(files, ctx, { workBudget = 10_000 } = {}) {
       if (name) map.set(name, node);
     }
     fnCache.set(file, map);
+    return map;
+  }
+
+  async function classesIn(file) {
+    if (classCache.has(file)) return classCache.get(file);
+    if (++work > workBudget) return new Map();
+    const map = new Map();
+    const tree = await ctx.tree(file, "python");
+    if (tree) for (const { node } of await queryTree(tree, "python", "(class_definition) @class")) {
+      const name = node.childForFieldName("name")?.text;
+      if (!name) continue;
+      map.set(name, {
+        id: `python:${file}:${name}`,
+        kind: "class",
+        language: "python",
+        file,
+        name,
+        line: node.startPosition.row + 1,
+        bases: classBases(node),
+        node,
+      });
+    }
+    classCache.set(file, map);
     return map;
   }
 
@@ -58,7 +82,79 @@ export function createSymbolIndex(files, ctx, { workBudget = 10_000 } = {}) {
     return resolveFunction(imported.target, imported.imported, seen);
   }
 
-  return { resolveFunction, stats: () => ({ work, workBudget, exhausted: work > workBudget }) };
+  async function resolveDeclaration(fromFile, name, seen = new Set()) {
+    if (++work > workBudget) return null;
+    const normalized = normalizeTypeName(name);
+    const key = `${fromFile}:${normalized}`;
+    if (!normalized || seen.has(key)) return null;
+    seen.add(key);
+    const local = await classesIn(fromFile);
+    if (local.has(normalized)) return local.get(normalized);
+    const imported = (await importsIn(fromFile)).get(normalized);
+    if (!imported) return null;
+    const targetClasses = await classesIn(imported.target);
+    if (targetClasses.has(imported.imported)) return targetClasses.get(imported.imported);
+    return resolveDeclaration(imported.target, imported.imported, seen);
+  }
+
+  async function allDeclarations() {
+    const result = [];
+    for (const file of [...fileSet].sort()) result.push(...(await classesIn(file)).values());
+    return result.sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  async function findDeclarationsByName(name) {
+    const normalized = normalizeTypeName(name);
+    return (await allDeclarations()).filter((item) => item.name === normalized);
+  }
+
+  function describeFunction(file, node) {
+    const name = node.childForFieldName("name")?.text ?? "anonymous";
+    const parameters = new Map();
+    const params = node.childForFieldName("parameters");
+    for (const param of params?.namedChildren ?? []) {
+      const paramName = param.childForFieldName("name")?.text ??
+        (param.type === "identifier" ? param.text : null);
+      const type = normalizeTypeName(param.childForFieldName("type")?.text);
+      if (paramName) parameters.set(paramName, type || null);
+    }
+    return {
+      id: `python:${file}:${name}`,
+      kind: "function",
+      file,
+      name,
+      line: node.startPosition.row + 1,
+      returnType: normalizeTypeName(node.childForFieldName("return_type")?.text),
+      parameters,
+      node,
+    };
+  }
+
+  return {
+    resolveFunction,
+    resolveDeclaration,
+    allDeclarations,
+    findDeclarationsByName,
+    describeFunction,
+    stats: () => ({ work, workBudget, exhausted: work > workBudget }),
+  };
+}
+
+function classBases(node) {
+  const supers = node.childForFieldName("superclasses");
+  if (!supers) return [];
+  return (supers.namedChildren ?? []).map((item) => normalizeTypeName(item.text)).filter(Boolean);
+}
+
+export function normalizeTypeName(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  if (/^(?:list|dict|set|tuple|Sequence|MutableSequence|Iterable|Mapping|MutableMapping)\s*\[/i.test(text)) return null;
+  const annotated = text.match(/^Annotated\[\s*([A-Za-z_]\w*)/);
+  if (annotated) return annotated[1];
+  const withoutOptional = text.replace(/^Optional\[(.+)\]$/, "$1").replace(/\s*\|\s*None\b/g, "");
+  const match = withoutOptional.match(/[A-Za-z_]\w*(?=\s*(?:\]|$))/);
+  return match?.[0] ?? null;
 }
 
 function buildModuleMap(fileSet) {

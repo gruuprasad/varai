@@ -1,6 +1,6 @@
 import path from "node:path";
 import { createScanContext } from "../context.js";
-import { dedupeFacts } from "../utils.js";
+import { dedupeObservations } from "../utils.js";
 
 // Extracts "how do I run this" facts — the operational surface of the repo:
 //   - `script`  : npm scripts, pyproject [project.scripts] / poetry scripts,
@@ -30,7 +30,7 @@ export async function extract(repoPath, files, ctx = createScanContext(repoPath)
       facts.push(...fromDockerfile(file));
     }
   }
-  return dedupeFacts(facts);
+  return dedupeObservations(facts);
 }
 
 async function fromPackageJson(file, ctx) {

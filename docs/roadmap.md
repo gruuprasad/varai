@@ -1,56 +1,57 @@
 # Varai Roadmap
 
-Direction: ADR 0004. Varai builds a local, evidence-backed System Model for technical builders supervising AI-written code. Kalakar is the first serious acceptance project, never the source of core vocabulary.
+Direction: ADR 0004. Varai builds one local, evidence-backed System Model. Kalakar is the first serious acceptance project, never the source of core vocabulary.
 
-## 0. Product and language alignment
+## 0. Product language — complete
 
+- Define Systems, Subsystems, Elements, Claims, evidence, claim state, and coverage.
+- Validate the vocabulary across API, UI, Worker, CLI, Data, Library, mobile, and AI-using systems.
 - Keep `docs/semantic-language.md` normative.
-- Record the System Model product decision and shared vocabulary.
-- Validate kernel changes across multiple system contexts.
 
-Status: complete for semantic language v0; product documentation alignment is part of the System Model v1 slice.
+## 1. One-model foundation — complete
 
-## 1. System Model v1 vertical slice
+- Make System Model v1 the only scanner output and snapshot payload.
+- Render `varai map` from the model.
+- Diff Elements, Claims, coverage, confidence, and evidence movement.
+- Invalidate pre-release Analysis IR snapshots instead of migrating them.
+- Remove intent matching, stock catalogs, fact-inventory reporters, framework-shaped diff, and dual-payload compatibility code.
 
-- Introduce a framework-neutral, versioned model beside Analysis IR v2.
-- Project current API, UI, Data, CLI, and Service observations.
-- Add explicit analyzer coverage.
-- Make `varai map` render the System Model.
-- Persist both Analysis IR and System Model objects.
+Exit: map, snapshot, diff, server, and dashboard all consume the same model.
 
-Exit: the current system is understandable in system language while existing snapshots/diffs remain compatible.
+## 2. Anchor-based semantic lift — implemented (v1)
 
-## 2. Semantic adapter contract
+- Recover declaration-backed Resource subjects through persistence or resolved convergence.
+- Keep distinct Behaviors grouped around Resources and attach Interfaces as reach.
+- Preserve ordered implementation provenance while keeping the implementation graph private.
+- Derive browse-by-thing and browse-by-capability projections without adding an Anchor primitive.
 
-- Replace scanner-level framework branches with registered semantic adapters.
-- Require each adapter to emit Elements, Claims, capability coverage, and diagnostics.
-- Prove that adding a second implementation of one lens changes no kernel/diff/persistence code.
+## 3. Semantic analyzer contract — next
 
-## 3. Current-system interface
+- Replace scanner-level framework branches with registered analyzers.
+- Require every analyzer to emit Elements, Claims, capability coverage, and diagnostics.
+- Keep parser observations private to each analyzer.
+- Prove a second implementation of one lens without changing kernel, diff, persistence, or rendering.
 
-- Make System Model navigation the primary dashboard experience.
-- Add subsystem and Element detail views with evidence links.
+Exit: a conformance analyzer can be registered without editing downstream model consumers.
+
+## 4. Improve current-system usefulness
+
+- Add Element detail views organized around inputs, outputs, conditions, effects, outcomes, and relationships.
 - Make partial/unsupported/failed coverage prominent.
+- Improve stable application/workflow lifting where it changes a real Kalakar decision.
 
-## 4. System Model diff
+## 5. Prove breadth deliberately
 
-- Diff Elements and Claims rather than fixed framework clauses.
-- Separate application changes, qualifier changes, confidence changes, evidence movement, and coverage evolution.
-- Replay the backend output-contract and frontend availability dogfood scenarios.
-
-## 5. Breadth through structurally different lenses
-
-Recommended order: CLI, Worker, Data, a second API framework, then a second UI implementation style. Each capability needs a generic fixture, adapter conformance test, model assertion, semantic diff assertion, and real-project acceptance when applicable.
+Recommended order: CLI, Worker, Data relationships, a second API framework, then another UI implementation style. Every capability needs a generic fixture, analyzer conformance test, model assertion, semantic diff assertion, and real-project acceptance where useful.
 
 ## 6. Checks and intent reconciliation
 
-- Derive falsifiable checks from the System Model with holds/violated/cannot-verify outcomes.
-- Bind durable repository intent artifacts as a separate overlay with bound/unbound/ambiguous states.
-- Keep steering output evidence-grounded and vendor-neutral.
+- Derive falsifiable checks from the model with holds/violated/cannot-verify outcomes.
+- Bind durable repository intent as a separate overlay with bound/unbound/ambiguous states.
 
 ## 7. Optional English interpreter
 
-An opt-in LLM may explain selected System Model Claims after deterministic output is useful. Every sentence must cite model IDs; removing the LLM changes readability only.
+After deterministic views are useful, allow an opt-in LLM to explain selected model claims. Every sentence must cite model IDs; removing the LLM changes readability only.
 
 ## Deferred
 

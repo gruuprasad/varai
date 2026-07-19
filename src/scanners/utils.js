@@ -1,7 +1,7 @@
-export function dedupeFacts(facts) {
+export function dedupeObservations(observations) {
   const byIdentity = new Map();
-  for (const fact of facts) {
-    const key = factKey(fact);
+  for (const fact of observations) {
+    const key = observationKey(fact);
     const current = byIdentity.get(key);
     if (!current) {
       byIdentity.set(key, { ...fact, evidence: [...(fact.evidence ?? [])] });
@@ -15,7 +15,7 @@ export function dedupeFacts(facts) {
   return [...byIdentity.values()];
 }
 
-function factKey(fact) {
+function observationKey(fact) {
   if (["env_var", "integration", "package", "script", "service"].includes(fact.kind)) {
     return `${fact.kind}:${fact.ecosystem ?? ""}:${fact.name}`;
   }

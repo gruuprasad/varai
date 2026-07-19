@@ -1,14 +1,14 @@
 # Varai Glossary
 
-Canonical terms for the product and codebase. `docs/semantic-language.md` is the normative language definition; `docs/spec.md` describes the implementation contract.
+Canonical terms for the product and codebase. `docs/semantic-language.md` is normative; `docs/spec.md` defines the implementation contract.
 
 ## System Model
 
-The local, evidence-backed description Varai builds from a repository. It is the product object from which the map, progression, checks, and explanations are projected.
+The one canonical, versioned, evidence-backed description Varai builds from a repository. Map, progression, checks, and explanations are projections over it.
 
 ## System
 
-The independently understandable software project being described. A repository normally maps to one System; future monorepo support may discover several.
+The independently understandable software project being described. A repository currently maps to one System.
 
 ## Subsystem
 
@@ -16,7 +16,7 @@ A coherent part of a System rendered through its own interaction language. Initi
 
 ## Element
 
-A stable, referable system-level part inside a Subsystem. Examples include an operation, screen, action, job, command, entity, contract, workflow, or process.
+A stable, referable system-level part inside a Subsystem: an operation, screen, action, job, command, entity, contract, workflow, or process.
 
 ## Interface
 
@@ -24,7 +24,7 @@ An Element role through which something outside a Subsystem can interact with it
 
 ## Behavior
 
-An Element role representing something the System can do. Behaviors are the primary units users inspect and compare. Meaningful internal application logic is lifted only when it has a stable use-case, workflow, decision, orchestration, or state-effect boundary.
+An Element role representing something the System can do. Internal application logic is lifted only when it has a stable use-case, workflow, decision, orchestration, or state-effect boundary.
 
 ## Resource
 
@@ -32,11 +32,11 @@ An Element role for state, data, contracts, files, configuration, queues, or ext
 
 ## Claim
 
-One atomic relationship from a source System/Subsystem/Element to a referenced Element or literal. Every Claim carries evidence, observation method, confidence state, and responsible analyzer capability.
+One atomic relationship from a source System, Subsystem, or Element to a referenced Element or literal. Every Claim carries evidence, observation method, confidence state, and analyzer capability.
 
 ## Evidence
 
-The repository-relative location and optional symbol/manifest key grounding an Element or Claim. Evidence can move without changing semantic identity.
+The repository-relative location and optional symbol or manifest key grounding an Element or Claim. Evidence can move without changing semantic identity.
 
 ## Claim state
 
@@ -48,19 +48,15 @@ What an analyzer capability could determine within a scope: `analyzed`, `partial
 
 ## Lens
 
-A subsystem-specific vocabulary and presentation over the framework-neutral kernel. Framework names belong in adapter/evidence details, not lens or relationship vocabulary.
+A subsystem-specific vocabulary and presentation over the framework-neutral kernel. Framework names belong in analyzer/evidence details, not lens or relationship vocabulary.
 
-## Adapter
+## Analyzer
 
-A deterministic translator from language/framework observations into System Model Elements, Claims, coverage records, and diagnostics.
+A deterministic translator from language/framework syntax and manifests into System Model Elements, Claims, coverage records, and diagnostics.
 
-## Fact
+## Observation
 
-The smallest deterministic technical observation produced by existing extractors. Facts remain valuable evidence and drill-down data, but are not the primary product surface. During migration they live in Analysis IR v2 and feed the System Model compatibility projector.
-
-## Stock pattern
-
-A common recognizable implementation pattern such as auth, payments, or notifications, grounded in deterministic fact signatures. Stock patterns are an optional classification overlay, not domain intent and not part of semantic identity.
+A private, framework-shaped parser result used while building the System Model. Observations may be cached for performance but are not a second product model, snapshot payload, or public API.
 
 ## Semantic progression
 

@@ -13,6 +13,7 @@ export const STANDARD_QUALIFIERS = Object.freeze([
   "timeout",
   "queue",
   "concurrency",
+  "type",
 ]);
 
 export function createQualifierRegistry(additional = []) {

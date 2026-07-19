@@ -33,9 +33,6 @@ export async function extract(repoPath, files, ctx = createScanContext(repoPath)
 
       const line = node.startPosition.row + 1;
       facts.push({ kind: "api_route", name, evidence: [{ file, line }], layer });
-      if (/webhook/i.test(routePath)) {
-        facts.push({ kind: "webhook_route", name, evidence: [{ file, line }], layer });
-      }
     }
   }
   return facts;
