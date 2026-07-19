@@ -36,6 +36,14 @@ export async function traceFrontendInteractions(files, ctx) {
         }
         const rootEvidence = { file, line: event.line };
         behavior.door.evidence.push(rootEvidence);
+        for (const condition of visibilityConditions(node, component.node)) {
+          let guard = behavior.guards.find((item) => item.kind === "visible_when" && item.condition === condition.text);
+          if (!guard) {
+            guard = { kind: "visible_when", condition: condition.text, evidence: [], layer: "ast" };
+            behavior.guards.push(guard);
+          }
+          guard.evidence.push({ file, line: condition.line });
+        }
         for (const condition of disabledConditions(attributes.get("disabled"))) {
           let guard = behavior.guards.find((item) => item.kind === "disabled_when" && item.condition === condition.text);
           if (!guard) {
@@ -104,6 +112,31 @@ function disabledConditions(expression) {
   const value = expressionValue(expression);
   if (!value) return [];
   return splitTopLevelOr(value.text).map((text) => ({ text: normalizeExpression(text), line: expression.startPosition.row + 1 })).filter((item) => item.text);
+}
+
+function visibilityConditions(node, boundary) {
+  const result = [];
+  let current = node.type === "jsx_opening_element" ? node.parent : node;
+  while (current?.parent && current !== boundary) {
+    const parent = current.parent;
+    if (parent.type === "ternary_expression") {
+      const condition = parent.childForFieldName("condition");
+      const consequence = parent.childForFieldName("consequence");
+      const alternative = parent.childForFieldName("alternative");
+      if (condition && (current === consequence || current === alternative)) {
+        const text = current === consequence ? normalizeExpression(condition.text) : negateExpression(condition.text);
+        if (text && !["true", "false"].includes(text)) result.push({ text, line: condition.startPosition.row + 1 });
+      }
+    }
+    current = parent;
+  }
+  return result;
+}
+
+function negateExpression(value) {
+  const normalized = normalizeExpression(value);
+  if (normalized.startsWith("!")) return normalizeExpression(normalized.slice(1));
+  return `!(${normalized})`;
 }
 
 function splitTopLevelOr(value) {

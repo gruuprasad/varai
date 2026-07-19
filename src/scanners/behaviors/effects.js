@@ -27,10 +27,11 @@ export function classifyAttributeEffect({ method, receiver, call, firstArgIdent,
 }
 
 export function classifyNamedEffect(name, target = null) {
-  if (target && MUTATION_RE.test(name)) {
+  const semanticName = normalizeOperationName(name);
+  if (target && MUTATION_RE.test(semanticName)) {
     return { access: "write", target, kind: "aggregate", medium: "memory", detail: name, observationMethod: "semantic" };
   }
-  if (target && READ_RE.test(name)) {
+  if (target && READ_RE.test(semanticName)) {
     return { access: "read", target, kind: "aggregate", medium: "memory", detail: name, observationMethod: "semantic" };
   }
   if (!FILE_WRITE_RE.test(name)) return null;
@@ -39,8 +40,11 @@ export function classifyNamedEffect(name, target = null) {
 
 export function isFileWriteName(name) { return FILE_WRITE_RE.test(name); }
 export function operationAccess(name) {
-  if (MUTATION_RE.test(name)) return "write";
-  if (READ_RE.test(name)) return "read";
+  const semanticName = normalizeOperationName(name);
+  if (MUTATION_RE.test(semanticName)) return "write";
+  if (READ_RE.test(semanticName)) return "read";
   return null;
 }
 export function returnRepresentsReadTarget(name) { return LOAD_RETURN_RE.test(name); }
+
+function normalizeOperationName(name) { return String(name ?? "").replace(/^_+/, ""); }

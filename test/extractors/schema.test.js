@@ -73,3 +73,14 @@ test("extracts schema facts with ast layer", async () => {
   const facts = await extract(dir, ["s.py"]);
   assert.equal(facts[0].layer, "ast");
 });
+
+test("extracts schemas that inherit from another Pydantic schema", async () => {
+  const dir = await setup();
+  await writeFile(join(dir, "base.py"), "from pydantic import BaseModel\nclass CatalogResponse(BaseModel):\n    items: list\n");
+  await writeFile(join(dir, "derived.py"), "from base import CatalogResponse\nclass MutationResponse(CatalogResponse):\n    item_id: str\n");
+
+  const facts = await extract(dir, ["base.py", "derived.py"]);
+
+  assert.ok(facts.some((item) => item.name === "CatalogResponse"));
+  assert.ok(facts.some((item) => item.name === "MutationResponse"));
+});

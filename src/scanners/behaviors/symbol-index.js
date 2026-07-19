@@ -114,6 +114,7 @@ export function createSymbolIndex(files, ctx, { workBudget = 10_000 } = {}) {
     const params = node.childForFieldName("parameters");
     for (const param of params?.namedChildren ?? []) {
       const paramName = param.childForFieldName("name")?.text ??
+        param.namedChildren?.find((child) => child.type === "identifier")?.text ??
         (param.type === "identifier" ? param.text : null);
       const type = normalizeTypeName(param.childForFieldName("type")?.text);
       if (paramName) parameters.set(paramName, type || null);

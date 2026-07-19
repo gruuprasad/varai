@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import { scanRepo } from "../../src/scanners/index.js";
-import { browseByThing, browseByCapability } from "../../src/system-model/projections/index.js";
+import {
+  behaviorFrames,
+  browseByThing,
+  browseByCapability,
+  systemPaths,
+} from "../../src/system-model/projections/index.js";
 
 async function model() {
   return (await scanRepo(path.resolve("test/fixtures/anchor-lift/base"), {
@@ -42,6 +47,35 @@ test("anchor projections are deterministic under collection ordering", async () 
   };
   assert.deepEqual(browseByThing(value), browseByThing(reversed));
   assert.deepEqual(browseByCapability(value), browseByCapability(reversed));
+  assert.deepEqual(behaviorFrames(value), behaviorFrames(reversed));
+  assert.deepEqual(systemPaths(value), systemPaths(reversed));
+});
+
+test("behavior frames separate effect subjects from contracts", async () => {
+  const value = await model();
+  const projection = behaviorFrames(value);
+  const byId = new Map(value.elements.map((item) => [item.id, item]));
+  const frame = projection.frames.find((item) =>
+    byId.get(item.behaviorId)?.name === "POST /projects/{project_id}/building/walls");
+
+  assert.ok(frame);
+  assert.ok(frame.subjectIds.some((id) => byId.get(id)?.name === "BuildingDocument"));
+  assert.ok(!frame.subjectIds.some((id) => byId.get(id)?.name === "AddWallRequest"));
+  assert.ok(frame.inputClaimIds.length >= 1);
+  assert.ok(frame.outputClaimIds.length >= 1);
+});
+
+test("system paths compose a UI action through its API operation to its subject", async () => {
+  const value = await model();
+  const projection = systemPaths(value);
+  const byId = new Map(value.elements.map((item) => [item.id, item]));
+  const path = projection.paths.find((item) => item.name.toLowerCase().includes("delete storey"));
+
+  assert.ok(path);
+  assert.equal(path.steps.length, 2);
+  assert.equal(byId.get(path.steps[0].behaviorId)?.kind, "action");
+  assert.equal(byId.get(path.steps[1].behaviorId)?.kind, "operation");
+  assert.ok(path.subjectIds.some((id) => byId.get(id)?.name === "BuildingDocument"));
 });
 
 test("subjects are tier 0, screens nest surfaces, unplaced surfaces stay honest", async () => {

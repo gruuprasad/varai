@@ -1,5 +1,5 @@
 import { validateSystemModel } from "../validate.js";
-import { indexModel, interfacesForBehavior } from "./shared.js";
+import { EFFECT_RELATIONS, indexModel, interfacesForBehavior } from "./shared.js";
 
 export function browseByCapability(model) {
   validateSystemModel(model);
@@ -10,6 +10,7 @@ export function browseByCapability(model) {
   for (const behavior of model.elements.filter((item) => item.roles.includes("behavior"))) {
     const claims = index.outgoing.get(behavior.id) ?? [];
     const resourceIds = [...new Set(claims
+      .filter((claim) => EFFECT_RELATIONS.has(claim.relation))
       .filter((claim) => claim.target.kind === "reference" && index.elements.get(claim.target.id)?.roles.includes("resource"))
       .map((claim) => claim.target.id))].sort();
     const interfaceIds = interfacesForBehavior(behavior, index);

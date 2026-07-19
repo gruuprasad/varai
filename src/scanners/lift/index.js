@@ -58,6 +58,14 @@ function readableCondition(value) {
     .toLowerCase();
 }
 
+function readableAvailableCondition(value) {
+  const normalized = String(value ?? "condition").trim();
+  const groupedNegative = normalized.match(/^!\((.*)\)$/);
+  if (groupedNegative) return `not ${readableCondition(groupedNegative[1])}`;
+  if (normalized.startsWith("!")) return `not ${readableCondition(normalized.slice(1))}`;
+  return readableCondition(normalized);
+}
+
 function conditionalRequirement(condition) {
   const match = String(condition ?? "").match(/^(.+?)\s*&&\s*!([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)$/);
   if (!match) return null;
@@ -214,12 +222,15 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
       addClaim({ source: source("ui", "surface", surfaceKey), relation: "offers", target: reference("ui", "action", actionKey), slot: `action:${actionKey}`, evidence, capability: "ui.action", observationMethod: "ast" });
       addClaim({ source: source("ui", "action", actionKey), relation: "triggered_by", target: literal("event", door.event), slot: "trigger", qualifiers: { event: door.event }, evidence, capability: "ui.action", observationMethod: "ast" });
       for (const guard of behavior.guards ?? []) {
-        const requirement = conditionalRequirement(guard.condition);
+        const visible = guard.kind === "visible_when";
+        const requirement = visible ? null : conditionalRequirement(guard.condition);
         addClaim({
           source: source("ui", "action", actionKey),
           relation: requirement ? "requires" : "available_when",
-          target: literal("condition", requirement ?? inverted(guard.condition)),
-          slot: `${requirement ? "requirement" : "availability"}:${guard.condition}`,
+          target: literal("condition", visible ? readableAvailableCondition(guard.condition) : requirement ?? inverted(guard.condition)),
+          slot: visible
+            ? `visibility:${guard.condition}`
+            : `${requirement ? "requirement" : "availability"}:${guard.condition}`,
           evidence: guard.evidence,
           implementationPath: guard.implementationPath,
           observationMethod: methodFor(guard),

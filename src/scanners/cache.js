@@ -2,7 +2,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, readFile, rename } from "node:fs/promises";
 
-export const EXTRACTOR_VERSION = 7; // Inline UI actions, compound guards, and API wrapper reach
+export const EXTRACTOR_VERSION = 8; // Semantic frames: inherited schemas, visible actions, and aggregate mutation targets
 
 const CACHE_FORMAT_VERSION = 1;
 

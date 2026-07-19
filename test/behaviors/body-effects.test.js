@@ -83,3 +83,29 @@ test("chained db.query(X).filter().delete() extracts X as write target", async (
   assert.ok(out.writes.some((w) => w.target === "JobOwnership" && w.medium === "db"),
     "chained delete target extracted");
 });
+
+test("underscored mutation helpers prefer their document argument over context", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-body-document-"));
+  await writeFile(join(dir, "h.py"), `class JobContext:
+    pass
+class BuildingModelDocument:
+    pass
+def handler(ctx: JobContext):
+    document = ensure_document()
+    _persist_document(ctx, document)
+def ensure_document() -> BuildingModelDocument:
+    return BuildingModelDocument()
+def _persist_document(ctx: JobContext, document):
+    save_document(document)
+`);
+  const { fn, ctx } = await fnAndCtx(dir, "h.py");
+  const resolver = createResolver(["h.py"], ctx);
+  const factIndex = { schemaNames: new Set(), modelNames: new Set(), envNames: new Set() };
+
+  const out = await traceBody(fn, "h.py", ctx, resolver, factIndex);
+
+  assert.ok(out.writes.some((item) => item.target === "BuildingModelDocument"),
+    "document is the mutation subject");
+  assert.ok(!out.writes.some((item) => item.target === "JobContext"),
+    "execution context is not the mutation subject");
+});

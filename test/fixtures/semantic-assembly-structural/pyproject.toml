@@ -1,0 +1,3 @@
+[project]
+name = "semantic-assembly-structural"
+dependencies = ["fastapi", "pydantic"]

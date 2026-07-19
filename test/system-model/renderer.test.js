@@ -7,7 +7,7 @@ import { renderSystemModel } from "../../src/reporters/system-model-markdown.js"
 test("renderer uses system language and exposes partial coverage", async () => {
   const scan = await scanRepo(path.resolve("test/fixtures/frontend-interaction/after"), { jobs: 1, cache: false });
   const output = renderSystemModel({ model: scan.model });
-  assert.match(output, /CreateProjectModal Dismiss.*reached through CreateProjectModal/);
+  assert.match(output, /\*\*Dismiss\*\*.*reached through CreateProjectModal/);
   assert.match(output, /CreateProjectModal Dismiss is available when not loading/);
   assert.match(output, /ui\.availability \(UI\): \*\*partial\*\*/);
   assert.doesNotMatch(output, /FastAPI|React|onClose/);
@@ -28,4 +28,11 @@ test("map report is subjects-first with screens nesting panels", async () => {
   assert.ok(output.indexOf("## Subjects") < output.indexOf("## Screens"));
   assert.ok(output.indexOf("### BuildingDocument") < output.indexOf("## Screens"));
   assert.doesNotMatch(output, /## Browse by thing/);
+  assert.match(output, /## Observed system paths/);
+  assert.match(output, /\*\*delete Storey\*\*.*BuildingToolbar.*DELETE \/projects.*BuildingDocument/);
+
+  const wallCapability = output.split("\n").find((line) =>
+    line.includes("POST /projects/{project_id}/building/walls") && line.includes("acts on"));
+  assert.match(wallCapability, /acts on BuildingDocument/);
+  assert.doesNotMatch(wallCapability, /AddWallRequest|ActionResponse/);
 });

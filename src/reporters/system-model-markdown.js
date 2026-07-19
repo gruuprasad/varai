@@ -1,4 +1,4 @@
-import { browseByThing, browseByCapability } from "../system-model/projections/index.js";
+import { behaviorFrames, browseByThing, systemPaths } from "../system-model/projections/index.js";
 import { RELATION_LABELS, claimStateLabel, kindLabel } from "./display-language.js";
 
 function evidenceLabel(evidence) {
@@ -32,7 +32,8 @@ function pathLabel(path) {
 
 export function renderSystemModel({ model }) {
   const thingView = browseByThing(model);
-  const capabilityView = browseByCapability(model);
+  const frameView = behaviorFrames(model);
+  const pathView = systemPaths(model);
   const byId = new Map([
     [model.system.id, model.system],
     ...model.subsystems.map((item) => [item.id, item]),
@@ -40,6 +41,8 @@ export function renderSystemModel({ model }) {
     ...model.claims.map((item) => [item.id, item]),
   ]);
   const claimsBySource = new Map();
+  const claimsById = new Map(model.claims.map((item) => [item.id, item]));
+  const framesByBehavior = new Map(frameView.frames.map((item) => [item.behaviorId, item]));
   for (const claim of model.claims) {
     const list = claimsBySource.get(claim.sourceId) ?? [];
     list.push(claim);
@@ -56,11 +59,12 @@ export function renderSystemModel({ model }) {
     for (const behaviorId of root.behaviorIds) {
       const behavior = byId.get(behaviorId);
       if (!behavior) continue;
+      const frame = framesByBehavior.get(behaviorId);
       const interfaces = root.interfaceIds.map((id) => byId.get(id)).filter(Boolean)
         .filter((item) => item.id === behavior.id ||
           (claimsBySource.get(item.id) ?? []).some((claim) => claim.relation === "offers" && claim.target.id === behavior.id));
-      lines.push(`${indent}- **${behavior.name}**${interfaces.length ? ` — reached through ${interfaces.map((item) => item.name).join(", ")}` : ""}`);
-      for (const claim of claimsBySource.get(behavior.id) ?? []) {
+      lines.push(`${indent}- **${frame?.name ?? behavior.name}**${interfaces.length ? ` — reached through ${interfaces.map((item) => item.name).join(", ")}` : ""}`);
+      for (const claim of orderedFrameClaims(frame, claimsById, claimsBySource.get(behavior.id) ?? [])) {
         lines.push(`${indent}  - ${claimSentence(claim, behavior.name, byId)} — ${evidenceLabel(claim.evidence)}`);
         const trace = pathLabel(claim.implementationPath);
         if (trace) lines.push(`${indent}    - Implementation: ${trace}`);
@@ -71,7 +75,7 @@ export function renderSystemModel({ model }) {
   const lines = [
     `# ${model.system.name}`,
     "",
-    `${subjects.length} subjects · ${screens.length} screens · ${capabilityView.capabilities.length} observed behaviors`,
+    `${subjects.length} subjects · ${screens.length} screens · ${frameView.frames.length} observed behaviors`,
     "",
     "## Subjects",
     "",
@@ -117,15 +121,23 @@ export function renderSystemModel({ model }) {
     lines.push(`_${detail.length} further elements (data contracts, UI state, internal records) are available through structured model output and dashboard search._`, "");
   }
 
-  lines.push("## Capabilities", "");
-  for (const item of capabilityView.capabilities) {
-    const behavior = byId.get(item.behaviorId);
-    if (!behavior) continue;
-    const resources = item.resourceIds.map((id) => byId.get(id)?.name).filter(Boolean);
-    const interfaces = item.interfaceIds.map((id) => byId.get(id)?.name).filter(Boolean);
-    lines.push(`- **${behavior.name}**${resources.length ? ` — acts on ${resources.join(", ")}` : ""}${interfaces.length ? ` — via ${interfaces.join(", ")}` : ""}`);
+  lines.push("## Observed system paths", "");
+  for (const item of pathView.paths) {
+    const steps = item.steps.map((step) => framesByBehavior.get(step.behaviorId)?.name ?? byId.get(step.behaviorId)?.name).filter(Boolean);
+    const subjects = item.subjectIds.map((id) => byId.get(id)?.name).filter(Boolean);
+    const interfaces = item.interfaceIds.map((id) => byId.get(id)?.name).filter(Boolean)
+      .filter((name) => !steps.includes(name));
+    lines.push(`- **${item.name}** — ${[...interfaces, ...steps, ...subjects].join(" → ")}`);
   }
-  if (!capabilityView.capabilities.length) lines.push("No supported behaviors were recovered.");
+  if (!pathView.paths.length) lines.push("No cross-interface path was fully resolved.");
+
+  lines.push("", "## Capabilities", "");
+  for (const frame of frameView.frames) {
+    const resources = frame.subjectIds.map((id) => byId.get(id)?.name).filter(Boolean);
+    const interfaces = frame.interfaceIds.map((id) => byId.get(id)?.name).filter(Boolean);
+    lines.push(`- **${frame.name}**${resources.length ? ` — acts on ${resources.join(", ")}` : ""}${interfaces.length ? ` — via ${interfaces.join(", ")}` : ""}`);
+  }
+  if (!frameView.frames.length) lines.push("No supported behaviors were recovered.");
   lines.push("", "## What varai couldn't determine", "");
 
   if (!model.coverage.length) lines.push("Nothing was declared out of reach.", "");
@@ -141,4 +153,13 @@ export function renderSystemModel({ model }) {
   }
 
   return `${lines.join("\n").trimEnd()}\n`;
+}
+
+function orderedFrameClaims(frame, claimsById, fallback) {
+  if (!frame) return fallback;
+  const fields = [
+    "triggerClaimIds", "conditionClaimIds", "inputClaimIds", "effectClaimIds",
+    "invocationClaimIds", "outputClaimIds", "outcomeClaimIds", "unresolvedClaimIds",
+  ];
+  return fields.flatMap((field) => frame[field].map((id) => claimsById.get(id)).filter(Boolean));
 }

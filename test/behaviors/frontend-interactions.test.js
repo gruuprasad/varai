@@ -61,6 +61,20 @@ test("retains an integrity acknowledgment gate as a distinct condition", async (
   ]);
 });
 
+test("recovers ternary-controlled action visibility", async () => {
+  const behaviors = await trace(`export function Panel({ preview }) {
+    return <>{!preview
+      ? <button onClick={() => void requestPreview()}>Preview change</button>
+      : <button onClick={() => void applyChange()}>Apply change</button>}
+    </>;
+  }`);
+  const preview = behaviors.find((item) => item.door.action === "Preview change");
+  const apply = behaviors.find((item) => item.door.action === "Apply change");
+
+  assert.ok(preview.guards.some((item) => item.kind === "visible_when" && item.condition === "!preview"));
+  assert.ok(apply.guards.some((item) => item.kind === "visible_when" && item.condition === "preview"));
+});
+
 test("traces an inline action through a unique API wrapper to its transport call", async () => {
   const behaviors = await traceFiles({
     "src/components/Panel.tsx": `import { updateType } from "../api/types";

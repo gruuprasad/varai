@@ -62,6 +62,21 @@ function indexes() {
   return { byId, claimsBySource };
 }
 
+function projectionIndexes() {
+  const frames = scanData.projections?.frames?.frames ?? [];
+  const paths = scanData.projections?.paths?.paths ?? [];
+  const frameByBehavior = new Map(frames.map((item) => [item.behaviorId, item]));
+  const pathsByBehavior = new Map();
+  for (const path of paths) {
+    for (const step of path.steps) {
+      const values = pathsByBehavior.get(step.behaviorId) ?? [];
+      values.push(path);
+      pathsByBehavior.set(step.behaviorId, values);
+    }
+  }
+  return { frames, paths, frameByBehavior, pathsByBehavior };
+}
+
 function changedIds() {
   const ids = new Set();
   const diff = diffData?.diff;
@@ -96,7 +111,8 @@ function renderTopbar() {
   const kindById = new Map(scanData.model.elements.map((item) => [item.id, item.kind]));
   const subjects = roots.filter((root) => root.tier === 0).length;
   const screens = roots.filter((root) => root.tier === 1 && kindById.get(root.elementId) === "screen").length;
-  const behaviors = scanData.projections?.capabilities?.capabilities?.length ?? 0;
+  const behaviors = scanData.projections?.frames?.frames?.length ??
+    scanData.projections?.capabilities?.capabilities?.length ?? 0;
   el.topbarStats.innerHTML = `<span>${subjects} subjects</span><span>${screens} screens</span><span>${behaviors} observed behaviors</span>`;
 }
 
@@ -225,18 +241,34 @@ function screenCard(root, byId, claimsBySource, changed) {
 
 function behaviorList(behaviorIds, interfaceIds, byId, claimsBySource, changed) {
   if (!behaviorIds.length) return `<p class="empty-copy">No connected behavior recovered within current coverage.</p>`;
+  const { frameByBehavior, pathsByBehavior } = projectionIndexes();
+  const claimsById = new Map(scanData.model.claims.map((item) => [item.id, item]));
   return behaviorIds.map((behaviorId) => {
     const behavior = byId.get(behaviorId);
     if (!behavior) return "";
-    const claims = claimsBySource.get(behaviorId) ?? [];
+    const frame = frameByBehavior.get(behaviorId);
+    const claims = orderedFrameClaims(frame, claimsById, claimsBySource.get(behaviorId) ?? []);
     const interfaces = interfaceIds.map((id) => byId.get(id)).filter((item) => item && (item.id === behaviorId ||
       (claimsBySource.get(item.id) ?? []).some((claim) => claim.relation === "offers" && claim.target.id === behaviorId)));
+    const entries = (pathsByBehavior.get(behaviorId) ?? [])
+      .filter((path) => path.entryBehaviorId !== behaviorId)
+      .map((path) => path.name);
+    const reach = [...new Set([...entries, ...interfaces.map((item) => item.name)])];
     return `<section class="behavior${changed.has(behaviorId) ? " behavior-changed" : ""}">` +
-      `<h3>${esc(behavior.name)}${changed.has(behaviorId) ? changeBadge() : ""}</h3>` +
-      (interfaces.length ? `<p class="reach">reached through ${interfaces.map((item) => esc(item.name)).join(" · ")}</p>` : "") +
+      `<h3>${esc(frame?.name ?? behavior.name)}${changed.has(behaviorId) ? changeBadge() : ""}</h3>` +
+      (reach.length ? `<p class="reach">reached through ${reach.map((item) => esc(item)).join(" · ")}</p>` : "") +
       claims.map((claim) => claimRow(claim, byId)).join("") +
       `</section>`;
   }).join("");
+}
+
+function orderedFrameClaims(frame, claimsById, fallback) {
+  if (!frame) return fallback;
+  const fields = [
+    "triggerClaimIds", "conditionClaimIds", "inputClaimIds", "effectClaimIds",
+    "invocationClaimIds", "outputClaimIds", "outcomeClaimIds", "unresolvedClaimIds",
+  ];
+  return fields.flatMap((field) => frame[field].map((id) => claimsById.get(id)).filter(Boolean));
 }
 
 function claimRow(claim, byId) {
@@ -284,29 +316,49 @@ function bindSnippets() {
 }
 
 function renderCapabilities() {
-  const projection = scanData.projections?.capabilities;
-  if (!projection) return renderEmpty("This scan does not include projections yet");
+  const projection = scanData.projections?.frames;
+  const pathProjection = scanData.projections?.paths;
+  if (!projection || !pathProjection) return renderEmpty("This scan does not include semantic frames yet");
   const { byId, claimsBySource } = indexes();
   const changed = changedIds();
   const query = el.search.value.toLowerCase().trim();
-  showSearch(`Find a behavior across ${projection.capabilities.length} capabilities...`);
-  const items = projection.capabilities.filter((item) => {
-    const names = [byId.get(item.behaviorId)?.name, ...item.resourceIds.map((id) => byId.get(id)?.name)];
+  showSearch(`Find a behavior across ${projection.frames.length} capabilities...`);
+  const items = projection.frames.filter((item) => {
+    const names = [item.name, byId.get(item.behaviorId)?.name, ...item.subjectIds.map((id) => byId.get(id)?.name)];
     return !query || names.some((name) => name?.toLowerCase().includes(query));
   });
-  el.searchCount.textContent = query ? `${items.length} matches` : "";
-  el.list.innerHTML = items.map((item) => {
+  const paths = pathProjection.paths.filter((item) => {
+    const names = [item.name, ...item.subjectIds.map((id) => byId.get(id)?.name)];
+    return !query || names.some((name) => name?.toLowerCase().includes(query));
+  });
+  el.searchCount.textContent = query ? `${items.length + paths.length} matches` : "";
+  let html = `<h2 class="group-heading">Observed system paths</h2>`;
+  html += paths.length ? paths.map((item) => {
+    const open = expandedId === item.id;
+    const steps = item.steps.map((step) =>
+      projection.frames.find((frame) => frame.behaviorId === step.behaviorId)?.name ?? byId.get(step.behaviorId)?.name).filter(Boolean);
+    const subjects = item.subjectIds.map((id) => byId.get(id)?.name).filter(Boolean);
+    return `<article class="card${open ? " open" : ""}">` +
+      `<button class="card-head" data-expand="${esc(item.id)}" aria-expanded="${open}">` +
+      `<span class="card-title"><strong>${esc(item.name)}</strong><small>${esc([...steps, ...subjects].join(" → "))}</small></span>` +
+      `<span class="chevron">⌄</span></button>` +
+      (open ? `<div class="card-detail">${behaviorList(item.steps.map((step) => step.behaviorId), item.interfaceIds, byId, claimsBySource, changed)}</div>` : "") +
+      `</article>`;
+  }).join("") : `<p class="empty-copy">No cross-interface path was fully resolved.</p>`;
+  html += `<h2 class="group-heading">All behaviors</h2>`;
+  html += items.map((item) => {
     const behavior = byId.get(item.behaviorId);
     const open = expandedId === behavior.id;
-    const resources = item.resourceIds.map((id) => byId.get(id)?.name).filter(Boolean);
+    const resources = item.subjectIds.map((id) => byId.get(id)?.name).filter(Boolean);
     return `<article class="card${open ? " open" : ""}">` +
       `<button class="card-head" data-expand="${esc(behavior.id)}" aria-expanded="${open}">` +
-      `<span class="card-title"><strong>${esc(behavior.name)}</strong>` +
+      `<span class="card-title"><strong>${esc(item.name)}</strong>` +
       `<small>${resources.length ? `acts on ${esc(resources.join(", "))}` : "no resolved subject"}</small></span>` +
       `${changed.has(behavior.id) ? changeBadge() : ""}<span class="chevron">⌄</span></button>` +
       (open ? `<div class="card-detail">${behaviorList([behavior.id], item.interfaceIds, byId, claimsBySource, changed)}</div>` : "") +
       `</article>`;
   }).join("") || emptyMarkup("No behaviors match this search");
+  el.list.innerHTML = html;
   bindExpanders();
   bindSnippets();
 }

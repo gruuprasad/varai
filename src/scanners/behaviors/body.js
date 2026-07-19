@@ -71,7 +71,9 @@ async function walk(info, ctx, resolver, factIndex, acc, graph, depth, seen, pat
     const typedTarget = await targetTypeForCall(call, localTypes, resolvedInfo, file, resolver);
     const returnedType = resolvedInfo?.returnType ?? null;
     const access = operationAccess(name);
-    const semanticTarget = access === "read" ? (typedTarget ?? (returnRepresentsReadTarget(name) ? returnedType : null)) : null;
+    const semanticTarget = access
+      ? (typedTarget ?? (access === "read" && returnRepresentsReadTarget(name) ? returnedType : null))
+      : null;
     const namedEffect = resolvedInfo
       ? (semanticTarget ? classifyNamedEffect(name, semanticTarget) : null)
       : classifyNamedEffect(name);
@@ -134,17 +136,35 @@ async function inferAssignedTypes(body, file, resolver, localTypes) {
 
 async function targetTypeForCall(call, localTypes, resolvedInfo, file, resolver) {
   const args = call.childForFieldName("arguments")?.namedChildren ?? [];
-  const parameterTypes = [...(resolvedInfo?.parameters?.values() ?? [])];
+  const parameters = [...(resolvedInfo?.parameters?.entries() ?? [])];
+  const candidates = [];
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     const localType = arg.type === "identifier" ? localTypes.get(arg.text) : null;
-    const candidate = localType ?? parameterTypes[index] ?? null;
+    const [parameterName, parameterType] = parameters[index] ?? [null, null];
+    const candidate = localType ?? parameterType ?? null;
     if (!candidate) continue;
     const declaration = await resolver.resolveDeclaration(resolvedInfo?.file ?? file, candidate) ??
       await resolver.resolveDeclaration(file, candidate);
-    if (declaration) return declaration.name;
+    if (!declaration) continue;
+    candidates.push({
+      name: declaration.name,
+      score: targetCandidateScore(parameterName, arg.type === "identifier" ? arg.text : null, declaration.name),
+      index,
+    });
   }
-  return null;
+  candidates.sort((a, b) => b.score - a.score || a.index - b.index || a.name.localeCompare(b.name));
+  return candidates[0]?.name ?? null;
+}
+
+function targetCandidateScore(parameterName, argumentName, typeName) {
+  const subject = /(?:document|model|entity|record|resource|state|project|artifact)/i;
+  const infrastructure = /(?:Context|Session|Connection|Client)$/;
+  let score = 0;
+  if (subject.test(parameterName ?? "")) score += 4;
+  if (subject.test(argumentName ?? "")) score += 2;
+  if (infrastructure.test(typeName)) score -= 4;
+  return score;
 }
 
 async function recordEffect(effect, evidence, path, file, resolver, acc, graph, currentId, traceDepth) {
