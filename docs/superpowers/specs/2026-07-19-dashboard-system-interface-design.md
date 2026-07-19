@@ -78,6 +78,16 @@ Varai is CLI-first, like git. The frontend is a client of varai, not a module of
 └───────────────────────────────────────────────────┘
 ```
 
+Core itself splits along a second axis (ADR 0004's central decision, already implemented):
+`src/scanners/` is the only place framework knowledge may live — extractors
+(`fastapi.js`, `react-vite.js`, `sqlalchemy.js`, …) produce framework-shaped private
+observations, and `src/scanners/lift/` converts them into framework-neutral Elements and
+Claims. `src/system-model/`, `src/snapshots/`, and `src/reporters/` never contain a
+framework-specific term. Supporting a new framework means adding an extractor, never
+touching the kernel. The screen⊃surface work in this spec follows the same rule: the
+render-chain resolution is React-specific and lives in the scanner side; what it emits is
+a neutral `contains` claim.
+
 Two rules, enforced by this design:
 
 1. **Dependency direction is strictly downward.** Core never imports from `src/server/` or
