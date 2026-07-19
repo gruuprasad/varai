@@ -1,15 +1,5 @@
-const LENS_META = {
-  api: { icon: "→", label: "API" }, ui: { icon: "□", label: "UI" }, worker: { icon: "◇", label: "Workers" },
-  cli: { icon: "▷", label: "CLI" }, data: { icon: "▤", label: "Data" }, service: { icon: "▣", label: "Services" },
-  library: { icon: "⬡", label: "Libraries" }, application: { icon: "◎", label: "Application" },
-};
-
-const RELATIONS = {
-  contains: "contains", exposes: "exposes", offers: "offers", triggered_by: "is triggered by", invokes: "invokes",
-  accepts: "accepts", produces: "produces", requires: "requires", available_when: "is available when", reads: "reads",
-  changes: "changes", creates: "creates", removes: "removes", succeeds_with: "succeeds with", fails_with: "fails with",
-  navigates_to: "navigates to", emits: "emits", has_field: "has field", relates_to: "relates to", stored_in: "is stored in",
-};
+const $ = (id) => document.getElementById(id);
+const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 (function setupTheme() {
   document.documentElement.dataset.theme = localStorage.getItem("varai-theme") || "dark";
@@ -20,40 +10,31 @@ const RELATIONS = {
   }));
 })();
 
-const $ = (id) => document.getElementById(id);
-const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const el = {
-  statusDot: $("status-dot"), statusText: $("status-text"), topbarStats: $("topbar-stats"), sidebarNav: $("sidebar-nav"),
-  search: $("search"), searchCount: $("search-count"), list: $("elements-list"),
+  statusDot: $("status-dot"), statusText: $("status-text"), topbarStats: $("topbar-stats"),
+  sidebarNav: $("sidebar-nav"), search: $("search"), searchCount: $("search-count"), list: $("elements-list"),
 };
 
-let activeView = "things";
+let activeView = "system";
 let expandedId = null;
-let showAllThings = false;
+let changesOnly = false;
 let scanData = null;
 let diffData = null;
+const snippetCache = new Map();
+const openSnippets = new Set();
 
 const events = new EventSource("/api/events");
 events.addEventListener("message", (event) => {
   const message = JSON.parse(event.data);
-  if (message.type === "model") {
-    scanData = message.data;
-    setStatus("live", "Live");
-    render();
-  } else if (message.type === "semantic-diff") {
-    diffData = message.data;
-    render();
-  } else if (message.type === "error") setStatus("error", "Error");
+  if (message.type === "model") { scanData = message.data; setStatus("live", "Live"); render(); }
+  else if (message.type === "semantic-diff") { diffData = message.data; render(); }
+  else if (message.type === "error") setStatus("error", "Error");
 });
 events.addEventListener("open", () => setStatus("scanning", "Connecting..."));
 events.addEventListener("error", () => setStatus("error", "Disconnected"));
 
 fetch("/api/model").then((response) => response.json()).then((data) => {
-  if (data.model) {
-    scanData = data;
-    setStatus("live", "Live");
-    render();
-  }
+  if (data.model) { scanData = data; setStatus("live", "Live"); render(); }
 }).catch(() => setStatus("error", "Connection error"));
 fetch("/api/diff").then((response) => response.json()).then((data) => { diffData = data; render(); });
 
@@ -62,60 +43,86 @@ function setStatus(kind, text) {
   el.statusText.textContent = text;
 }
 
+function language() {
+  return scanData?.displayLanguage ?? { relations: {}, kinds: {}, claimStates: {} };
+}
+const relationLabel = (relation) => language().relations[relation] ?? relation;
+const kindLabel = (kind) => language().kinds[kind] ?? kind;
+const stateLabel = (state) => language().claimStates[state] ?? state;
+
 function indexes() {
   const model = scanData.model;
-  return {
-    byId: new Map([...model.subsystems, ...model.elements, ...model.claims].map((item) => [item.id, item])),
-    subsystemById: new Map(model.subsystems.map((item) => [item.id, item])),
-    claimsBySource: model.claims.reduce((map, claim) => {
-      const values = map.get(claim.sourceId) ?? [];
-      values.push(claim);
-      map.set(claim.sourceId, values);
-      return map;
-    }, new Map()),
-  };
+  const byId = new Map([...model.subsystems, ...model.elements, ...model.claims].map((item) => [item.id, item]));
+  const claimsBySource = new Map();
+  for (const claim of model.claims) {
+    const list = claimsBySource.get(claim.sourceId) ?? [];
+    list.push(claim);
+    claimsBySource.set(claim.sourceId, list);
+  }
+  return { byId, claimsBySource };
+}
+
+function changedIds() {
+  const ids = new Set();
+  const diff = diffData?.diff;
+  if (!diff) return ids;
+  for (const item of diff.elements.added) ids.add(item.id);
+  for (const item of diff.elements.changed) ids.add(item.after.id);
+  for (const item of diff.claims.added) ids.add(item.sourceId);
+  for (const item of diff.claims.removed) ids.add(item.sourceId);
+  for (const item of diff.claims.changed) ids.add(item.after.sourceId);
+  return ids;
+}
+
+function rootChanged(root, changed) {
+  return changed.has(root.elementId) ||
+    root.behaviorIds.some((id) => changed.has(id)) ||
+    root.surfaceIds.some((id) => changed.has(id));
 }
 
 function render() {
   if (!scanData?.model) return;
-  renderStats();
+  renderTopbar();
   renderNav();
-  if (activeView === "progression") renderProgression();
-  else if (activeView === "coverage") renderCoverage();
-  else if (activeView === "capabilities") renderCapabilities();
-  else if (activeView === "all") renderAllElements();
-  else renderThings();
+  if (activeView === "capabilities") renderCapabilities();
+  else if (activeView === "changes") renderChanges();
+  else if (activeView === "everything") renderEverything();
+  else if (activeView === "unknowns") renderUnknowns();
+  else renderSystem();
 }
 
-function renderStats() {
-  const summary = scanData.summary;
-  const stacks = (summary.stacks ?? []).join(" · ");
-  el.topbarStats.innerHTML = `<span><em>${summary.fileCount}</em> files</span><span><em>${summary.elementCount}</em> elements</span>` +
-    `<span><em>${summary.claimCount}</em> claims</span>${stacks ? `<span>${esc(stacks)}</span>` : ""}`;
+function renderTopbar() {
+  const roots = scanData.projections?.things?.roots ?? [];
+  const kindById = new Map(scanData.model.elements.map((item) => [item.id, item.kind]));
+  const subjects = roots.filter((root) => root.tier === 0).length;
+  const screens = roots.filter((root) => root.tier === 1 && kindById.get(root.elementId) === "screen").length;
+  const behaviors = scanData.projections?.capabilities?.capabilities?.length ?? 0;
+  el.topbarStats.innerHTML = `<span>${subjects} subjects</span><span>${screens} screens</span><span>${behaviors} observed behaviors</span>`;
 }
 
 function renderNav() {
-  const things = scanData.projections?.things?.roots?.length ?? 0;
-  const capabilities = scanData.projections?.capabilities?.capabilities?.length ?? 0;
-  const progression = diffData?.diff?.summary?.semanticChanges ?? 0;
-  el.sidebarNav.innerHTML = navItem("progression", "∆", "Progression", progression) +
-    `<div class="nav-group"><span class="nav-group-label">System lens</span>` +
-    navItem("things", "◎", "Things", things, "nav-item") +
-    navItem("capabilities", "↳", "Capabilities", capabilities, "nav-item") +
-    navItem("all", "≡", "All elements", scanData.model.elements.length, "nav-item") +
-    `</div>${navItem("coverage", "◌", "Coverage", scanData.model.coverage.length)}`;
+  const changes = diffData?.diff?.summary?.semanticChanges ?? 0;
+  el.sidebarNav.innerHTML =
+    navItem("system", "◎", "System", null) +
+    navItem("capabilities", "↳", "Capabilities", null) +
+    navItem("changes", "∆", "Changes", changes || null) +
+    `<div class="nav-group"><span class="nav-group-label">Advanced</span>` +
+    navItem("everything", "≡", "Everything", scanData.model.elements.length) +
+    navItem("unknowns", "◌", "Couldn't determine", scanData.model.coverage.length) +
+    `</div>`;
   el.sidebarNav.querySelectorAll("[data-view]").forEach((item) => item.addEventListener("click", () => {
     activeView = item.dataset.view;
     expandedId = null;
-    showAllThings = false;
+    changesOnly = false;
     el.search.value = "";
     render();
   }));
 }
 
-function navItem(view, icon, name, count, className = "nav-all") {
-  return `<button class="${className}${activeView === view ? " active" : ""}" data-view="${view}">` +
-    `<span class="nav-icon">${esc(icon)}</span><span class="nav-name">${esc(name)}</span><span class="nav-count">${count}</span></button>`;
+function navItem(view, icon, name, count) {
+  return `<button class="nav-item${activeView === view ? " active" : ""}" data-view="${view}">` +
+    `<span class="nav-icon">${esc(icon)}</span><span class="nav-name">${esc(name)}</span>` +
+    `${count == null ? "" : `<span class="nav-count">${count}</span>`}</button>`;
 }
 
 function showSearch(placeholder) {
@@ -123,98 +130,238 @@ function showSearch(placeholder) {
   el.search.placeholder = placeholder;
 }
 
-function renderThings() {
-  const projection = scanData.projections?.things;
-  if (!projection) return renderMissingProjection();
-  const { byId, claimsBySource } = indexes();
-  const query = el.search.value.toLowerCase().trim();
-  const matchingRoots = projection.roots.filter((root) => {
-    if (!query) return true;
-    const names = [byId.get(root.elementId)?.name, ...root.behaviorIds.map((id) => byId.get(id)?.name)];
-    return names.some((name) => name?.toLowerCase().includes(query));
-  });
-  const roots = query || showAllThings ? matchingRoots : matchingRoots.slice(0, 24);
-  showSearch(`Find a system thing or behavior across ${projection.roots.length} roots...`);
-  el.searchCount.textContent = query ? `${roots.length} matches` : `${roots.length} of ${projection.roots.length}`;
-  if (!roots.length) return renderEmpty("No system subjects or surfaces match this search");
-
-  el.list.innerHTML = `<div class="view-intro"><span class="eyebrow">SUBJECT MAP</span><h1>What the system is about</h1>` +
-    `<p>Open a thing to see what acts on it, how those behaviors are reached, and where the implementation runs.</p></div>` +
-    roots.map((root, index) => thingCard(root, index, byId, claimsBySource)).join("") +
-    (!query && projection.roots.length > roots.length ? `<button class="show-all" id="show-all-things">Show all ${projection.roots.length} system things</button>` : "");
-  bindExpanders();
-  $("show-all-things")?.addEventListener("click", () => { showAllThings = true; renderThings(); });
+function stateMark(state) {
+  const label = stateLabel(state);
+  return label ? `<span class="state-mark">${esc(label)}</span>` : "";
 }
 
-function thingCard(root, index, byId, claimsBySource) {
+function changeBadge() {
+  return `<span class="change-badge">changed</span>`;
+}
+
+function matchRoot(root, byId, query) {
+  if (!query) return true;
+  const names = [byId.get(root.elementId)?.name,
+    ...root.behaviorIds.map((id) => byId.get(id)?.name),
+    ...root.surfaceIds.map((id) => byId.get(id)?.name)];
+  return names.some((name) => name?.toLowerCase().includes(query));
+}
+
+function renderSystem() {
+  const projection = scanData.projections?.things;
+  if (!projection) return renderEmpty("This scan does not include projections yet");
+  const { byId, claimsBySource } = indexes();
+  const changed = changedIds();
+  const query = el.search.value.toLowerCase().trim();
+  showSearch("Find a subject, screen, or behavior...");
+
+  const visible = (root) => matchRoot(root, byId, query) && (!changesOnly || rootChanged(root, changed));
+  const subjects = projection.roots.filter((root) => root.tier === 0 && visible(root));
+  const screens = projection.roots.filter((root) => root.tier === 1 && byId.get(root.elementId)?.kind === "screen" && visible(root));
+  const unplaced = projection.roots.filter((root) => root.tier === 1 && byId.get(root.elementId)?.kind === "surface" && visible(root));
+  el.searchCount.textContent = query ? `${subjects.length + screens.length + unplaced.length} matches` : "";
+
+  const changedRootCount = projection.roots.filter((root) => root.tier <= 1 && rootChanged(root, changed)).length;
+  const strip = diffData?.diff?.summary?.hasChanges
+    ? `<button class="change-strip${changesOnly ? " active" : ""}" id="change-strip">` +
+      `<b>${changedRootCount}</b> ${changedRootCount === 1 ? "area" : "areas"} changed since the last snapshot` +
+      `<span>${changesOnly ? "show everything" : "show only changes"}</span></button>`
+    : diffData?.error ? `<p class="baseline-note">${esc(diffData.error)}</p>` : "";
+
+  let html = strip + `<h2 class="group-heading">Subjects</h2>`;
+  html += subjects.length
+    ? subjects.map((root) => subjectCard(root, byId, claimsBySource, changed)).join("")
+    : `<p class="empty-copy">No system subjects recovered.</p>`;
+  html += `<h2 class="group-heading">Screens</h2>`;
+  html += screens.length
+    ? screens.map((root) => screenCard(root, byId, claimsBySource, changed)).join("")
+    : `<p class="empty-copy">No screens recovered.</p>`;
+  if (unplaced.length) {
+    html += `<h3 class="subgroup-heading">Not placed on a screen</h3>` +
+      unplaced.map((root) => subjectCard(root, byId, claimsBySource, changed)).join("");
+  }
+  el.list.innerHTML = html;
+  bindExpanders();
+  bindSnippets();
+  $("change-strip")?.addEventListener("click", () => { changesOnly = !changesOnly; render(); });
+}
+
+function subjectCard(root, byId, claimsBySource, changed) {
   const item = byId.get(root.elementId);
   const open = expandedId === root.elementId;
-  const state = item.claimState === "observed" ? "" : `<span class="state-pill">${esc(item.claimState)}</span>`;
-  let detail = "";
-  if (open) {
-    detail = `<div class="anchor-detail">${root.behaviorIds.length ? root.behaviorIds.map((id) => behaviorBlock(byId.get(id), root.interfaceIds, byId, claimsBySource)).join("") : `<p class="empty-copy">No connected behavior recovered within current coverage.</p>`}</div>`;
-  }
-  return `<article class="anchor-card${open ? " open" : ""}" style="--order:${index}">` +
-    `<button class="anchor-head" data-expand="${esc(root.elementId)}" aria-expanded="${open}">` +
-    `<span class="anchor-glyph">${item.kind === "screen" || item.kind === "surface" ? "□" : "◉"}</span>` +
-    `<span class="anchor-title"><small>${esc(item.kind)}</small><strong>${esc(item.name)}</strong></span>${state}` +
-    `<span class="behavior-count"><b>${root.behaviorIds.length}</b> behaviors</span><span class="chevron">⌄</span></button>${detail}</article>`;
+  return `<article class="card${open ? " open" : ""}">` +
+    `<button class="card-head" data-expand="${esc(root.elementId)}" aria-expanded="${open}">` +
+    `<span class="card-title"><strong>${esc(item.name)}</strong><small>${esc(kindLabel(item.kind))}</small></span>` +
+    `${rootChanged(root, changed) ? changeBadge() : ""}` +
+    `${item.claimState !== "observed" ? stateMark(item.claimState) : ""}` +
+    `<span class="count">${root.behaviorIds.length} ${root.behaviorIds.length === 1 ? "behavior" : "behaviors"}</span>` +
+    `<span class="chevron">⌄</span></button>` +
+    (open ? `<div class="card-detail">${behaviorList(root.behaviorIds, root.interfaceIds, byId, claimsBySource, changed)}</div>` : "") +
+    `</article>`;
 }
 
-function behaviorBlock(behavior, interfaceIds, byId, claimsBySource) {
-  const claims = claimsBySource.get(behavior.id) ?? [];
-  const interfaces = interfaceIds.map((id) => byId.get(id)).filter((item) => item && (item.id === behavior.id ||
-    (claimsBySource.get(item.id) ?? []).some((claim) => claim.relation === "offers" && claim.target.id === behavior.id)));
-  return `<section class="behavior-block"><div class="behavior-heading"><span>BEHAVIOR</span><h3>${esc(behavior.name)}</h3>` +
-    `${interfaces.length ? `<p>reached through ${interfaces.map((item) => esc(item.name)).join(" · ")}</p>` : ""}</div>` +
-    `<div class="claim-grid">${claims.length ? claims.map((claim) => claimRow(claim, byId)).join("") : `<p class="empty-copy">No contract or effect claims recovered.</p>`}</div></section>`;
+function screenCard(root, byId, claimsBySource, changed) {
+  const item = byId.get(root.elementId);
+  const open = expandedId === root.elementId;
+  let detail = "";
+  if (open) {
+    const panels = root.surfaceIds.map((surfaceId) => {
+      const surface = byId.get(surfaceId);
+      const offers = (claimsBySource.get(surfaceId) ?? [])
+        .filter((claim) => claim.relation === "offers" && claim.target.kind === "reference")
+        .map((claim) => claim.target.id);
+      return `<section class="panel-block"><h4>${esc(surface.name)} <small>${esc(kindLabel(surface.kind))}</small></h4>` +
+        behaviorList(offers, [surfaceId], byId, claimsBySource, changed) + `</section>`;
+    }).join("");
+    detail = `<div class="card-detail">${panels || `<p class="empty-copy">No panels were resolved into this screen.</p>`}</div>`;
+  }
+  return `<article class="card${open ? " open" : ""}">` +
+    `<button class="card-head" data-expand="${esc(root.elementId)}" aria-expanded="${open}">` +
+    `<span class="card-title"><strong>${esc(item.name)}</strong><small>screen</small></span>` +
+    `${rootChanged(root, changed) ? changeBadge() : ""}` +
+    `<span class="count">${root.surfaceIds.length} ${root.surfaceIds.length === 1 ? "panel" : "panels"} · ${root.behaviorIds.length} ${root.behaviorIds.length === 1 ? "behavior" : "behaviors"}</span>` +
+    `<span class="chevron">⌄</span></button>${detail}</article>`;
+}
+
+function behaviorList(behaviorIds, interfaceIds, byId, claimsBySource, changed) {
+  if (!behaviorIds.length) return `<p class="empty-copy">No connected behavior recovered within current coverage.</p>`;
+  return behaviorIds.map((behaviorId) => {
+    const behavior = byId.get(behaviorId);
+    if (!behavior) return "";
+    const claims = claimsBySource.get(behaviorId) ?? [];
+    const interfaces = interfaceIds.map((id) => byId.get(id)).filter((item) => item && (item.id === behaviorId ||
+      (claimsBySource.get(item.id) ?? []).some((claim) => claim.relation === "offers" && claim.target.id === behaviorId)));
+    return `<section class="behavior${changed.has(behaviorId) ? " behavior-changed" : ""}">` +
+      `<h3>${esc(behavior.name)}${changed.has(behaviorId) ? changeBadge() : ""}</h3>` +
+      (interfaces.length ? `<p class="reach">reached through ${interfaces.map((item) => esc(item.name)).join(" · ")}</p>` : "") +
+      claims.map((claim) => claimRow(claim, byId)).join("") +
+      `</section>`;
+  }).join("");
 }
 
 function claimRow(claim, byId) {
   const target = claim.target.kind === "reference" ? byId.get(claim.target.id)?.name ?? claim.target.id : claim.target.value;
   const trace = claim.implementationPath ?? [];
-  return `<div class="claim-row"><div class="claim-line"><span class="relation">${esc(RELATIONS[claim.relation] ?? claim.relation)}</span>` +
-    `<strong>${esc(target)}</strong>${claim.claimState === "observed" ? "" : `<span class="state-pill">${esc(claim.claimState)}</span>`}</div>` +
-    `${trace.length ? `<ol class="trace-path">${trace.map((step, index) => `<li><span>${index + 1}</span><code>${esc(step.symbol ? `${step.symbol} · ${step.file}` : step.file)}${step.line ? `:${step.line}` : ""}</code></li>`).join("")}</ol>` : `<small>${evidence(claim)}</small>`}</div>`;
+  const steps = trace.map((step, index) =>
+    `<li><button class="trace-step" data-file="${esc(step.file)}" data-line="${step.line ?? 1}">` +
+    `<span>${index + 1}</span><code>${esc(step.symbol ? `${step.symbol} · ${step.file}` : step.file)}${step.line ? `:${step.line}` : ""}</code></button>` +
+    `<div class="snippet" data-snippet="${esc(`${step.file}:${step.line ?? 1}`)}" hidden></div></li>`).join("");
+  const fallback = (claim.evidence ?? []).map((entry) => `${esc(entry.file)}${entry.line ? `:${entry.line}` : ""}`).join(", ");
+  return `<div class="claim"><p>${esc(relationLabel(claim.relation))} <strong>${esc(target)}</strong>${stateMark(claim.claimState)}</p>` +
+    (steps ? `<ol class="trace">${steps}</ol>` : fallback ? `<small class="evidence">${fallback}</small>` : "") + `</div>`;
+}
+
+async function toggleSnippet(button) {
+  const key = `${button.dataset.file}:${button.dataset.line}`;
+  const holder = button.parentElement.querySelector(`[data-snippet="${CSS.escape(key)}"]`);
+  if (!holder) return;
+  if (!holder.hidden) { holder.hidden = true; openSnippets.delete(key); return; }
+  if (!snippetCache.has(key)) {
+    try {
+      const response = await fetch(`/api/source?file=${encodeURIComponent(button.dataset.file)}&line=${encodeURIComponent(button.dataset.line)}`);
+      if (!response.ok) throw new Error("unavailable");
+      snippetCache.set(key, await response.json());
+    } catch {
+      snippetCache.set(key, null);
+    }
+  }
+  const snippet = snippetCache.get(key);
+  holder.innerHTML = snippet
+    ? `<pre class="code">${snippet.lines.map((line, index) => {
+        const number = snippet.startLine + index;
+        return `<span class="line${number === snippet.focusLine ? " focus" : ""}"><i>${number}</i>${esc(line)}</span>`;
+      }).join("\n")}</pre>`
+    : `<p class="empty-copy">Source unavailable.</p>`;
+  holder.hidden = false;
+  openSnippets.add(key);
+}
+
+function bindSnippets() {
+  el.list.querySelectorAll(".trace-step").forEach((button) => button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleSnippet(button);
+  }));
 }
 
 function renderCapabilities() {
   const projection = scanData.projections?.capabilities;
-  if (!projection) return renderMissingProjection();
+  if (!projection) return renderEmpty("This scan does not include projections yet");
   const { byId, claimsBySource } = indexes();
+  const changed = changedIds();
   const query = el.search.value.toLowerCase().trim();
+  showSearch(`Find a behavior across ${projection.capabilities.length} capabilities...`);
   const items = projection.capabilities.filter((item) => {
     const names = [byId.get(item.behaviorId)?.name, ...item.resourceIds.map((id) => byId.get(id)?.name)];
     return !query || names.some((name) => name?.toLowerCase().includes(query));
   });
-  showSearch(`Find a behavior across ${projection.capabilities.length} capabilities...`);
   el.searchCount.textContent = query ? `${items.length} matches` : "";
-  el.list.innerHTML = `<div class="view-intro"><span class="eyebrow">CAPABILITY INDEX</span><h1>What the system can do</h1>` +
-    `<p>Behaviors stay distinct even when they act on the same system thing.</p></div>` + items.map((item, index) => {
-      const behavior = byId.get(item.behaviorId);
-      const open = expandedId === behavior.id;
-      const resources = item.resourceIds.map((id) => byId.get(id)?.name).filter(Boolean);
-      return `<article class="anchor-card${open ? " open" : ""}" style="--order:${index}"><button class="anchor-head" data-expand="${esc(behavior.id)}" aria-expanded="${open}">` +
-        `<span class="anchor-glyph">↳</span><span class="anchor-title"><small>behavior</small><strong>${esc(behavior.name)}</strong></span>` +
-        `<span class="behavior-count">${resources.length ? `acts on <b>${esc(resources.join(", "))}</b>` : "no resolved subject"}</span><span class="chevron">⌄</span></button>` +
-        `${open ? `<div class="anchor-detail">${behaviorBlock(behavior, item.interfaceIds, byId, claimsBySource)}</div>` : ""}</article>`;
-    }).join("");
+  el.list.innerHTML = items.map((item) => {
+    const behavior = byId.get(item.behaviorId);
+    const open = expandedId === behavior.id;
+    const resources = item.resourceIds.map((id) => byId.get(id)?.name).filter(Boolean);
+    return `<article class="card${open ? " open" : ""}">` +
+      `<button class="card-head" data-expand="${esc(behavior.id)}" aria-expanded="${open}">` +
+      `<span class="card-title"><strong>${esc(behavior.name)}</strong>` +
+      `<small>${resources.length ? `acts on ${esc(resources.join(", "))}` : "no resolved subject"}</small></span>` +
+      `${changed.has(behavior.id) ? changeBadge() : ""}<span class="chevron">⌄</span></button>` +
+      (open ? `<div class="card-detail">${behaviorList([behavior.id], item.interfaceIds, byId, claimsBySource, changed)}</div>` : "") +
+      `</article>`;
+  }).join("") || emptyMarkup("No behaviors match this search");
   bindExpanders();
+  bindSnippets();
 }
 
-function renderAllElements() {
-  const { byId, subsystemById, claimsBySource } = indexes();
+function renderChanges() {
+  el.search.closest(".search-wrap").hidden = true;
+  if (diffData?.error) return renderEmpty(diffData.error);
+  const diff = diffData?.diff;
+  if (!diff) return renderEmpty("Semantic diff is not ready");
+  if (!diff.summary.hasChanges) return renderEmpty("No semantic changes within declared coverage");
+  const label = (id) => diff.labels[id] ?? id;
+  const claimText = (item) =>
+    `${relationLabel(item.relation)} ${item.target.kind === "reference" ? label(item.target.id) : item.target.value}`;
+  let html = `<h2 class="group-heading">${diff.summary.semanticChanges} semantic ${diff.summary.semanticChanges === 1 ? "change" : "changes"}</h2>`;
+  for (const item of diff.elements.added) html += changeCard("added", "+", item.name, kindLabel(item.kind));
+  for (const item of diff.elements.removed) html += changeCard("removed", "−", item.name, kindLabel(item.kind));
+  for (const item of diff.claims.added) html += changeCard("added", "+", label(item.sourceId), claimText(item));
+  for (const item of diff.claims.removed) html += changeCard("removed", "−", label(item.sourceId), claimText(item));
+  for (const item of diff.claims.changed) html += changeCard("changed", "~", label(item.after.sourceId), claimText(item.after));
+  el.list.innerHTML = html;
+}
+
+function changeCard(kind, symbol, name, detail) {
+  return `<article class="card change-${kind}"><div class="card-head static">` +
+    `<span class="card-title"><strong>${symbol} ${esc(name)}</strong><small>${esc(detail)}</small></span></div></article>`;
+}
+
+function renderEverything() {
+  const { byId, claimsBySource } = indexes();
   const query = el.search.value.toLowerCase().trim();
-  const elements = scanData.model.elements.filter((item) => !query || item.name.toLowerCase().includes(query) || item.evidence.some((entry) => entry.file.toLowerCase().includes(query)));
-  showSearch(`Search all ${scanData.model.elements.length} semantic elements and source paths...`);
+  const elements = scanData.model.elements.filter((item) => !query ||
+    item.name.toLowerCase().includes(query) ||
+    item.evidence.some((entry) => entry.file.toLowerCase().includes(query)));
+  showSearch(`Search all ${scanData.model.elements.length} elements and source paths...`);
   el.searchCount.textContent = query ? `${elements.length} matches` : "";
-  if (!elements.length) return renderEmpty("No semantic elements match this search");
-  el.list.innerHTML = elements.map((item) => {
-    const subsystem = subsystemById.get(item.subsystemId);
-    const meta = LENS_META[subsystem?.lens] ?? { icon: "·", label: subsystem?.name ?? "System" };
-    return `<article class="diff-card"><h3>${esc(meta.icon)} ${esc(item.name)}</h3><p>${esc(item.kind)} · ${esc(item.roles.join(", "))}</p>` +
-      `<ul>${(claimsBySource.get(item.id) ?? []).map((claim) => `<li>${claimText(claim, byId)}</li>`).join("")}</ul><small>${evidence(item)}</small></article>`;
-  }).join("");
+  if (!elements.length) return renderEmpty("Nothing matches this search");
+  el.list.innerHTML = elements.slice(0, 200).map((item) =>
+    `<article class="card"><div class="card-head static">` +
+    `<span class="card-title"><strong>${esc(item.name)}</strong><small>${esc(kindLabel(item.kind))}</small></span></div>` +
+    `<div class="card-detail open-static">` +
+    (claimsBySource.get(item.id) ?? []).map((claim) => claimRow(claim, byId)).join("") +
+    `<small class="evidence">${(item.evidence ?? []).map((entry) => `${esc(entry.file)}${entry.line ? `:${entry.line}` : ""}`).join(", ") || "no direct evidence"}</small>` +
+    `</div></article>`).join("") +
+    (elements.length > 200 ? `<p class="empty-copy">${elements.length - 200} more — narrow the search.</p>` : "");
+  bindSnippets();
+}
+
+function renderUnknowns() {
+  el.search.closest(".search-wrap").hidden = true;
+  el.list.innerHTML = `<h2 class="group-heading">What varai couldn't determine</h2>` +
+    (scanData.model.coverage.length ? scanData.model.coverage.map((item) =>
+      `<article class="card"><div class="card-head static">` +
+      `<span class="card-title"><strong>${esc(item.capability)}</strong><small>${esc(item.state)}</small></span></div>` +
+      `${item.details.length ? `<div class="card-detail open-static"><p>${esc(item.details.join("; "))}</p></div>` : ""}</article>`).join("")
+      : emptyMarkup("Nothing was declared out of reach"));
 }
 
 function bindExpanders() {
@@ -225,46 +372,6 @@ function bindExpanders() {
   }));
 }
 
-function renderCoverage() {
-  el.search.closest(".search-wrap").hidden = true;
-  el.list.innerHTML = `<div class="view-intro"><span class="eyebrow">ANALYZER REACH</span><h1>What Varai could determine</h1></div>` +
-    (scanData.model.coverage.length ? scanData.model.coverage.map((item) => `<article class="diff-card"><h3>${esc(item.capability)}</h3><p>${esc(item.state)}</p><small>${esc(item.details.join("; "))}</small></article>`).join("") : emptyMarkup("No analyzer coverage declared"));
-}
-
-function renderProgression() {
-  el.search.closest(".search-wrap").hidden = true;
-  if (diffData?.error) return renderEmpty(diffData.error);
-  const diff = diffData?.diff;
-  if (!diff) return;
-  if (!diff.summary.hasChanges) return renderEmpty("No semantic changes within declared coverage");
-  let html = `<div class="view-intro"><span class="eyebrow">SEMANTIC PROGRESSION</span><h1>${diff.summary.semanticChanges} system changes</h1></div>`;
-  for (const item of diff.elements.added) html += changeCard("added", "+", item.name, `${item.kind} · ${evidence(item)}`);
-  for (const item of diff.elements.removed) html += changeCard("removed", "−", item.name, `${item.kind} · ${evidence(item)}`);
-  for (const item of diff.claims.added) html += changeCard("added", "+", diff.labels[item.sourceId] ?? item.sourceId, claimDiffText(item, diff));
-  for (const item of diff.claims.removed) html += changeCard("removed", "−", diff.labels[item.sourceId] ?? item.sourceId, claimDiffText(item, diff));
-  for (const item of diff.claims.changed) html += changeCard("changed", "~", diff.labels[item.after.sourceId] ?? item.after.sourceId, "Claim changed");
-  el.list.innerHTML = html;
-}
-
-function claimDiffText(item, diff) {
-  const target = item.target.kind === "reference" ? diff.labels[item.target.id] ?? item.target.id : item.target.value;
-  return `${RELATIONS[item.relation] ?? item.relation} ${target}`;
-}
-
-function claimText(claim, byId) {
-  const target = claim.target.kind === "reference" ? byId.get(claim.target.id)?.name ?? claim.target.id : claim.target.value;
-  return `${esc(RELATIONS[claim.relation] ?? claim.relation)} ${esc(target)}`;
-}
-
-function evidence(item) {
-  return (item.evidence ?? []).map((entry) => `${esc(entry.file)}${entry.line ? `:${entry.line}` : ""}`).join(", ") || "no direct evidence";
-}
-
-function changeCard(kind, symbol, name, detail) {
-  return `<article class="diff-card ${kind}"><h3>${symbol} ${esc(name)}</h3><p>${esc(detail)}</p></article>`;
-}
-
-function renderMissingProjection() { renderEmpty("This scan does not include anchor projections yet"); }
 function renderEmpty(message) { el.list.innerHTML = emptyMarkup(message); }
 function emptyMarkup(message) { return `<div class="empty-state"><span class="empty-icon">◌</span><span>${esc(message)}</span></div>`; }
 
