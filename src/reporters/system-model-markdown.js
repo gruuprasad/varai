@@ -1,5 +1,5 @@
 import { browseByThing, browseByCapability } from "../system-model/projections/index.js";
-import { RELATION_LABELS, claimStateLabel } from "./display-language.js";
+import { RELATION_LABELS, claimStateLabel, kindLabel } from "./display-language.js";
 
 function evidenceLabel(evidence) {
   const values = (evidence ?? []).map((item) => {
@@ -46,46 +46,76 @@ export function renderSystemModel({ model }) {
     claimsBySource.set(claim.sourceId, list);
   }
 
-  const lines = [
-    `# ${model.system.name}`,
-    "",
-    "## System overview",
-    "",
-    `- ${thingView.roots.length} system subjects and surfaces`,
-    `- ${capabilityView.capabilities.length} behaviors`,
-    `- ${model.elements.length} total semantic elements · ${model.claims.length} claims`,
-    "",
-    "## Browse by thing",
-    "",
-  ];
+  const subjects = thingView.roots.filter((root) => root.tier === 0);
+  const screens = thingView.roots.filter((root) => root.tier === 1 && byId.get(root.elementId)?.kind === "screen");
+  const unplaced = thingView.roots.filter((root) => root.tier === 1 && byId.get(root.elementId)?.kind === "surface");
+  const detail = thingView.roots.filter((root) => root.tier === 2);
 
-  if (!thingView.roots.length) lines.push("No supported system-level subjects or surfaces were recovered.", "");
-  const renderedRoots = thingView.roots.slice(0, 24);
-  for (const root of renderedRoots) {
-    const element = byId.get(root.elementId);
-    lines.push(`### ${element.name}`, "", `_${element.kind} · ${element.roles.join(", ")}_`, "");
-    if (!root.behaviorIds.length) lines.push("- No connected behavior recovered within current coverage.");
+  function behaviorLines(root, lines, indent = "") {
+    if (!root.behaviorIds.length) lines.push(`${indent}- No connected behavior recovered within current coverage.`);
     for (const behaviorId of root.behaviorIds) {
       const behavior = byId.get(behaviorId);
       const interfaces = root.interfaceIds.map((id) => byId.get(id)).filter(Boolean)
-        .filter((item) => item.id === behavior.id || (claimsBySource.get(item.id) ?? []).some((claim) => claim.relation === "offers" && claim.target.id === behavior.id));
-      lines.push(`- **${behavior.name}**${interfaces.length ? ` — reached through ${interfaces.map((item) => item.name).join(", ")}` : ""}`);
+        .filter((item) => item.id === behavior.id ||
+          (claimsBySource.get(item.id) ?? []).some((claim) => claim.relation === "offers" && claim.target.id === behavior.id));
+      lines.push(`${indent}- **${behavior.name}**${interfaces.length ? ` — reached through ${interfaces.map((item) => item.name).join(", ")}` : ""}`);
       for (const claim of claimsBySource.get(behavior.id) ?? []) {
-        lines.push(`  - ${claimSentence(claim, behavior.name, byId)} — ${evidenceLabel(claim.evidence)}`);
+        lines.push(`${indent}  - ${claimSentence(claim, behavior.name, byId)} — ${evidenceLabel(claim.evidence)}`);
         const trace = pathLabel(claim.implementationPath);
-        if (trace) lines.push(`    - Implementation: ${trace}`);
+        if (trace) lines.push(`${indent}    - Implementation: ${trace}`);
       }
     }
-    for (const claim of claimsBySource.get(element.id) ?? []) {
-      if (claim.relation === "offers") lines.push(`- ${claimSentence(claim, element.name, byId)} — ${evidenceLabel(claim.evidence)}`);
-    }
-    lines.push(`- Evidence: ${evidenceLabel(element.evidence)}`, "");
-  }
-  if (thingView.roots.length > renderedRoots.length) {
-    lines.push(`_${thingView.roots.length - renderedRoots.length} additional Resources and surfaces remain available through structured model output and dashboard search._`, "");
   }
 
-  lines.push("## Browse by capability", "");
+  const lines = [
+    `# ${model.system.name}`,
+    "",
+    `${subjects.length} subjects · ${screens.length} screens · ${capabilityView.capabilities.length} observed behaviors`,
+    "",
+    "## Subjects",
+    "",
+  ];
+
+  if (!subjects.length) lines.push("No system subjects were recovered.", "");
+  for (const root of subjects) {
+    const element = byId.get(root.elementId);
+    lines.push(`### ${element.name}`, "", `_${kindLabel(element.kind)}_`, "");
+    behaviorLines(root, lines);
+    lines.push(`- Evidence: ${evidenceLabel(element.evidence)}`, "");
+  }
+
+  lines.push("## Screens", "");
+  if (!screens.length) lines.push("No screens were recovered.", "");
+  for (const root of screens) {
+    const element = byId.get(root.elementId);
+    lines.push(`### ${element.name}`, "");
+    for (const surfaceId of root.surfaceIds) {
+      const surface = byId.get(surfaceId);
+      lines.push(`- **${surface.name}** (${kindLabel(surface.kind)})`);
+      for (const claim of claimsBySource.get(surfaceId) ?? []) {
+        if (claim.relation !== "offers" || claim.target.kind !== "reference") continue;
+        const action = byId.get(claim.target.id);
+        if (action) lines.push(`  - offers ${action.name}`);
+      }
+    }
+    if (!root.surfaceIds.length) lines.push("- No panels were resolved into this screen.");
+    lines.push("");
+  }
+  if (unplaced.length) {
+    lines.push("### Not placed on a screen", "");
+    for (const root of unplaced) {
+      const element = byId.get(root.elementId);
+      lines.push(`- **${element.name}** (${kindLabel(element.kind)}) — render chain unresolved`);
+      behaviorLines(root, lines, "  ");
+    }
+    lines.push("");
+  }
+
+  if (detail.length) {
+    lines.push(`_${detail.length} further elements (data contracts, UI state, internal records) are available through structured model output and dashboard search._`, "");
+  }
+
+  lines.push("## Capabilities", "");
   for (const item of capabilityView.capabilities) {
     const behavior = byId.get(item.behaviorId);
     const resources = item.resourceIds.map((id) => byId.get(id)?.name).filter(Boolean);
@@ -93,13 +123,13 @@ export function renderSystemModel({ model }) {
     lines.push(`- **${behavior.name}**${resources.length ? ` — acts on ${resources.join(", ")}` : ""}${interfaces.length ? ` — via ${interfaces.join(", ")}` : ""}`);
   }
   if (!capabilityView.capabilities.length) lines.push("No supported behaviors were recovered.");
-  lines.push("", "## Analyzer coverage", "");
+  lines.push("", "## What varai couldn't determine", "");
 
-  if (!model.coverage.length) lines.push("No semantic analyzer coverage was declared.", "");
+  if (!model.coverage.length) lines.push("Nothing was declared out of reach.", "");
   else for (const item of model.coverage) {
     const scope = byId.get(item.scopeId)?.name ?? item.scopeId;
-    const detail = item.details.length ? ` — ${item.details.join("; ")}` : "";
-    lines.push(`- ${item.capability} (${scope}): **${item.state}**${detail}`);
+    const detailText = item.details.length ? ` — ${item.details.join("; ")}` : "";
+    lines.push(`- ${item.capability} (${scope}): **${item.state}**${detailText}`);
   }
 
   if (model.diagnostics.length) {
