@@ -90,7 +90,7 @@ function outcomeValue(clause) {
   return String(clause.status ?? clause.reason ?? "unknown failure");
 }
 
-export function liftSystemModel({ observations, behaviors, registry, convergence, diagnostics = [], scanContext }, options = {}) {
+export function liftSystemModel({ observations, behaviors, registry, convergence, containment = [], diagnostics = [], scanContext }, options = {}) {
   const subsystems = new Map();
   const elements = [];
   const claims = [];
@@ -285,6 +285,25 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
       source: behaviorSource, relation: "fails_with", target: literal("outcome", outcomeValue(clause)), slot: `failure:${clause.status ?? clause.reason}`,
       qualifiers: clause.status == null ? {} : { http_status: String(clause.status) }, evidence: [clause.evidence].flat(), implementationPath: clause.implementationPath,
       observationMethod: methodFor(clause), claimState: stateFor(clause), capability: "api.failure",
+    });
+  }
+
+  const surfaceKeys = new Set(behaviors
+    .filter((item) => item.door?.kind === "ui_action")
+    .map((item) => String(item.door.component)));
+  const screenKeys = new Set(observations
+    .filter((item) => item.kind === "page")
+    .map((item) => String(item.name)));
+  for (const entry of containment) {
+    if (!surfaceKeys.has(entry.surfaceKey) || !screenKeys.has(entry.screen)) continue;
+    addClaim({
+      source: source("ui", "screen", entry.screen),
+      relation: "contains",
+      target: reference("ui", "surface", entry.surfaceKey),
+      slot: `contains:surface:${entry.surfaceKey}`,
+      evidence: entry.evidence,
+      capability: "ui.containment",
+      observationMethod: "ast",
     });
   }
 

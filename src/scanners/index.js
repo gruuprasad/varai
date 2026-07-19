@@ -11,6 +11,7 @@ import { createObservationCache } from "./cache.js";
 import { selectBackend } from "./treesitter.js";
 import { traceBehaviors } from "./behaviors/index.js";
 import { traceFrontendInteractions } from "./frontend/interactions.js";
+import { traceScreenContainment } from "./frontend/render-graph.js";
 import { createResolver } from "./behaviors/resolver.js";
 import { createImplementationGraph } from "./lift/implementation-graph.js";
 import { createDeclarationRegistry } from "./lift/declarations.js";
@@ -176,6 +177,21 @@ export async function scanRepo(repoPath, options = {}) {
       });
     }
   }
+  let screenContainment = [];
+  if (stacks.has("react-vite")) {
+    try {
+      const surfaces = frontendBehaviors
+        .filter((behavior) => behavior.door?.kind === "ui_action")
+        .map((behavior) => ({ component: String(behavior.door.component), file: behavior.door.source }));
+      screenContainment = await traceScreenContainment(
+        files, ctx, observations.filter((item) => item.kind === "page"), surfaces);
+    } catch (err) {
+      diagnostics.push({
+        code: "screen-containment-failed", severity: "warning", message: err.message,
+        claimState: "unverified", capability: "ui.containment",
+      });
+    }
+  }
 
   // "base" is an internal always-on stack; don't surface it to the report.
   const displayStacks = [...stacks].filter((s) => s !== "base");
@@ -227,6 +243,7 @@ export async function scanRepo(repoPath, options = {}) {
     behaviors: bindings.behaviors,
     registry,
     convergence: bindings.convergence,
+    containment: screenContainment,
     diagnostics,
     scanContext,
   }, { repoPath, systemName: options.systemName });
