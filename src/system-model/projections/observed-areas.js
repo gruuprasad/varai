@@ -11,6 +11,8 @@ export function observedAreas(model) {
   const regionView = semanticRegionCandidates(model);
   const envelopeView = behavioralEnvelopes(model);
   const pathView = systemPaths(model);
+  const claims = new Map(model.claims.map((item) => [item.id, item]));
+  const elements = new Map(model.elements.map((item) => [item.id, item]));
   const envelopes = new Map(envelopeView.envelopes.map((item) => [item.id, item]));
   const pathsByEntry = new Map();
   for (const path of pathView.paths) {
@@ -21,10 +23,15 @@ export function observedAreas(model) {
 
   const interaction = regionView.regions.filter((item) => item.basis === "interaction-context");
   const cores = regionView.regions.filter((item) => item.basis === "shared-resource-core");
-  const containsSources = new Set(regionView.relationships
-    .filter((item) => item.relation === "contains")
-    .map((item) => item.sourceRegionId));
-  const leafParents = interaction.filter((item) => !containsSources.has(item.id));
+  const interactionById = new Map(interaction.map((item) => [item.id, item]));
+  const childEnvelopeIdsByParent = new Map();
+  for (const relationship of regionView.relationships) {
+    if (relationship.relation !== "contains") continue;
+    if (!interactionById.has(relationship.sourceRegionId) || !interactionById.has(relationship.targetRegionId)) continue;
+    const values = childEnvelopeIdsByParent.get(relationship.sourceRegionId) ?? new Set();
+    for (const envelopeId of interactionById.get(relationship.targetRegionId).envelopeIds) values.add(envelopeId);
+    childEnvelopeIdsByParent.set(relationship.sourceRegionId, values);
+  }
 
   const usesByParent = new Map();
   for (const relationship of regionView.relationships) {
@@ -35,27 +42,35 @@ export function observedAreas(model) {
     usesByParent.set(relationship.sourceRegionId, values);
   }
 
-  const areas = leafParents.map((region) => {
-    const operations = region.envelopeIds
+  const areas = interaction.flatMap((region) => {
+    const inheritedEnvelopeIds = childEnvelopeIdsByParent.get(region.id) ?? new Set();
+    const presentedEnvelopeIds = region.envelopeIds.filter((id) => !inheritedEnvelopeIds.has(id));
+    if (!presentedEnvelopeIds.length) return [];
+    const operations = presentedEnvelopeIds
       .map((envelopeId) => envelopes.get(envelopeId))
       .filter(Boolean)
-      .map((envelope) => operationRecord(envelope, pathsByEntry))
+      .map((envelope) => operationRecord(envelope, pathsByEntry, claims, elements))
       .sort(compareOperation);
+    if (!operations.length) return [];
     const sharedCoreIds = uniqueSorted(usesByParent.get(region.id) ?? []);
-    return {
+    const operationBehaviorIds = uniqueSorted(operations.flatMap((item) => item.behaviorIds));
+    const operationClaimIds = uniqueSorted(operations.flatMap((item) => item.claimIds));
+    const primaryOperationCount = operations.filter((item) => item.prominence === "primary").length;
+    return [{
       id: region.id,
       regionId: region.id,
       basis: region.basis,
       anchorElementId: region.anchorElementIds[0],
-      envelopeIds: region.envelopeIds,
-      behaviorIds: region.behaviorIds,
+      envelopeIds: presentedEnvelopeIds,
+      behaviorIds: operationBehaviorIds,
       operations,
       operationCount: operations.length,
+      primaryOperationCount,
       sharedCoreIds,
-      completeness: region.completeness,
+      completeness: operations.every((item) => item.completeness === "closed") ? "supported" : "partial",
       reasonCodes: region.reasonCodes,
-      claimIds: region.claimIds,
-    };
+      claimIds: operationClaimIds,
+    }];
   }).sort(compareArea);
 
   const areaIds = new Set(areas.map((item) => item.id));
@@ -96,7 +111,7 @@ export function observedAreas(model) {
   };
 }
 
-function operationRecord(envelope, pathsByEntry) {
+function operationRecord(envelope, pathsByEntry, claims, elements) {
   const claimIds = uniqueSorted([
     ...(envelope.triggerClaimIds ?? []),
     ...(envelope.conditionClaimIds ?? []),
@@ -122,19 +137,38 @@ function operationRecord(envelope, pathsByEntry) {
     unresolvedClaimIds: envelope.unresolvedClaimIds ?? [],
     pathIds: uniqueSorted(pathsByEntry.get(envelope.entryBehaviorId) ?? []),
     claimIds,
+    prominence: hasPrimarySemanticReach(envelope, claims, elements) ? "primary" : "supporting",
     completeness: envelope.completeness,
     completenessReasons: envelope.completenessReasons ?? [],
   };
 }
 
 function compareArea(left, right) {
-  return right.operationCount - left.operationCount || left.id.localeCompare(right.id);
+  return right.primaryOperationCount - left.primaryOperationCount ||
+    right.operationCount - left.operationCount || left.id.localeCompare(right.id);
 }
 
 function compareOperation(left, right) {
-  return left.id.localeCompare(right.id);
+  return prominenceRank(left.prominence) - prominenceRank(right.prominence) || left.id.localeCompare(right.id);
 }
 
 function uniqueSorted(values) {
   return [...new Set(values)].sort();
+}
+
+function hasPrimarySemanticReach(envelope, claims, elements) {
+  const hasDomainMutation = (envelope.primaryEffectClaimIds ?? []).some((id) => {
+    const claim = claims.get(id);
+    if (claim?.target.kind !== "reference") return false;
+    return ["aggregate", "entity", "artifact"].includes(elements.get(claim.target.id)?.kind);
+  });
+  if (hasDomainMutation) return true;
+  return (envelope.outputClaimIds ?? []).some((id) => {
+    const claim = claims.get(id);
+    return claim?.target.kind === "reference" && elements.get(claim.target.id)?.kind === "artifact";
+  });
+}
+
+function prominenceRank(value) {
+  return value === "primary" ? 0 : 1;
 }

@@ -4,10 +4,13 @@ import {
   areaIsChanged,
   areaMatchesQuery,
   areaPreviewClaims,
+  areaRoleLine,
+  areaSummarySentences,
   collectChangedClaimIds,
   coreIsChanged,
   formatClaimSummary,
   operationIsChanged,
+  operationPreviewSummary,
   renderObservedAreasOutline,
   sharedCoreLabel,
   ungroupedMatchesQuery,
@@ -59,6 +62,7 @@ const projection = {
     claimIds: ["claim:change"],
     sharedCoreIds: ["region:shared-resource-core:model"],
     operationCount: 1,
+    primaryOperationCount: 1,
     completeness: "supported",
     operations: [{
       id: "envelope:wall",
@@ -73,6 +77,8 @@ const projection = {
       unresolvedClaimIds: [],
       claimIds: ["claim:change"],
       completeness: "closed",
+      prominence: "primary",
+      pathIds: ["path:wall"],
     }],
   }, {
     id: "region:interaction-context:el:surface-b",
@@ -82,6 +88,7 @@ const projection = {
     claimIds: ["claim:produce", "claim:fail"],
     sharedCoreIds: [],
     operationCount: 1,
+    primaryOperationCount: 1,
     completeness: "partial",
     operations: [{
       id: "envelope:qty",
@@ -96,6 +103,8 @@ const projection = {
       unresolvedClaimIds: [],
       claimIds: ["claim:produce", "claim:fail"],
       completeness: "partial",
+      prominence: "primary",
+      pathIds: [],
     }],
   }],
   sharedCores: [{
@@ -128,6 +137,10 @@ const stateMark = () => "";
 const changeBadge = () => `<span class="change-badge">changed</span>`;
 const pathStatus = (value) => value ? `<span class="path-status">${value}</span>` : "";
 const claimRow = (claim) => `<div class="claim">${formatClaimSummary(claim, byId, relationLabel)}</div>`;
+const pathsById = new Map([["path:wall", {
+  id: "path:wall",
+  steps: [{ behaviorId: "el:action-wall", viaClaimId: null }],
+}]]);
 
 test("shared core labels stay recovered names and compact without invention", () => {
   assert.equal(
@@ -141,6 +154,38 @@ test("shared core labels stay recovered names and compact without invention", ()
   );
   assert.equal(many, "Building Model + Quantity Summary + 2 more");
   assert.equal(many.toLowerCase().includes("authoring"), false);
+});
+
+test("role line uses kind label, primary counts, and completeness", () => {
+  assert.equal(areaRoleLine(projection.areas[0], byId, kindLabel), "surface · 1 primary operation");
+  assert.equal(areaRoleLine(projection.areas[1], byId, kindLabel), "surface · 1 primary operation · partial");
+});
+
+test("summary sentences dedupe relation+target and lead with Mainly", () => {
+  assert.deepEqual(
+    areaSummarySentences(projection.areas[0], claimsById, byId, relationLabel),
+    ["Mainly changes Building Model."],
+  );
+  assert.deepEqual(
+    areaSummarySentences(projection.areas[1], claimsById, byId, relationLabel),
+    ["Mainly produces Quantity Summary."],
+  );
+  const dupOp = {
+    ...projection.areas[0].operations[0],
+    primaryEffectClaimIds: ["claim:change", "claim:change"],
+  };
+  const dupArea = { ...projection.areas[0], operations: [dupOp, dupOp] };
+  assert.deepEqual(
+    areaSummarySentences(dupArea, claimsById, byId, relationLabel),
+    ["Mainly changes Building Model."],
+  );
+});
+
+test("operation preview summary uses one deduped primary claim", () => {
+  assert.equal(
+    operationPreviewSummary(projection.areas[0].operations[0], claimsById, byId, relationLabel),
+    "changes Building Model",
+  );
 });
 
 test("preview claims prefer primary effects, outputs, and outcomes", () => {
@@ -178,6 +223,7 @@ test("outline renders populated, partial, ungrouped, empty, and changed-only sta
     projection,
     byId,
     envelopesById,
+    pathsById,
     claimsById,
     query: "",
     changesOnly: false,
@@ -195,18 +241,24 @@ test("outline renders populated, partial, ungrouped, empty, and changed-only sta
   assert.match(populated.html, /Observed areas/);
   assert.match(populated.html, /Plan Canvas/);
   assert.match(populated.html, /Quantities/);
+  assert.match(populated.html, /area-role/);
+  assert.match(populated.html, /Mainly changes Building Model/);
+  assert.match(populated.html, /Mainly produces Quantity Summary/);
   assert.match(populated.html, /partial/);
   assert.match(populated.html, /Shared system parts/);
   assert.match(populated.html, /Building Model/);
+  assert.match(populated.html, /Uses shared parts/);
   assert.match(populated.html, /Not placed in an observed area/);
   assert.match(populated.html, /Orphan export/);
   assert.match(populated.html, /changed/);
+  assert.equal(populated.html.includes("changes Building Model · changes Building Model"), false);
   assert.equal(populated.changedAreaCount, 1);
 
   const changedOnly = renderObservedAreasOutline({
     projection,
     byId,
     envelopesById,
+    pathsById,
     claimsById,
     query: "",
     changesOnly: true,
@@ -229,6 +281,7 @@ test("outline renders populated, partial, ungrouped, empty, and changed-only sta
     projection: { ...projection, areas: [], sharedCores: [], ungrouped: [] },
     byId,
     envelopesById,
+    pathsById,
     claimsById,
     query: "",
     changesOnly: false,
@@ -249,6 +302,7 @@ test("outline renders populated, partial, ungrouped, empty, and changed-only sta
     projection,
     byId,
     envelopesById,
+    pathsById,
     claimsById,
     query: "",
     changesOnly: false,
@@ -265,4 +319,55 @@ test("outline renders populated, partial, ungrouped, empty, and changed-only sta
   });
   assert.match(expanded.html, /Uses shared system parts/);
   assert.match(expanded.html, /changes Building Model/);
+  assert.match(expanded.html, /Observed path/);
+  assert.match(expanded.html, /Add wall/);
+  assert.match(expanded.html, /<section class="envelope-section"><h3>Changes<\/h3>/);
+
+  const withSupporting = {
+    ...projection,
+    areas: [{
+      ...projection.areas[0],
+      operations: [
+        projection.areas[0].operations[0],
+        {
+          ...projection.areas[0].operations[0],
+          id: "envelope:support",
+          envelopeId: "envelope:support",
+          prominence: "supporting",
+          primaryEffectClaimIds: [],
+          supportingEffectClaimIds: ["claim:change"],
+          claimIds: ["claim:change"],
+        },
+      ],
+    }],
+  };
+  envelopesById.set("envelope:support", {
+    id: "envelope:support", name: "Support read", entryBehaviorId: "el:action-wall",
+    behaviorIds: ["el:action-wall"], completeness: "partial",
+    primaryEffectClaimIds: [], outputClaimIds: [], outcomeClaimIds: [],
+  });
+  const supporting = renderObservedAreasOutline({
+    projection: withSupporting,
+    byId,
+    envelopesById,
+    pathsById,
+    claimsById,
+    query: "",
+    changesOnly: false,
+    changedElements: new Set(),
+    changedClaims: new Set(),
+    expandedId: withSupporting.areas[0].id,
+    relationLabel,
+    kindLabel,
+    stateMark,
+    changeBadge,
+    pathStatus,
+    claimRow,
+    esc,
+  });
+  assert.match(supporting.html, /<details class="supporting-observations"/);
+  assert.match(supporting.html, /Support read/);
+  const changesAt = supporting.html.indexOf("<h3>Changes</h3>");
+  const usesAt = supporting.html.indexOf("<h3>Uses</h3>");
+  assert.equal(changesAt >= 0 && usesAt > changesAt, true);
 });

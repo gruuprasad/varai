@@ -117,9 +117,10 @@ function renderTopbar() {
   const areas = scanData.projections?.observedAreas?.areas ?? [];
   const cores = scanData.projections?.observedAreas?.sharedCores ?? [];
   const operations = areas.reduce((sum, area) => sum + area.operationCount, 0);
+  const primaryOperations = areas.reduce((sum, area) => sum + (area.primaryOperationCount ?? area.operationCount), 0);
   el.topbarStats.innerHTML =
     `<span>${areas.length} observed areas</span>` +
-    `<span>${operations} operations</span>` +
+    `<span>${primaryOperations} primary · ${operations} observed operations</span>` +
     `<span>${cores.length} shared parts</span>`;
 }
 
@@ -181,6 +182,7 @@ function renderObservedAreas() {
   if (!projection) return renderEmpty("This scan does not include observed areas yet");
   const { byId } = indexes();
   const envelopesById = new Map((scanData.projections?.envelopes?.envelopes ?? []).map((item) => [item.id, item]));
+  const pathsById = new Map((scanData.projections?.paths?.paths ?? []).map((item) => [item.id, item]));
   const claimsById = new Map(scanData.model.claims.map((item) => [item.id, item]));
   const changedElements = changedIds();
   const changedClaims = collectChangedClaimIds(diffData?.diff);
@@ -191,6 +193,7 @@ function renderObservedAreas() {
     projection,
     byId,
     envelopesById,
+    pathsById,
     claimsById,
     query,
     changesOnly,
