@@ -106,3 +106,172 @@ test("traces an API wrapper invoked inside a nested mutation callback", async ()
     { method: "PUT", path: "*/structural-types/*" },
   ]);
 });
+
+test("recovers form submission as a UI action and traces its API invocation", async () => {
+  const behaviors = await traceFiles({
+    "src/components/CreateProjectModal.tsx": `import { createProject } from "../api/projects";
+      export default function CreateProjectModal() {
+        async function handleSubmit(event) { event.preventDefault(); await createProject(); }
+        return <form onSubmit={handleSubmit}><button type="submit">Create project</button></form>;
+      }`,
+    "src/api/projects.ts": `export async function createProject() {
+      return apiFetch("/api/projects", { method: "POST" });
+    }`,
+  });
+
+  assert.equal(behaviors.length, 1);
+  assert.equal(behaviors[0].door.event, "submit");
+  assert.equal(behaviors[0].door.action, "handleSubmit");
+  assert.deepEqual(behaviors[0].invokes.map(({ method, path: routePath }) => ({ method, path: routePath })), [
+    { method: "POST", path: "/api/projects" },
+  ]);
+});
+
+test("does not invent a separate action for a submit button without an onClick handler", async () => {
+  const behaviors = await trace(`export default function Form() {
+    function handleSubmit(event) { event.preventDefault(); }
+    return <form onSubmit={handleSubmit}><button type="submit">Save</button></form>;
+  }`);
+
+  assert.equal(behaviors.length, 1);
+  assert.equal(behaviors[0].door.event, "submit");
+});
+
+test("does not mistake an object getter for an HTTP GET", async () => {
+  const behaviors = await trace(`export default function Panel() {
+    async function retry() { response.headers.get("content-type"); }
+    return <button onClick={retry}>Retry</button>;
+  }`);
+
+  assert.deepEqual(behaviors[0].invokes, []);
+});
+
+test("traces a click into a handler stored in useCallback", async () => {
+  const behaviors = await trace(`export default function Panel() {
+    const refresh = useCallback(async () => apiRequest("/api/items", { method: "GET" }), []);
+    return <button onClick={refresh}>Refresh</button>;
+  }`);
+
+  assert.deepEqual(behaviors[0].invokes.map(({ method, path: routePath }) => ({ method, path: routePath })), [
+    { method: "GET", path: "/api/items" },
+  ]);
+});
+
+test("recovers a lifecycle load through useEffect and useCallback", async () => {
+  const behaviors = await trace(`export default function Inventory() {
+    const loadItems = useCallback(async () => apiRequest("/api/items", { method: "GET" }), []);
+    useEffect(() => { void loadItems(); }, [loadItems]);
+    return <div>Inventory</div>;
+  }`);
+
+  assert.equal(behaviors.length, 1);
+  assert.equal(behaviors[0].door.event, "lifecycle");
+  assert.equal(behaviors[0].door.action, "loadItems");
+  assert.deepEqual(behaviors[0].invokes.map(({ method, path: routePath }) => ({ method, path: routePath })), [
+    { method: "GET", path: "/api/items" },
+  ]);
+});
+
+test("traces a callback prop into a uniquely wired parent callback", async () => {
+  const behaviors = await traceFiles({
+    "src/components/DownloadButton.tsx": `export function DownloadButton({ onDownload }) {
+      return <button onClick={() => onDownload()}>Download</button>;
+    }`,
+    "src/components/Workspace.tsx": `import { DownloadButton } from "./DownloadButton";
+      export function Workspace() {
+        return <DownloadButton onDownload={() => apiRequest("/api/export", { method: "POST" })} />;
+      }`,
+  });
+  const download = behaviors.find((item) => item.door.component === "DownloadButton");
+
+  assert.deepEqual(download.invokes.map(({ method, path: routePath }) => ({ method, path: routePath })), [
+    { method: "POST", path: "/api/export" },
+  ]);
+});
+
+test("traces a callback prop through a uniquely resolved custom-hook member", async () => {
+  const behaviors = await traceFiles({
+    "src/components/DownloadButton.tsx": `export function DownloadButton({ onDownload }) {
+      return <button onClick={() => onDownload()}>Download</button>;
+    }`,
+    "src/components/Workspace.tsx": `import { DownloadButton } from "./DownloadButton";
+      export function Workspace() {
+        const exporter = useExporter();
+        return <DownloadButton onDownload={() => exporter.download()} />;
+      }`,
+    "src/hooks/useExporter.ts": `export function useExporter() {
+      const download = async () => apiRequest("/api/export", { method: "POST" });
+      return { download };
+    }`,
+  });
+  const download = behaviors.find((item) => item.door.component === "DownloadButton");
+
+  assert.deepEqual(download.invokes.map(({ method, path: routePath }) => ({ method, path: routePath })), [
+    { method: "POST", path: "/api/export" },
+  ]);
+});
+
+test("propagates a literal callback argument through a selected branch", async () => {
+  const behaviors = await traceFiles({
+    "src/components/DownloadButton.tsx": `export function DownloadButton({ onDownload }) {
+      return <button onClick={() => onDownload("dxf")}>Download DXF</button>;
+    }`,
+    "src/components/Workspace.tsx": `import { DownloadButton } from "./DownloadButton";
+      export function Workspace() {
+        return <DownloadButton onDownload={(format) => format === "pdf"
+          ? apiRequest("/api/export.pdf", { method: "GET" })
+          : apiRequest(\`/api/export.${"${format}"}\`, { method: "GET" })} />;
+      }`,
+  });
+  const download = behaviors.find((item) => item.door.component === "DownloadButton");
+
+  assert.deepEqual(download.invokes.map(({ method, path: routePath }) => ({ method, path: routePath })), [
+    { method: "GET", path: "/api/export.dxf" },
+  ]);
+});
+
+test("keeps all statically reachable branches when a callback argument is unknown", async () => {
+  const behaviors = await traceFiles({
+    "src/components/DownloadButton.tsx": `export function DownloadButton({ onDownload, format }) {
+      return <button onClick={() => onDownload(format)}>Download</button>;
+    }`,
+    "src/components/Workspace.tsx": `import { DownloadButton } from "./DownloadButton";
+      export function Workspace() {
+        return <DownloadButton onDownload={(format) => format === "pdf"
+          ? apiRequest("/api/export.pdf", { method: "GET" })
+          : apiRequest("/api/export.cad", { method: "GET" })} />;
+      }`,
+  });
+  const download = behaviors.find((item) => item.door.component === "DownloadButton");
+
+  assert.deepEqual(download.invokes.map(({ path: routePath }) => routePath).sort(), ["/api/export.cad", "/api/export.pdf"]);
+});
+
+test("continues through a uniquely typed ref-backed hook API", async () => {
+  const behaviors = await traceFiles({
+    "src/components/Canvas.tsx": `export function Canvas({ onCanvasClick }) {
+      return <button onClick={() => onCanvasClick()}>Draw wall</button>;
+    }`,
+    "src/components/Workspace.tsx": `import { Canvas } from "./Canvas";
+      type WallToolApi = ReturnType<typeof useWallTool>;
+      function useWallTool() {
+        const commit = async () => apiRequest("/api/walls", { method: "POST" });
+        const handleCanvasClick = async () => commit();
+        return { handleCanvasClick };
+      }
+      function usePlanInteraction() {
+        const wallToolRef = useRef<WallToolApi | null>(null);
+        const handleCanvasClick = async () => wallToolRef.current?.handleCanvasClick();
+        return { handleCanvasClick };
+      }
+      export function Workspace() {
+        const interaction = usePlanInteraction();
+        return <Canvas onCanvasClick={() => interaction.handleCanvasClick()} />;
+      }`,
+  });
+  const draw = behaviors.find((item) => item.door.component === "Canvas");
+
+  assert.deepEqual(draw.invokes.map(({ method, path: routePath }) => ({ method, path: routePath })), [
+    { method: "POST", path: "/api/walls" },
+  ]);
+});

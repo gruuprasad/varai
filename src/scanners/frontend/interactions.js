@@ -14,21 +14,44 @@ export async function traceFrontendInteractions(files, ctx) {
     trees.set(file, tree);
     indexFunctions(tree.rootNode, file, functions);
   }
+  const callbackProps = indexCallbackProps(trees);
+  const hookBindings = indexHookBindings(trees);
+  const refHookBindings = indexRefHookBindings(trees);
 
   const grouped = new Map();
   for (const [file, tree] of trees) {
     if (!isComponentScope(file)) continue;
     for (const component of exportedComponents(tree.rootNode)) {
       walk(component.node, (node) => {
+        if (!isLifecycleEffect(node)) return;
+        const callback = callbackFunction(node.childForFieldName("arguments")?.namedChildren?.[0]);
+        if (!callback) return;
+        const rootEvidence = { file, line: node.startPosition.row + 1 };
+        const invocations = apiInvocations(callback, file, rootEvidence, functions, callbackProps, hookBindings, refHookBindings, component.name);
+        if (!invocations.length) return;
+        const action = firstCalledIdentifier(callback) ?? "Load";
+        const key = JSON.stringify([file, component.name, "lifecycle", action]);
+        grouped.set(key, {
+          door: {
+            kind: "ui_action", source: file, component: component.name,
+            event: "lifecycle", action, evidence: [rootEvidence],
+          },
+          bundle: null, requires: [], takes: [], gives: [], reads: [], writes: [],
+          fails: [], untraced: [], guards: [], invokes: invocations, helperCalls: [], trunkCall: null,
+        });
+      });
+      walk(component.node, (node) => {
         if (node.type !== "jsx_opening_element" && node.type !== "jsx_self_closing_element") return;
         const attributes = jsxAttributes(node);
-        const event = eventHandler(attributes.get("onClick"), node);
+        const binding = interactionBinding(node, attributes);
+        if (!binding) return;
+        const event = eventHandler(binding.expression, node);
         if (!event) return;
-        const key = JSON.stringify([file, component.name, "click", event.action]);
+        const key = JSON.stringify([file, component.name, binding.event, event.action]);
         let behavior = grouped.get(key);
         if (!behavior) {
           behavior = {
-            door: { kind: "ui_action", source: file, component: component.name, event: "click", action: event.action, evidence: [] },
+            door: { kind: "ui_action", source: file, component: component.name, event: binding.event, action: event.action, evidence: [] },
             bundle: null, requires: [], takes: [], gives: [], reads: [], writes: [],
             fails: [], untraced: [], guards: [], invokes: [], helperCalls: [], trunkCall: null,
           };
@@ -53,13 +76,28 @@ export async function traceFrontendInteractions(files, ctx) {
           guard.evidence.push({ file, line: condition.line });
         }
         const handler = event.node ?? localHandler(component.node, event.action);
-        for (const invocation of handler ? apiInvocations(handler, file, rootEvidence, functions) : []) {
+        for (const invocation of handler
+          ? apiInvocations(handler, file, rootEvidence, functions, callbackProps, hookBindings, refHookBindings, component.name)
+          : []) {
           if (!behavior.invokes.some((item) => item.method === invocation.method && item.path === invocation.path)) behavior.invokes.push(invocation);
         }
       });
     }
   }
   return [...grouped.values()];
+}
+
+function interactionBinding(node, attributes) {
+  if (attributes.get("onClick")) return { event: "click", expression: attributes.get("onClick") };
+  if (jsxTagName(node) === "form" && attributes.get("onSubmit")) {
+    return { event: "submit", expression: attributes.get("onSubmit") };
+  }
+  return null;
+}
+
+function jsxTagName(node) {
+  return (node.namedChildren ?? []).find((item) =>
+    item.type === "identifier" || item.type === "member_expression")?.text ?? "";
 }
 
 function indexFunctions(root, file, index) {
@@ -69,14 +107,111 @@ function indexFunctions(root, file, index) {
     if (node.type === "function_declaration") name = node.childForFieldName("name")?.text;
     if (node.type === "variable_declarator") {
       name = node.childForFieldName("name")?.text;
-      value = node.childForFieldName("value");
-      if (!["arrow_function", "function_expression"].includes(value?.type)) name = null;
+      value = callbackFunction(node.childForFieldName("value"));
+      if (!value) name = null;
     }
     if (!name) return;
     const entries = index.get(name) ?? [];
-    entries.push({ name, file, node: value });
+    entries.push({ name, file, node: value, owner: enclosingFunctionName(node) });
     index.set(name, entries);
   });
+}
+
+function indexCallbackProps(trees) {
+  const result = new Map();
+  for (const [file, tree] of trees) {
+    walk(tree.rootNode, (node) => {
+      if (node.type !== "jsx_opening_element" && node.type !== "jsx_self_closing_element") return;
+      const component = jsxTagName(node);
+      if (!/^[A-Z]/.test(component)) return;
+      for (const [name, expression] of jsxAttributes(node)) {
+        if (!/^on[A-Z]/.test(name)) continue;
+        const value = expressionValue(expression);
+        if (!value) continue;
+        const key = `${component}:${name}`;
+        const entries = result.get(key) ?? [];
+        entries.push({ file, node: value });
+        result.set(key, entries);
+      }
+    });
+  }
+  return result;
+}
+
+function indexHookBindings(trees) {
+  const result = new Map();
+  for (const [file, tree] of trees) {
+    walk(tree.rootNode, (node) => {
+      if (node.type !== "variable_declarator") return;
+      const name = node.childForFieldName("name")?.text;
+      const value = node.childForFieldName("value");
+      if (!name || value?.type !== "call_expression") return;
+      const hook = value.childForFieldName("function")?.text;
+      if (!/^use[A-Z]/.test(hook ?? "")) return;
+      const key = `${file}:${name}`;
+      const values = result.get(key) ?? new Set();
+      values.add(hook);
+      result.set(key, values);
+    });
+  }
+  return result;
+}
+
+function indexRefHookBindings(trees) {
+  const aliases = new Map();
+  for (const [, tree] of trees) {
+    walk(tree.rootNode, (node) => {
+      if (node.type !== "type_alias_declaration") return;
+      const match = node.text.match(/\btype\s+([A-Za-z_$][\w$]*)\s*=\s*ReturnType\s*<\s*typeof\s+(use[A-Z][\w$]*)\s*>/);
+      if (!match) return;
+      const hooks = aliases.get(match[1]) ?? new Set();
+      hooks.add(match[2]);
+      aliases.set(match[1], hooks);
+    });
+  }
+  const result = new Map();
+  for (const [file, tree] of trees) {
+    walk(tree.rootNode, (node) => {
+      if (node.type !== "variable_declarator") return;
+      const name = node.childForFieldName("name")?.text;
+      const value = node.childForFieldName("value");
+      if (!name || value?.type !== "call_expression" || value.childForFieldName("function")?.text !== "useRef") return;
+      const typeName = value.text.match(/^useRef\s*<\s*([A-Za-z_$][\w$]*)/)?.[1];
+      const hooks = aliases.get(typeName);
+      if (hooks?.size === 1) result.set(`${file}:${name}`, new Set(hooks));
+    });
+  }
+  return result;
+}
+
+function enclosingFunctionName(node) {
+  let current = node.parent;
+  while (current) {
+    if (current.type === "function_declaration") return current.childForFieldName("name")?.text ?? null;
+    if (current.type === "variable_declarator") {
+      const value = callbackFunction(current.childForFieldName("value"));
+      if (value && containsNode(value, node)) return current.childForFieldName("name")?.text ?? null;
+    }
+    current = current.parent;
+  }
+  return null;
+}
+
+function containsNode(boundary, node) {
+  return boundary.startIndex <= node.startIndex && boundary.endIndex >= node.endIndex;
+}
+
+function callbackFunction(value) {
+  if (["arrow_function", "function_expression"].includes(value?.type)) return value;
+  if (value?.type !== "call_expression") return null;
+  const name = value.childForFieldName("function")?.text;
+  if (name !== "useCallback") return null;
+  const candidate = value.childForFieldName("arguments")?.namedChildren?.[0];
+  return ["arrow_function", "function_expression"].includes(candidate?.type) ? candidate : null;
+}
+
+function isLifecycleEffect(node) {
+  return node.type === "call_expression" && node.childForFieldName("function")?.text === "useEffect";
 }
 
 function eventHandler(expression, openingNode) {
@@ -185,64 +320,175 @@ function localHandler(componentNode, name) {
     if (found) return;
     if (node.type === "function_declaration" && node.childForFieldName("name")?.text === name) found = node;
     if (node.type === "variable_declarator" && node.childForFieldName("name")?.text === name) {
-      const value = node.childForFieldName("value");
-      if (["arrow_function", "function_expression"].includes(value?.type)) found = value;
+      const value = callbackFunction(node.childForFieldName("value"));
+      if (value) found = value;
     }
   });
   return found;
 }
 
-function apiInvocations(handler, file, rootEvidence, functions) {
+function apiInvocations(handler, file, rootEvidence, functions, callbackProps, hookBindings, refHookBindings, componentName) {
   const result = [];
   const visited = new Set();
-  function trace(node, currentFile, implementationPath, depth) {
+  function trace(node, currentFile, implementationPath, depth, bindings = new Map()) {
     if (depth > MAX_CALL_DEPTH) return;
-    walkCalls(node, (call) => {
+    walkReachableCalls(node, bindings, (call) => {
       const fn = call.childForFieldName("function");
       const args = call.childForFieldName("arguments")?.namedChildren ?? [];
       if (!fn) return;
       const evidence = { file: currentFile, line: call.startPosition.row + 1 };
-      const transport = transportInvocation(fn, args);
+      const transport = transportInvocation(fn, args, bindings);
       if (transport) {
         result.push({ ...transport, evidence, implementationPath: [...implementationPath, evidence], layer: "ast" });
         return;
       }
-      if (fn.type !== "identifier") return;
-      const candidates = functions.get(fn.text) ?? [];
+      let candidates = [];
+      if (fn.type === "identifier") {
+        candidates = functions.get(fn.text) ?? [];
+        if (candidates.length !== 1 && /^on[A-Z]/.test(fn.text)) {
+          const propBindings = callbackProps.get(`${componentName}:${fn.text}`) ?? [];
+          if (propBindings.length === 1) {
+            const binding = propBindings[0];
+            trace(binding.node, binding.file, [...implementationPath, evidence], depth + 1, bindArguments(binding.node, args, bindings));
+          }
+          return;
+        }
+      } else if (fn.type === "member_expression") {
+        const property = fn.childForFieldName("property")?.text;
+        const hook = hookOwner(fn.childForFieldName("object"), currentFile, hookBindings)
+          ?? refHookOwner(fn.childForFieldName("object"), currentFile, refHookBindings);
+        if (property && hook) candidates = (functions.get(property) ?? []).filter((item) => item.owner === hook);
+      } else return;
       if (candidates.length !== 1) return;
       const target = candidates[0];
-      const key = `${target.file}:${target.name}`;
+      const nextBindings = bindArguments(target.node, args, bindings);
+      const key = `${target.file}:${target.owner ?? ""}:${target.name}:${bindingKey(nextBindings)}`;
       if (visited.has(key)) return;
       visited.add(key);
-      trace(target.node, target.file, [...implementationPath, evidence], depth + 1);
+      trace(target.node, target.file, [...implementationPath, evidence], depth + 1, nextBindings);
     });
   }
   trace(handler, file, [rootEvidence], 0);
   return result;
 }
 
-function transportInvocation(fn, args) {
+function callbackParameters(node) {
+  const parameters = node?.childForFieldName("parameters")?.namedChildren;
+  if (parameters) return parameters;
+  const parameter = node?.childForFieldName("parameter");
+  return parameter ? [parameter] : [];
+}
+
+function bindArguments(node, args, callerBindings) {
+  const result = new Map();
+  const parameters = callbackParameters(node);
+  for (let index = 0; index < parameters.length; index += 1) {
+    const name = parameterName(parameters[index]);
+    if (!name) continue;
+    const value = staticValue(args[index], callerBindings) ?? defaultParameterValue(parameters[index], callerBindings);
+    if (value !== undefined) result.set(name, value);
+  }
+  return result;
+}
+
+function parameterName(node) {
+  if (node?.type === "identifier" || node?.type === "required_parameter") return node.text.replace(/\??\s*:\s*[\s\S]*$/, "").trim();
+  if (["optional_parameter", "assignment_pattern"].includes(node?.type)) {
+    return node.childForFieldName("left")?.text ?? node.childForFieldName("name")?.text ?? node.namedChildren?.[0]?.text ?? null;
+  }
+  return null;
+}
+
+function defaultParameterValue(node, bindings) {
+  if (!["optional_parameter", "assignment_pattern"].includes(node?.type)) return undefined;
+  return staticValue(node.childForFieldName("right") ?? node.childForFieldName("value") ?? node.namedChildren?.at(-1), bindings);
+}
+
+function staticValue(node, bindings) {
+  if (!node) return undefined;
+  if (node.type === "identifier") return bindings.get(node.text);
+  if (["string", "string_fragment"].includes(node.type)) return node.text.replace(/^["']|["']$/g, "");
+  if (node.type === "true") return true;
+  if (node.type === "false") return false;
+  if (node.type === "number") return Number(node.text);
+  return undefined;
+}
+
+function bindingKey(bindings) {
+  return JSON.stringify([...bindings].sort(([left], [right]) => left.localeCompare(right)));
+}
+
+function hookOwner(object, file, hookBindings) {
+  if (object?.type !== "identifier") return null;
+  const values = hookBindings.get(`${file}:${object.text}`);
+  return values?.size === 1 ? [...values][0] : null;
+}
+
+function refHookOwner(object, file, refHookBindings) {
+  if (object?.type !== "member_expression" || object.childForFieldName("property")?.text !== "current") return null;
+  const ref = object.childForFieldName("object");
+  if (ref?.type !== "identifier") return null;
+  const values = refHookBindings.get(`${file}:${ref.text}`);
+  return values?.size === 1 ? [...values][0] : null;
+}
+
+function transportInvocation(fn, args, bindings) {
   let method = null;
-  if (fn.type === "identifier" && (fn.text === "fetch" || /Fetch$/.test(fn.text))) {
+  if (fn.type === "identifier" && (fn.text === "fetch" || /(?:Fetch|Request)$/.test(fn.text))) {
     method = (args[1]?.text.match(/\bmethod\s*:\s*["']([A-Za-z]+)["']/)?.[1] ?? "GET").toUpperCase();
   } else if (fn.type === "member_expression") {
     const property = fn.childForFieldName("property")?.text;
     if (["get", "post", "put", "patch", "delete"].includes(property?.toLowerCase())) method = property.toUpperCase();
   }
   if (!method || !args.length) return null;
-  const routePath = routePattern(args[0]);
-  return routePath ? { method, path: routePath } : null;
+  const routePath = routePattern(args[0], bindings);
+  return routePath && isHttpPath(routePath) ? { method, path: routePath } : null;
 }
 
-function routePattern(node) {
+function isHttpPath(value) {
+  return value.startsWith("/") || value.startsWith("*") || /^https?:\/\//.test(value);
+}
+
+function routePattern(node, bindings = new Map()) {
   if (!node || !["string", "string_fragment", "template_string"].includes(node.type)) return null;
   if (node.type !== "template_string") return node.text.replace(/^["'`]|["'`]$/g, "");
-  return node.text.replace(/^`|`$/g, "").replace(/\$\{[^}]+\}/g, "*").replace(/\/{2,}/g, "/");
+  return node.text.replace(/^`|`$/g, "").replace(/\$\{([^}]+)\}/g, (_match, expression) => {
+    const name = expression.trim();
+    return bindings.has(name) ? String(bindings.get(name)) : "*";
+  }).replace(/\/{2,}/g, "/");
 }
 
-function walkCalls(node, visit) {
+function walkReachableCalls(node, bindings, visit) {
+  if (node.type === "ternary_expression") {
+    const selected = selectedBranch(node.childForFieldName("condition"), bindings);
+    if (selected !== null) {
+      const branch = node.childForFieldName(selected ? "consequence" : "alternative");
+      if (branch) walkReachableCalls(branch, bindings, visit);
+      return;
+    }
+  }
+  if (node.type === "if_statement") {
+    const selected = selectedBranch(node.childForFieldName("condition"), bindings);
+    if (selected !== null) {
+      const branch = node.childForFieldName(selected ? "consequence" : "alternative");
+      if (branch) walkReachableCalls(branch, bindings, visit);
+      return;
+    }
+  }
   if (node.type === "call_expression") visit(node);
-  for (const child of node.namedChildren ?? []) walkCalls(child, visit);
+  for (const child of node.namedChildren ?? []) walkReachableCalls(child, bindings, visit);
+}
+
+function selectedBranch(condition, bindings) {
+  if (!condition) return null;
+  if (!["binary_expression", "equality_expression"].includes(condition.type)) return null;
+  const operator = condition.children?.find((child) => ["===", "==", "!==", "!="].includes(child.type))?.type;
+  if (!operator) return null;
+  const left = staticValue(condition.childForFieldName("left"), bindings);
+  const right = staticValue(condition.childForFieldName("right"), bindings);
+  if (left === undefined || right === undefined) return null;
+  const equal = left === right;
+  return operator === "===" || operator === "==" ? equal : !equal;
 }
 
 function isComponentScope(file) { return /(^|\/)(components|pages)\//.test(file); }

@@ -1,4 +1,4 @@
-# Semantic Assembly Acceptance Corpus: Five Kalakar Paths
+# Semantic Assembly Acceptance Corpus: Seven Kalakar Paths
 
 **Date:** 2026-07-19  
 **Status:** Discovery fixture for the next model increment  
@@ -102,6 +102,8 @@ machine, explicit orchestration, or equivalent control-flow evidence proves that
 | Render building model | UI action and backend read/output claims | exact wrapper binding, artifact effects, application operation |
 | Reset password | backend contract and reads | form action, UI conditions, User change, token removal |
 | Export plan | backend format operations | callback-prop chain, hook action, produced file identity |
+| Draw wall | canvas tool and wall API contract | multi-event gesture, preview-to-commit continuation, topology effects |
+| Inspect quantities | quantities surface and read API | view activation, parallel reads, derived result identity |
 
 ## 1. Create project
 
@@ -299,6 +301,81 @@ Export plan drawing
 | Output is a typed downloadable artifact | endpoint media type, filename header, and frontend blob download | Bind response construction and download handling to an Artifact output |
 | `changes unknown` is a false semantic emphasis for read-only projection work | plan projection helpers allocate/derive intermediate structures | Distinguish mutation of local/intermediate values from persistent or externally observable effects |
 
+## 6. Draw wall on the Plan Canvas
+
+### Target frame
+
+```text
+Draw wall
+  Started from: Plan Canvas wall tool
+  Available when: a job, active storey, model revision, and wall type exist
+  Accepts: snapped wall points, wall type, placement, and current model revision
+  Previews: room, topology, and integrity consequences
+  Requires: consequence confirmation when review is necessary
+  Changes: Building Model
+  Produces: updated Plan Slice, created wall identities, and topology changes
+  Selects: the last created wall
+  Can fail: topology resolution required; invalid wall; stale or failed mutation
+  Reached through: POST /api/v1/building-model/{job_id}/walls/chain
+```
+
+### Deterministic evidence in source
+
+| Observation | Evidence |
+|---|---|
+| The wall tool accumulates snapped canvas points | `useWallTool.ts:85-119,260-300` |
+| Commit requires job, storey, revision, wall type, and enough points | `useWallTool.ts:121-134,194-208` |
+| The completed draft is previewed before commit | `useWallTool.ts:210-228` |
+| Reviewable consequences suspend commit behind confirmation | `useWallTool.ts:229-244` |
+| The committed action invokes the wall-chain API | `useWallTool.ts:135-176`, `api/buildingModel/plan.ts:473-493` |
+| The backend mutates and persists `BuildingModelDocument` | `_routes.py:2266-2310` |
+| The response identifies created walls and topology changes | `_routes.py:2311-2318` |
+
+### Envelope questions
+
+| Question | Why it matters |
+|---|---|
+| Can one logical action begin with several canvas events rather than one click? | Tests whether an envelope can assemble a gesture without pretending every pointer event is a separate capability. |
+| Does preview remain a prerequisite/branch of commit rather than a second unrelated story? | Tests evidence-backed continuation across stored callback/state. |
+| Are the Building Model and created walls primary results while draft state and mutation session remain mechanism? | Tests semantic-role separation on an authoring path. |
+| Are topology consequences visible without turning every affected entity into a headline subject? | Tests bounded presentation of fan-out effects. |
+
+## 7. Inspect quantities
+
+### Target frame
+
+```text
+Inspect quantities
+  Started from: Quantities workspace
+  Available when: a job exists
+  Reads: Building Model, material catalog, rate book, and costing profile
+  Derives: quantity takeoff and priced estimate
+  Produces: quantity summary, measured rows, material statement, and readiness/assumptions
+  Can fail: Building Model cannot be projected into quantities
+  Reached through: GET /api/v1/building-model/{job_id}/quantities
+```
+
+### Deterministic evidence in source
+
+| Observation | Evidence |
+|---|---|
+| Quantities is a selectable workspace view | `ActivityRail.tsx:84-88`, `workspaceViewRegistry.ts:13` |
+| Entering the view loads quantities and the material catalog in parallel | `QuantitiesWorkspaceView.tsx:90-108` |
+| The frontend reaches the quantities API | `api/buildingModel/artifacts.ts:333-342` |
+| The backend loads the Building Model and derives the quantity artifact | `_routes.py:362-369` |
+| The response exposes summaries, measured elements, assumptions, and a material statement | `buildingModel.generated.ts:3983-4004` |
+| Projection failure is exposed as 409 | `_routes.py:365-369` |
+
+### Envelope questions
+
+| Question | Why it matters |
+|---|---|
+| Can a surface-opening/load behavior be represented without forcing a button-like trigger? | Tests a read-oriented application surface rather than an explicit command. |
+| Can parallel reads remain one coherent inspection envelope? | Tests fan-out that belongs together by entry behavior. |
+| Is `BuildingModelDocument` the source subject while quantity takeoff is a derived output? | Tests the difference between a domain subject and a computed representation. |
+| Do material catalog, rate book, and costing profile appear as supporting inputs rather than peer headline subjects? | Tests role-correct packaging of a broad read path. |
+| Does the envelope avoid reporting local aggregation and table formatting as system effects? | Tests separation of presentation computation from observable behavior. |
+
 ## Required mechanisms, ordered by leverage
 
 ### A. Role-correct behavior frames
@@ -352,7 +429,7 @@ comparable. It must not label newly recoverable `contains` Claims as repository 
 The semantic-assembly increment passes this corpus when:
 
 1. Each scenario renders one concise frame whose sentences map to Claim IDs.
-2. The five frames use the existing semantic vocabulary; no Kalakar-only relation is added.
+2. The seven frames use the existing semantic vocabulary; no Kalakar-only relation is added.
 3. Routes appear as reach, not as the only human-facing action name where a stable application
    boundary is recovered.
 4. Request/response contracts never appear under "acts on."
@@ -379,5 +456,40 @@ Implementation order:
 5. Add a public system-path projection joining the UI action to the API operation and subject.
 6. Make the dashboard consume the same frame/path JSON without deriving semantics client-side.
 
-After that vertical slice, use Create Project, Render, Reset Password, and Export Plan in that order
-to widen the resolver rather than adding scenario-specific labels.
+After that vertical slice, use Create Project, Render, Reset Password, Export Plan, Draw Wall, and
+Inspect Quantities to widen the resolver rather than adding scenario-specific labels. The last two
+deliberately contrast an authoring gesture with a read-only inspection surface.
+
+## Corpus execution: 2026-07-20
+
+Executed against the current Kalakar `main` worktree through System Model analyzer `0.12.0`. The
+passes added generalized HTML form, React lifecycle, `useCallback`, uniquely wired callback-prop,
+and custom-hook member continuation. Frontend transport classification was also tightened. No
+scenario labels or semantic-region logic were added.
+
+| Scenario | Result | Observed envelope | Next evidence mechanism |
+|---|---|---|---|
+| Apply structural type | Credible / closed | Panel action -> PUT operation -> `BuildingModelDocument`; request, response, availability, 400, and 409 are present | Improve condition wording separately; no structural blocker |
+| Create project | Partial | Form submit -> POST projects; `ProjectCreate`, `ProjectResponse`, and persistent subjects are present | Bind the initial Building Model creation, remove generic `db` effect, recover navigation, and distinguish created subjects from supporting ownership/user records |
+| Render building model | Partial | Render action -> render operation plus manifest check -> `BuildingModelDocument`; response and failures are present | Bind written GLB as an Artifact and classify the manifest check as part of the same action without flattening its contracts/effects |
+| Reset password | Open | Form submit -> reset-password operation; token visibility, request, and response are present | Bind query result `row` to `PasswordResetToken`, recover `User` field mutation and token removal, and lift explicit validation/failure branches |
+| Export plan drawing | Partial | Explicit Download DXF -> plan DXF -> `BuildingModelDocument`; response and 400/404/409 are present. The selected literal survives callback, hook, branch, and route-template boundaries | Bind PDF/DXF/DWG files as Artifacts and reduce derived implementation reads beneath the envelope |
+| Draw wall | Missing envelope | Canvas click reaches `usePlanInteraction`; uniquely typed ref-backed hook APIs are now resolvable in isolation, but the Kalakar behavior is a multi-event draft/finish/preview/commit protocol rather than one call chain | Model bounded interaction protocols so draft clicks and an explicit/automatic finish can assemble without claiming every click commits a wall |
+| Inspect quantities | Credible / closed | Reactive load -> quantities plus material-catalog operations -> `BuildingModelDocument`; both response contracts and 409 outcomes are present | Distinguish automatic load from manual Refresh in display and reduce derived-plan implementation reads beneath the envelope |
+
+### Findings
+
+1. A behavioral envelope is credible for a conventional UI action once Varai proves its API reach
+   and aggregate effect. The Apply case remains the reference.
+2. Form submission is a reusable frontend boundary. It recovered both Create Project and Reset
+   Password without domain-specific rules.
+3. React hook/callback continuation closes the read-oriented Quantities case and recovers the
+   explicit DXF export without weakening unique-target rules. Only statically known literal values
+   select a branch; unknown values retain all reachable alternatives.
+4. Backend effect binding remains independently incomplete for Create Project, Render, and Reset
+   Password. A UI-to-API join alone does not make an envelope semantically closed.
+5. Region experiments should remain deferred until the corpus contains several credible envelopes
+   from mutation, read/inspection, artifact production, and form workflows—not only direct buttons.
+6. Literal argument flow and uniquely typed ref-backed hook continuation are now available. The
+   remaining Wall gap is no longer a missing call edge: it is behavioral assembly across a stateful,
+   multi-event protocol (draft points -> finish -> preview/review -> commit).

@@ -18,7 +18,10 @@ test("frontend System Model is identical in serial and worker scans", { timeout:
   const serial = await scanRepo(fixture, { ...common, jobs: 1 });
   const worker = await scanRepo(fixture, { ...common, jobs: 4 });
   assert.deepEqual(worker.model, serial.model);
-  assert.equal(serial.model.elements.filter((item) => item.kind === "action").length, 1);
+  assert.deepEqual(
+    serial.model.elements.filter((item) => item.kind === "action").map((item) => item.name).sort(),
+    ["CreateProjectModal Dismiss", "CreateProjectModal handle Submit"],
+  );
 });
 
 test("native and WASM parsers produce the same canonical System Model", { timeout: 30_000 }, async () => {

@@ -2,7 +2,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, readFile, rename } from "node:fs/promises";
 
-export const EXTRACTOR_VERSION = 10; // Resolve wildcard frontend API paths by route shape, not loose subsequence
+export const EXTRACTOR_VERSION = 16; // Continue through uniquely typed ref-backed hook APIs
 
 const CACHE_FORMAT_VERSION = 1;
 
