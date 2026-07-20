@@ -1,3 +1,8 @@
+import {
+  collectChangedClaimIds,
+  renderObservedAreasOutline,
+} from "./observed-areas-view.js";
+
 const $ = (id) => document.getElementById(id);
 const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
@@ -100,27 +105,29 @@ function render() {
   if (!scanData?.model) return;
   renderTopbar();
   renderNav();
-  if (activeView === "capabilities") renderCapabilities();
+  if (activeView === "subjects") renderSubjects();
+  else if (activeView === "capabilities") renderCapabilities();
   else if (activeView === "changes") renderChanges();
   else if (activeView === "everything") renderEverything();
   else if (activeView === "unknowns") renderUnknowns();
-  else renderSystem();
+  else renderObservedAreas();
 }
 
 function renderTopbar() {
-  const roots = scanData.projections?.things?.roots ?? [];
-  const kindById = new Map(scanData.model.elements.map((item) => [item.id, item.kind]));
-  const subjects = roots.filter((root) => root.tier === 0).length;
-  const screens = roots.filter((root) => root.tier === 1 && kindById.get(root.elementId) === "screen").length;
-  const behaviors = scanData.projections?.frames?.frames?.length ??
-    scanData.projections?.capabilities?.capabilities?.length ?? 0;
-  el.topbarStats.innerHTML = `<span>${subjects} subjects</span><span>${screens} screens</span><span>${behaviors} observed behaviors</span>`;
+  const areas = scanData.projections?.observedAreas?.areas ?? [];
+  const cores = scanData.projections?.observedAreas?.sharedCores ?? [];
+  const operations = areas.reduce((sum, area) => sum + area.operationCount, 0);
+  el.topbarStats.innerHTML =
+    `<span>${areas.length} observed areas</span>` +
+    `<span>${operations} operations</span>` +
+    `<span>${cores.length} shared parts</span>`;
 }
 
 function renderNav() {
   const changes = diffData?.diff?.summary?.semanticChanges ?? 0;
   el.sidebarNav.innerHTML =
-    navItem("system", "◎", "System", null) +
+    navItem("system", "◎", "Observed areas", null) +
+    navItem("subjects", "◈", "Subjects", null) +
     navItem("capabilities", "↳", "Capabilities", null) +
     navItem("changes", "∆", "Changes", changes || null) +
     `<div class="nav-group"><span class="nav-group-label">Advanced</span>` +
@@ -169,7 +176,50 @@ function matchRoot(root, byId, query) {
   return names.some((name) => name?.toLowerCase().includes(query));
 }
 
-function renderSystem() {
+function renderObservedAreas() {
+  const projection = scanData.projections?.observedAreas;
+  if (!projection) return renderEmpty("This scan does not include observed areas yet");
+  const { byId } = indexes();
+  const envelopesById = new Map((scanData.projections?.envelopes?.envelopes ?? []).map((item) => [item.id, item]));
+  const claimsById = new Map(scanData.model.claims.map((item) => [item.id, item]));
+  const changedElements = changedIds();
+  const changedClaims = collectChangedClaimIds(diffData?.diff);
+  const query = el.search.value.toLowerCase().trim();
+  showSearch("Find an observed area, operation, or shared part...");
+
+  const rendered = renderObservedAreasOutline({
+    projection,
+    byId,
+    envelopesById,
+    claimsById,
+    query,
+    changesOnly,
+    changedElements,
+    changedClaims,
+    expandedId,
+    relationLabel,
+    kindLabel,
+    stateMark,
+    changeBadge,
+    pathStatus,
+    claimRow,
+    esc,
+  });
+
+  const strip = diffData?.diff?.summary?.hasChanges
+    ? `<button class="change-strip${changesOnly ? " active" : ""}" id="change-strip">` +
+      `<b>${rendered.changedAreaCount}</b> ${rendered.changedAreaCount === 1 ? "area" : "areas"} changed since the last snapshot` +
+      `<span>${changesOnly ? "show everything" : "show only changes"}</span></button>`
+    : diffData?.error ? `<p class="baseline-note">${esc(diffData.error)}</p>` : "";
+
+  el.searchCount.textContent = query ? `${rendered.matchCount} matches` : "";
+  el.list.innerHTML = strip + rendered.html;
+  bindExpanders();
+  bindSnippets();
+  $("change-strip")?.addEventListener("click", () => { changesOnly = !changesOnly; render(); });
+}
+
+function renderSubjects() {
   const projection = scanData.projections?.things;
   if (!projection) return renderEmpty("This scan does not include projections yet");
   const { byId, claimsBySource } = indexes();

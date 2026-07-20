@@ -579,3 +579,91 @@ the initial `BuildingModelDocument` is passed and persisted as an untyped dictio
 source evidence does not yet bind that value to the declared aggregate without a further semantic
 factory/value-representation rule. Supporting-effect presentation is also deferred rather than
 encoded as domain-name heuristics.
+
+## Experimental semantic-region graph: 2026-07-20
+
+The first region experiment remains a pure projection over canonical behavioral envelopes. It adds
+no kernel vocabulary, persisted objects, analyzer rules, or renderer surface.
+
+The enforced structural rule is:
+
+```text
+distinct interaction parents -> use one closed shared intersection
+shared intersection -> may use a broader shared intersection
+shared membership -> never unions the parents
+```
+
+A neutral model proves two disjoint parents, nested Screen/Surface contexts, one reusable shared
+core, parent-local Resources, shared-contract rejection, meaningful relationship removal,
+collection-order invariance, display-name invariance, and private-evidence invariance.
+
+The first implementation created one core per repeated Resource. Kalakar produced 28 cores and 238
+`uses` edges: a reformatted subject map. That mechanism was discarded. The implemented projection
+now computes closed repeated Resource intersections across independent leaf parents and connects
+specialized intersections to broader cores.
+
+Fresh Kalakar result:
+
+- 31 interaction-context parents;
+- 24 closed shared intersections;
+- 66 `uses` relationships;
+- 0 recovered parent `contains` relationships;
+- 24 envelopes outside a supported multi-envelope context.
+
+The graph preserves the important non-collapse property. One broad `BuildingModelDocument` core is
+reused without combining Plan Canvas, structural panels, quantities, rendering, and export into one
+parent. Several repeated intersections also ring true:
+`BuildingModelDocument + SectionProfile` is shared by three opening/band authoring panels;
+`Project + ProjectArtifact` is shared by several project-artifact surfaces; and
+`BuildingModelDocument + ShellTopologyResult` is shared by site-level and plan-canvas work.
+
+The experiment does **not** pass the promotion gate yet:
+
+1. Parent candidates are almost entirely UI Surfaces, so the parent layer currently resembles UI
+   anatomy more than a recovered human-level system organization.
+2. No Screen -> Surface region containment survived the multi-envelope threshold in live Kalakar.
+   Consequently contexts such as a generic action control and its workspace may appear independent
+   even when product composition would treat one as nested in the other.
+3. Backend supporting-read fan-out produces large closed intersections of derived geometry types.
+   These are evidence-backed and correctly shared, but still too compute-shaped and verbose to
+   present as human semantic regions.
+
+Therefore the projection stays experimental and is not promoted into canonical language, snapshots,
+diff, or semantic identity. It is now exposed as a derived dashboard presentation through the
+Observed Areas view so humans can judge whether the recovered structure is useful. The next evidence
+question is parent-boundary recovery—especially workspace, screen, and nested interaction
+context—rather than another clustering heuristic. Effect-role reduction remains a separate
+input-quality gap.
+
+## Observed areas visualization: 2026-07-20
+
+Observed Areas is a presentation projection over the experimental region candidates and behavioral
+envelopes. It does not invent area names, merge parents through shared membership, or persist a
+second IR.
+
+Fresh Kalakar presentation result:
+
+- 31 observed leaf interaction areas;
+- 16 shared system parts linked from those areas;
+- 24 honestly ungrouped envelopes;
+- Plan Canvas (`PlanCanvasLayer`) shows wall/create/trim/column/beam/stair/dimension operations that
+  change `BuildingModelDocument`;
+- Quantities (`QuantitiesWorkspaceView`) remains a distinct area with quantity load and estimate
+  export outputs;
+- Rendering (`RenderWorkspaceView`) and export (`DrawingSetWorkspaceView`, `PlanExportPopover`)
+  remain separate from authoring areas while still linking into Building Model-related shared parts;
+- Independent areas reuse Building Model cores without collapsing into one parent.
+
+Presentation findings:
+
+1. The primary outline answers the Kalakar acceptance questions for Plan Canvas, Quantities, and
+   Render/Export without inventing domain classifications.
+2. Shared-core labels can still be too compute-shaped when closed intersections include many derived
+   geometry Resources. The UI now compactly ranks recovered names for landing links and keeps the
+   full recovered membership on core expansion.
+3. Partial completeness is common and remains attached to the affected operations/areas.
+4. Some leaf surfaces such as generic action controls still appear as peer areas because nested
+   Screen/Surface region containment has not yet recovered; that is an honesty issue in the region
+   experiment, not something the visualization invents away.
+
+Stop before promoting Region into the canonical language. Improve parent-boundary evidence first.

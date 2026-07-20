@@ -9,16 +9,10 @@ import { analyzeCurrent, persistCurrentModel } from "../snapshots/snapshot.js";
 import { createSnapshotStore } from "../snapshots/store.js";
 import { diffSystemModels } from "../system-model/diff.js";
 import { readGitState } from "../snapshots/git-state.js";
-import {
-  behaviorFrames,
-  behavioralEnvelopes,
-  browseByThing,
-  browseByCapability,
-  systemPaths,
-} from "../system-model/projections/index.js";
 import { SYSTEM_MODEL_SCHEMA_VERSION } from "../system-model/version.js";
 import { readSourceSnippet } from "./source.js";
 import { displayLanguage } from "../reporters/display-language.js";
+import { serializeProjections } from "./projections.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.resolve(__dirname, "..", "ui");
@@ -91,13 +85,7 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
       latestScan = {
         ...current.scan,
         displayLanguage: displayLanguage(),
-        projections: {
-          things: browseByThing(current.scan.model),
-          capabilities: browseByCapability(current.scan.model),
-          frames: behaviorFrames(current.scan.model),
-          paths: systemPaths(current.scan.model),
-          envelopes: behavioralEnvelopes(current.scan.model),
-        },
+        projections: serializeProjections(current.scan.model),
       };
       const store = createSnapshotStore(current.git.semanticStoreRoot);
       let ref = await store.getCommitRef(current.git.head);
