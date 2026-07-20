@@ -113,6 +113,13 @@ An Element read, changed, created, removed, or produced by a Behavior. Common re
 
 Storage medium is a qualifier on a Resource or relationship, not a new semantic primitive.
 
+Produced files and media are represented as `artifact` Resources. Their encoding and delivery are
+properties of the `produces` Claim (`format`, `media_type`, and `delivery`), not the Artifact's
+identity: the same artifact family may be generated as one format and served as another. An
+analyzer may infer an Artifact only from converging output evidence, such as a concrete response
+media type plus filename/disposition, or a traced writer plus a public output boundary. A route
+suffix, extension, generic file write, or media type alone is insufficient.
+
 ## Relationship vocabulary
 
 A relationship is one atomic semantic statement from a source Element to a target Element or literal value.

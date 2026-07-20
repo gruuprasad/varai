@@ -22,6 +22,10 @@ export function classifyAttributeEffect({ method, receiver, call, firstArgIdent,
     const mechanism = !target;
     return { access: "write", target, kind: "db_model", medium: "db", via: `${receiverText}.${method}`, observationMethod: "semantic", ...(mechanism ? { mechanism: true } : {}) };
   }
+  if (/^(?:write_bytes|write_text)$/.test(method) ||
+      (receiverType === "Path" && /^(?:touch|rename|replace|unlink)$/.test(method))) {
+    return { access: "write", target: "file", kind: "file", medium: "file", via: `${receiverText}.${method}`, observationMethod: "semantic" };
+  }
   if (receiverType && MUTATION_RE.test(method)) {
     return { access: "write", target: receiverType, kind: "aggregate", medium: "memory", via: `${receiverText}.${method}`, observationMethod: "semantic" };
   }

@@ -529,3 +529,28 @@ Three generic analyzer gaps were exposed and fixed during corpus execution:
    exists; multiple production declarations remain ambiguous.
 3. Exact lexical coverage ranks `Wall` above `CompoundWall`, `WallJoin`, and other partial token
    matches when operation, result, and interface evidence agree.
+
+## Artifact-production increment: 2026-07-20
+
+System Model analyzer `0.15.0` adds one framework-neutral Artifact lift with two evidence routes:
+
+```text
+concrete media type + filename/disposition -> downloadable Artifact
+traced file writer + stable format + public output boundary -> generated Artifact
+```
+
+The neutral fixture proves both routes and proves that a media type, route suffix, or file-looking
+name alone cannot create an Artifact. Format, media type, and delivery qualify the `produces`
+Claim; they do not define a second file/media IR or fragment Artifact identity.
+
+The Kalakar corpus recovers five Artifact families (PDF, DXF, DWG, JSON, and glTF) across fourteen
+API output relationships. The intended corpus paths now include:
+
+```text
+Download DXF -> plan DXF operation -> produces DXF file
+Render -> render operation -> produces glTF model
+```
+
+Both remain honestly partial for independent pre-existing reasons: Export still carries derived
+projection effects, while Render still promotes implementation subjects such as `RenderScene`.
+Artifact identity is no longer the missing link; effect-role reduction is a separate later slice.

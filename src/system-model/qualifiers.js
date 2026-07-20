@@ -14,6 +14,8 @@ export const STANDARD_QUALIFIERS = Object.freeze([
   "queue",
   "concurrency",
   "type",
+  "format",
+  "media_type",
 ]);
 
 export function createQualifierRegistry(additional = []) {

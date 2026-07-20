@@ -258,6 +258,7 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
   }
 
   const emittedApplicationOperations = new Set();
+  const emittedArtifacts = new Set();
   for (const behavior of behaviors) {
     const door = behavior.door ?? {};
     if (door.kind === "ui_action") {
@@ -313,6 +314,44 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
       evidence: [door.evidence].flat(), implementationPath: [door.evidence].flat(), observationMethod: "semantic", claimState: "observed", capability: "api.operation",
     });
     expose("api", "operation", key, [door.evidence].flat(), "api.operation");
+
+    for (const artifact of behavior.artifactOutputs ?? []) {
+      const artifactKey = `artifact:${artifact.key}`;
+      const artifactSource = source("data", "artifact", artifactKey);
+      if (!emittedArtifacts.has(artifactKey)) {
+        emittedArtifacts.add(artifactKey);
+        addElement({
+          subsystemKey: "data",
+          subsystemName: "Data",
+          key: artifactKey,
+          kind: "artifact",
+          roles: ["resource"],
+          name: artifact.name,
+          evidence: artifact.evidence,
+          implementationPath: artifact.implementationPath,
+          observationMethod: "semantic",
+          claimState: artifact.bindingState,
+          capability: "data.artifact",
+        });
+        expose("data", "artifact", artifactKey, artifact.evidence, "data.artifact", "contains");
+      }
+      addClaim({
+        source: behaviorSource,
+        relation: "produces",
+        target: reference("data", "artifact", artifactKey),
+        slot: `artifact:${artifactKey}`,
+        qualifiers: {
+          delivery: artifact.delivery,
+          format: artifact.format,
+          ...(artifact.mediaType ? { media_type: artifact.mediaType } : {}),
+        },
+        evidence: artifact.evidence,
+        implementationPath: artifact.implementationPath,
+        observationMethod: "semantic",
+        claimState: artifact.bindingState,
+        capability: "api.artifact-output",
+      });
+    }
 
     for (const candidate of behavior.applicationCalls ?? []) {
       const aggregate = promoted.get(candidate.subjectDeclarationId);

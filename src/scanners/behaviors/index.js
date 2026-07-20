@@ -4,6 +4,7 @@ import { traceBody } from "./body.js";
 import { createResolver } from "./resolver.js";
 import { createValueFlow } from "./value-flow.js";
 import { privateNodeId } from "../lift/implementation-graph.js";
+import { boundaryArtifactOutputs, writtenArtifactOutputs } from "./artifact-outputs.js";
 
 export function buildObservationIndex(observations) {
   const schemaNames = new Set();
@@ -39,6 +40,10 @@ export async function traceBehaviors(repoPath, files, ctx, observations, options
     const decoratorText = decoratorTextFor(h.handlerNode);
     const sig = traceSignature(h.handlerNode, decoratorText, h.file, factIndex, { rootEvidence: h.door.evidence });
     const body = await traceBody(h.handlerNode, h.file, ctx, resolver, factIndex, { rootEvidence: h.door.evidence, graph, flow });
+    const artifactOutputs = [
+      ...boundaryArtifactOutputs(h.handlerNode, h.file, h.door.evidence),
+      ...writtenArtifactOutputs(body, sig),
+    ];
     behaviors.push({
       door: h.door,
       handler: { id: handler.id, file: handler.file, line: handler.line, symbol: handler.name },
@@ -53,6 +58,7 @@ export async function traceBehaviors(repoPath, files, ctx, observations, options
       helperCalls: body.helperCalls,
       trunkCall: body.trunkCall,
       applicationCalls: body.applicationCalls,
+      artifactOutputs,
     });
   }
   return behaviors;
