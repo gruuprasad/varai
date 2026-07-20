@@ -148,6 +148,65 @@ test("operations carry primary effect, output, and outcome claim ids for evidenc
   assert.ok(withMutation.claimIds.includes(withMutation.primaryEffectClaimIds[0]));
   assert.ok(withArtifact.claimIds.includes(withArtifact.outputClaimIds[0]));
   assert.ok(withArtifact.claimIds.includes(withArtifact.outcomeClaimIds[0]));
+  assert.ok(withArtifact.pathIds.length, "operations retain canonical observed path ids");
+  assert.equal(withArtifact.prominence, "primary");
+});
+
+test("response contracts and outcomes remain supporting while mutations and artifacts are primary", () => {
+  const model = buildSystemModel(regionDraft(), { systemName: "observed-areas-prominence-fixture" });
+  const value = observedAreas(model);
+  const names = new Map(model.elements.map((item) => [item.id, item.name]));
+  const alpha = value.areas.find((area) => names.get(area.anchorElementId) === "Alpha Tools");
+  const mutation = alpha.operations.find((item) => item.primaryEffectClaimIds.length);
+  const artifact = alpha.operations.find((item) => item.outputClaimIds.some((id) => {
+    const claimValue = model.claims.find((claimItem) => claimItem.id === id);
+    return claimValue?.target.kind === "reference" && names.get(claimValue.target.id) === "Alpha Export";
+  }));
+  assert.equal(mutation.prominence, "primary");
+  assert.equal(artifact.prominence, "primary");
+
+  const draft = regionDraft();
+  draft.claims = draft.claims.filter((item) => item.slot !== "specific-1" && item.slot !== "core-1" && item.slot !== "artifact");
+  draft.claims.push(claim(source("api", "operation", "POST /a/two"), "fails_with",
+    literal("condition", "temporarily unavailable"), "supporting-outcome"));
+  const supportingModel = buildSystemModel(draft, { systemName: "observed-areas-supporting-fixture" });
+  const supporting = observedAreas(supportingModel).areas
+    .flatMap((area) => area.operations)
+    .find((item) => supportingModel.elements.find((elementItem) => elementItem.id === item.entryBehaviorId)?.name === "a-two");
+  assert.equal(supporting.prominence, "supporting");
+
+  const stateDraft = regionDraft();
+  stateDraft.elements.push(element("data", "state", "view-state", "Workspace View State", ["resource"]));
+  stateDraft.claims = stateDraft.claims.filter((item) => item.slot !== "specific-1" && item.slot !== "core-1" && item.slot !== "artifact");
+  stateDraft.claims.push(claim(source("api", "operation", "POST /a/two"), "changes",
+    reference("data", "state", "view-state"), "view-state-change"));
+  const stateModel = buildSystemModel(stateDraft, { systemName: "observed-areas-state-fixture" });
+  const stateOperation = observedAreas(stateModel).areas.flatMap((area) => area.operations)
+    .find((item) => stateModel.elements.find((elementItem) => elementItem.id === item.entryBehaviorId)?.name === "a-two");
+  assert.equal(stateOperation.prominence, "supporting", "state mutation alone does not outrank domain operations");
+});
+
+test("parent-only operations remain visible without repeating child operations", () => {
+  const draft = regionDraft();
+  draft.elements.push(
+    element("ui", "action", "screen-own", "Refresh workspace", ["behavior"]),
+    element("api", "operation", "POST /workspace/refresh", "POST /workspace/refresh", ["interface", "behavior"]),
+  );
+  draft.claims.push(
+    claim(source("ui", "screen", "screen-a"), "offers", reference("ui", "action", "screen-own"), "offer-screen-own"),
+    claim(source("ui", "action", "screen-own"), "triggered_by", literal("event", "click"), "trigger-screen-own"),
+    claim(source("ui", "action", "screen-own"), "invokes", reference("api", "operation", "POST /workspace/refresh"), "invoke-screen-own"),
+    claim(source("api", "operation", "POST /workspace/refresh"), "changes", reference("data", "aggregate", "specific-a"), "effect-screen-own"),
+  );
+  const model = buildSystemModel(draft, { systemName: "observed-areas-parent-fixture" });
+  const value = observedAreas(model);
+  const names = new Map(model.elements.map((item) => [item.id, item.name]));
+  const screen = value.areas.find((area) => names.get(area.anchorElementId) === "Workspace Alpha");
+  const surface = value.areas.find((area) => names.get(area.anchorElementId) === "Alpha Tools");
+  assert.ok(screen, "a parent with its own operation remains an observed area");
+  assert.equal(screen.operations.length, 1);
+  assert.equal(names.get(screen.operations[0].entryBehaviorId), "Refresh workspace");
+  assert.equal(intersection(screen.envelopeIds, surface.envelopeIds).length, 0, "child operations are not repeated");
 });
 
 test("most-specific shared cores are linked once and never merge independent parents", () => {
@@ -205,8 +264,12 @@ test("partial completeness is preserved on affected operations and areas", () =>
 
 test("areas rank by meaningful operation count then stable id", () => {
   const value = projection();
-  assert.ok(value.areas[0].operationCount >= value.areas[1].operationCount);
-  if (value.areas[0].operationCount === value.areas[1].operationCount) {
+  assert.ok(value.areas[0].primaryOperationCount >= value.areas[1].primaryOperationCount);
+  if (value.areas[0].primaryOperationCount === value.areas[1].primaryOperationCount) {
+    assert.ok(value.areas[0].operationCount >= value.areas[1].operationCount);
+  }
+  if (value.areas[0].primaryOperationCount === value.areas[1].primaryOperationCount &&
+      value.areas[0].operationCount === value.areas[1].operationCount) {
     assert.ok(value.areas[0].id.localeCompare(value.areas[1].id) <= 0);
   }
 });

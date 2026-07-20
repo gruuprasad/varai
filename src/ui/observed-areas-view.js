@@ -17,6 +17,70 @@ export function formatClaimSummary(claim, byId, relationLabel) {
   return `${relationLabel(claim.relation)} ${target}`;
 }
 
+export function claimSummaryKey(claim) {
+  const target = claim.target.kind === "reference"
+    ? claim.target.id
+    : `literal:${claim.target.value}`;
+  return `${claim.relation}\0${target}`;
+}
+
+export function dedupeClaimsBySummary(claims) {
+  const seen = new Set();
+  const unique = [];
+  for (const claim of claims) {
+    const key = claimSummaryKey(claim);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(claim);
+  }
+  return unique;
+}
+
+export function primaryOperations(area) {
+  const primary = area.operations.filter((item) => item.prominence === "primary");
+  return primary.length ? primary : area.operations;
+}
+
+export function areaRoleLine(area, byId, kindLabel) {
+  const kind = kindLabel(byId.get(area.anchorElementId)?.kind ?? "surface");
+  const count = area.primaryOperationCount ?? primaryOperations(area).length;
+  const unit = count === 1 ? "operation" : "operations";
+  const completeness = area.completeness === "partial" ? " · partial" : "";
+  return `${kind} · ${count} primary ${unit}${completeness}`;
+}
+
+export function areaSummarySentences(area, claimsById, byId, relationLabel) {
+  const claims = dedupeClaimsBySummary(primaryOperations(area).flatMap((operation) => [
+    ...operation.primaryEffectClaimIds,
+    ...operation.outputClaimIds,
+  ].map((id) => claimsById.get(id)).filter(Boolean)));
+  if (!claims.length) return ["No primary effect or output recovered."];
+
+  const byRelation = new Map();
+  for (const claim of claims) {
+    const list = byRelation.get(claim.relation) ?? [];
+    list.push(claim);
+    byRelation.set(claim.relation, list);
+  }
+  const rankedRelations = [...byRelation.entries()].sort((left, right) =>
+    right[1].length - left[1].length || left[0].localeCompare(right[0]));
+  const lines = [];
+  for (const [index, [, group]] of rankedRelations.entries()) {
+    const summaries = group.map((claim) => formatClaimSummary(claim, byId, relationLabel)).join(" · ");
+    lines.push(`${index === 0 ? "Mainly" : "Also"} ${summaries}.`);
+  }
+  return lines;
+}
+
+export function operationPreviewSummary(operation, claimsById, byId, relationLabel) {
+  const claims = dedupeClaimsBySummary([
+    ...operation.primaryEffectClaimIds,
+    ...operation.outputClaimIds,
+  ].map((id) => claimsById.get(id)).filter(Boolean));
+  if (!claims.length) return "no primary effect or output recovered";
+  return formatClaimSummary(claims[0], byId, relationLabel);
+}
+
 export function sharedCoreLabel(anchorElementIds, byId, { compact = false } = {}) {
   const ranked = [...anchorElementIds].sort((left, right) => {
     const leftKind = byId.get(left)?.kind ?? "";
@@ -85,6 +149,7 @@ export function renderObservedAreasOutline({
   projection,
   byId,
   envelopesById,
+  pathsById,
   claimsById,
   query,
   changesOnly,
@@ -100,6 +165,7 @@ export function renderObservedAreasOutline({
   esc,
 }) {
   const coresById = new Map(projection.sharedCores.map((item) => [item.id, item]));
+  const areasById = new Map(projection.areas.map((item) => [item.id, item]));
   const areas = projection.areas.filter((area) =>
     areaMatchesQuery(area, byId, envelopesById, coresById, query) &&
     (!changesOnly || areaIsChanged(area, changedElements, changedClaims)));
@@ -108,7 +174,7 @@ export function renderObservedAreasOutline({
     if (!query) return true;
     const names = [
       ...core.anchorElementIds.map((id) => byId.get(id)?.name),
-      ...core.usedByAreaIds.map((id) => byId.get(projection.areas.find((area) => area.id === id)?.anchorElementId)?.name),
+      ...core.usedByAreaIds.map((id) => byId.get(areasById.get(id)?.anchorElementId)?.name),
     ];
     return names.some((name) => name?.toLowerCase().includes(query));
   });
@@ -136,7 +202,7 @@ export function renderObservedAreasOutline({
     html += `<p class="empty-copy">${changesOnly ? "No observed areas changed since the last snapshot." : "No observed interaction areas were recovered."}</p>`;
   } else {
     html += areas.map((area) => renderArea(area, {
-      byId, envelopesById, claimsById, coresById, expandedId, changedElements, changedClaims,
+      byId, envelopesById, pathsById, claimsById, coresById, expandedId, changedElements, changedClaims,
       relationLabel, kindLabel, stateMark, changeBadge, pathStatus, claimRow, esc,
     })).join("");
   }
@@ -144,7 +210,7 @@ export function renderObservedAreasOutline({
   if (cores.length) {
     html += `<h2 class="group-heading">Shared system parts</h2>`;
     html += cores.map((core) => renderSharedCore(core, {
-      projection, byId, envelopesById, claimsById, expandedId, changedElements, changedClaims,
+      areasById, byId, envelopesById, claimsById, expandedId, changedElements, changedClaims,
       relationLabel, kindLabel, stateMark, changeBadge, pathStatus, claimRow, esc,
     })).join("");
   }
@@ -167,19 +233,20 @@ export function renderObservedAreasOutline({
 function renderArea(area, ctx) {
   const {
     byId, envelopesById, claimsById, coresById, expandedId, changedElements, changedClaims,
-    relationLabel, kindLabel, stateMark, changeBadge, pathStatus, claimRow, esc,
+    relationLabel, kindLabel, changeBadge, pathStatus, claimRow, esc,
   } = ctx;
   const anchor = byId.get(area.anchorElementId);
   const open = expandedId === area.id;
   const changed = areaIsChanged(area, changedElements, changedClaims);
+  const role = areaRoleLine(area, byId, kindLabel);
+  const summary = areaSummarySentences(area, claimsById, byId, relationLabel)
+    .map((line) => `<p class="area-summary">${esc(line)}</p>`).join("");
   const preview = area.operations.slice(0, 4).map((operation) => {
     const envelope = envelopesById.get(operation.envelopeId);
-    const summaries = areaPreviewClaims(operation, claimsById)
-      .slice(0, 2)
-      .map((claim) => formatClaimSummary(claim, byId, relationLabel));
+    const effect = operationPreviewSummary(operation, claimsById, byId, relationLabel);
     return `<li class="area-op-preview${operationIsChanged(operation, changedElements, changedClaims) ? " changed" : ""}">` +
       `<span class="op-name">${esc(envelope?.name ?? operation.envelopeId)}</span>` +
-      `<span class="op-effect">${esc(summaries.join(" · ") || "no primary effect or output recovered")}</span>` +
+      `<span class="op-effect">${esc(effect)}</span>` +
       `${pathStatus(operation.completeness)}</li>`;
   }).join("");
 
@@ -192,10 +259,19 @@ function renderArea(area, ctx) {
 
   let detail = "";
   if (open) {
+    const primary = area.operations.filter((item) => item.prominence === "primary");
+    const supporting = area.operations.filter((item) => item.prominence !== "primary");
+    const primaryHtml = (primary.length ? primary : area.operations)
+      .map((operation) => renderOperation(operation, ctx)).join("");
+    const supportingHtml = primary.length && supporting.length
+      ? `<details class="supporting-observations"><summary class="supporting-heading">Supporting observations</summary>` +
+        supporting.map((operation) => renderOperation(operation, ctx)).join("") +
+        `</details>`
+      : supporting.map((operation) => renderOperation(operation, ctx)).join("");
     detail = `<div class="card-detail area-detail">` +
-      `<p class="reach">${esc(kindLabel(anchor?.kind ?? "surface"))} · ${area.operationCount} ${area.operationCount === 1 ? "operation" : "operations"}` +
-      `${area.completeness === "partial" ? " · partial" : ""}</p>` +
-      area.operations.map((operation) => renderOperation(operation, ctx)).join("") +
+      summary +
+      primaryHtml +
+      supportingHtml +
       (shared ? `<section class="area-shared"><h3>Uses shared system parts</h3><div class="core-links">${shared}</div></section>` : "") +
       `</div>`;
   }
@@ -203,43 +279,58 @@ function renderArea(area, ctx) {
   return `<article class="area-block${open ? " open" : ""}${changed ? " area-changed" : ""}">` +
     `<button class="area-head" data-expand="${esc(area.id)}" aria-expanded="${open}">` +
     `<span class="area-title"><strong>${esc(anchor?.name ?? area.anchorElementId)}</strong>` +
-    `<small>${area.operationCount} ${area.operationCount === 1 ? "operation" : "operations"}` +
-    `${area.completeness === "partial" ? " · partial" : ""}</small></span>` +
+    `<small class="area-role">${esc(role)}</small></span>` +
     `${changed ? changeBadge() : ""}` +
     `<span class="chevron">⌄</span></button>` +
-    (open ? detail : `<ul class="area-preview">${preview}</ul>${shared ? `<div class="core-links landing">${shared}</div>` : ""}`) +
+    (open ? detail : `${summary}<ul class="area-preview">${preview}</ul>${shared ? `<div class="core-links landing"><span class="shared-label">Uses shared parts</span>${shared}</div>` : ""}`) +
     `</article>`;
 }
 
 function renderOperation(operation, ctx) {
   const {
-    byId, envelopesById, claimsById, changedElements, changedClaims,
-    relationLabel, stateMark, changeBadge, pathStatus, claimRow, esc,
+    byId, envelopesById, pathsById, claimsById, changedElements, changedClaims,
+    changeBadge, pathStatus, claimRow, esc,
   } = ctx;
   const envelope = envelopesById.get(operation.envelopeId);
   const changed = operationIsChanged(operation, changedElements, changedClaims);
   const sections = [
-    ["When", operation.conditionClaimIds],
     ["Changes", operation.primaryEffectClaimIds],
     ["Uses", operation.supportingEffectClaimIds],
     ["Produces", operation.outputClaimIds],
+    ["When", operation.conditionClaimIds],
     ["May result", operation.outcomeClaimIds],
     ["Unresolved", operation.unresolvedClaimIds],
   ];
-  const path = (envelope?.behaviorIds ?? operation.behaviorIds).map((id) => byId.get(id)?.name).filter(Boolean);
+  const paths = (operation.pathIds ?? []).map((id) => pathsById.get(id)).filter(Boolean);
   return `<section class="behavior area-operation${changed ? " behavior-changed" : ""}">` +
     `<h3>${esc(envelope?.name ?? operation.envelopeId)}${changed ? changeBadge() : ""}${pathStatus(operation.completeness)}</h3>` +
-    (path.length ? `<p class="reach">${esc(path.join(" → "))}</p>` : "") +
-    sections.filter(([, ids]) => ids.length).map(([label, ids]) =>
-      `<section class="envelope-section"><h3>${label}</h3>` +
-      ids.map((id) => claimsById.get(id)).filter(Boolean).map((claim) => claimRow(claim, byId)).join("") +
-      `</section>`).join("") +
+    renderObservedPaths(paths, byId, claimsById, claimRow, esc) +
+    sections.map(([label, ids]) => {
+      const claims = dedupeClaimsBySummary(ids.map((id) => claimsById.get(id)).filter(Boolean));
+      if (!claims.length) return "";
+      return `<section class="envelope-section"><h3>${label}</h3>` +
+        claims.map((claim) => claimRow(claim, byId)).join("") +
+        `</section>`;
+    }).join("") +
     `</section>`;
+}
+
+function renderObservedPaths(paths, byId, claimsById, claimRow, esc) {
+  if (!paths.length) return `<p class="reach">No complete observed path was recovered.</p>`;
+  return paths.map((path) => {
+    const steps = path.steps.map((step) => {
+      const behavior = byId.get(step.behaviorId);
+      const via = step.viaClaimId ? claimsById.get(step.viaClaimId) : null;
+      return `<li><strong>${esc(behavior?.name ?? step.behaviorId)}</strong>` +
+        (via ? claimRow(via, byId) : "") + `</li>`;
+    }).join("");
+    return `<section class="observed-path"><h4>Observed path</h4><ol>${steps}</ol></section>`;
+  }).join("");
 }
 
 function renderSharedCore(core, ctx) {
   const {
-    projection, byId, envelopesById, claimsById, expandedId, changedElements, changedClaims,
+    areasById, byId, envelopesById, claimsById, expandedId, changedElements, changedClaims,
     changeBadge, pathStatus, claimRow, esc,
   } = ctx;
   const open = expandedId === core.id;
@@ -247,7 +338,7 @@ function renderSharedCore(core, ctx) {
   const label = sharedCoreLabel(core.anchorElementIds, byId, { compact: !open });
   const fullLabel = sharedCoreLabel(core.anchorElementIds, byId);
   const usedBy = core.usedByAreaIds.map((areaId) => {
-    const area = projection.areas.find((item) => item.id === areaId);
+    const area = areasById.get(areaId);
     const name = byId.get(area?.anchorElementId)?.name ?? areaId;
     return `<button class="core-link" data-expand="${esc(areaId)}">${esc(name)}</button>`;
   }).join("");
