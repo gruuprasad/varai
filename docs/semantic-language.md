@@ -290,6 +290,30 @@ The Application lens represents internal Behaviors with stable system-level mean
 
 Varai does not promote every function, class, helper, or call-graph node. Internal code becomes an Application Behavior only when deterministic evidence supports a meaningful boundary that a user can reason about independently.
 
+#### Aggregate-member operations
+
+A common application pattern is a stable operation that changes an aggregate by creating,
+changing, or removing one of its contained resources. This is not tied to a particular domain or
+web framework. For example:
+
+```text
+Catalog Document contains Item.
+POST /catalog/items invokes Create Item.
+Create Item creates Item.
+Create Item changes Catalog Document.
+```
+
+Varai may recover this pattern when independent evidence agrees:
+
+- a resolved internal operation accepts a typed aggregate;
+- the aggregate's typed structure contains the candidate resource;
+- operation, result-contract, or interface-resource vocabulary identifies one unique member.
+
+A REST-shaped path may contribute resource vocabulary and request scope, but it cannot establish
+an Application Behavior or domain resource by itself. Framework paths and call-graph nodes remain
+private analyzer evidence; the emitted claims use only kernel relationships. If multiple contained
+resources remain equally plausible, Varai emits no member-effect claim.
+
 ### Provisional AI lens
 
 AI-oriented systems fit the kernel without new relationships. Model, Prompt, Context, Memory, Tool, Guardrail, Agent, and Evaluation are candidate lens-specific Element kinds. Existing relationships describe their wiring and effects.

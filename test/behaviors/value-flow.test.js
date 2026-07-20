@@ -7,6 +7,7 @@ import { createScanContext } from "../../src/scanners/context.js";
 import { queryTree } from "../../src/scanners/treesitter.js";
 import { createResolver } from "../../src/scanners/behaviors/resolver.js";
 import { traceBody } from "../../src/scanners/behaviors/body.js";
+import { createValueFlow, declarationV } from "../../src/scanners/behaviors/value-flow.js";
 
 async function fnAndCtx(dir, file) {
   const ctx = createScanContext(dir);
@@ -34,6 +35,21 @@ def update_structural_type(document):
     document.update()
     return document
 `;
+
+test("resolved local bindings survive recursive resolution budget exhaustion", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-vf-budget-"));
+  await writeFile(join(dir, "h.py"), "def route():\n    return document\n");
+  const { fn, ctx } = await fnAndCtx(dir, "h.py");
+  const resolver = createResolver(["h.py"], ctx);
+  const flow = createValueFlow({ resolver, budget: 0 });
+  const identifier = fn.childForFieldName("body").descendantsOfType("identifier")
+    .find((node) => node.text === "document");
+  const expected = declarationV("Document", { id: "document" });
+  const env = new Map([["document", expected]]);
+
+  assert.equal((await flow.evalExpr(identifier, env, "h.py")).name, "Document");
+  assert.equal((await flow.evalExpr(identifier, env, "h.py")).name, "Document");
+});
 
 test("value flow reaches the aggregate through unannotated wrapper, callable value, and closure", async () => {
   const dir = await mkdtemp(join(tmpdir(), "varai-vf-real-"));

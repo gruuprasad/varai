@@ -189,6 +189,43 @@ test("traces a callback prop into a uniquely wired parent callback", async () =>
   ]);
 });
 
+test("traces a directly forwarded callback prop into its production binding", async () => {
+  const behaviors = await traceFiles({
+    "src/components/Canvas.tsx": `export function Canvas({ onCanvasClick }) {
+      return <Stage onClick={onCanvasClick} />;
+    }`,
+    "src/components/Workspace.tsx": `import { Canvas } from "./Canvas";
+      export function Workspace() {
+        const handleCanvasClick = () => apiRequest("/api/canvas", { method: "POST" });
+        return <Canvas onCanvasClick={handleCanvasClick} />;
+      }`,
+  });
+  const canvas = behaviors.find((item) => item.door.component === "Canvas");
+
+  assert.deepEqual(canvas.invokes.map(({ method, path: routePath }) => ({ method, path: routePath })), [
+    { method: "POST", path: "/api/canvas" },
+  ]);
+});
+
+test("test-only component wiring does not make the production callback ambiguous", async () => {
+  const behaviors = await traceFiles({
+    "src/components/DownloadButton.tsx": `export function DownloadButton({ onDownload }) {
+      return <button onClick={() => onDownload()}>Download</button>;
+    }`,
+    "src/components/Workspace.tsx": `import { DownloadButton } from "./DownloadButton";
+      export function Workspace() {
+        return <DownloadButton onDownload={() => apiRequest("/api/export", { method: "POST" })} />;
+      }`,
+    "src/components/DownloadButton.test.tsx": `import { DownloadButton } from "./DownloadButton";
+      export function Harness() { return <DownloadButton onDownload={() => fakeDownload()} />; }`,
+  });
+  const download = behaviors.find((item) => item.door.component === "DownloadButton");
+
+  assert.deepEqual(download.invokes.map(({ method, path: routePath }) => ({ method, path: routePath })), [
+    { method: "POST", path: "/api/export" },
+  ]);
+});
+
 test("traces a callback prop through a uniquely resolved custom-hook member", async () => {
   const behaviors = await traceFiles({
     "src/components/DownloadButton.tsx": `export function DownloadButton({ onDownload }) {
@@ -274,4 +311,71 @@ test("continues through a uniquely typed ref-backed hook API", async () => {
   assert.deepEqual(draw.invokes.map(({ method, path: routePath }) => ({ method, path: routePath })), [
     { method: "POST", path: "/api/walls" },
   ]);
+});
+
+test("continues a multi-event draft through preview and injected commit fallbacks", async () => {
+  const behaviors = await traceFiles({
+    "src/components/Canvas.tsx": `export function Canvas({ onCanvasClick }) {
+      return <button onClick={() => onCanvasClick()}>Draw wall</button>;
+    }`,
+    "src/components/Workspace.tsx": `import { Canvas } from "./Canvas";
+      import { addWallChain, previewConsequence } from "../api/walls";
+      type WallToolApi = ReturnType<typeof useWallTool>;
+      function useWallTool(args) {
+        const addChain = args.addChain ?? addWallChain;
+        const preview = args.preview ?? previewConsequence;
+        const commitDraft = async (result) => mutate(() => addChain("job", result));
+        const finishDraft = async () => {
+          const result = await preview("job");
+          if (result.requires_review) {
+            setPending({ commit: async () => commitDraft(result) });
+            return;
+          }
+          await commitDraft(result);
+        };
+        const handleCanvasClick = async () => {
+          setDraftPoints((points) => [...points, point]);
+          if (shouldClose) await finishDraft();
+        };
+        return { handleCanvasClick, finishDraft };
+      }
+      function usePlanInteraction() {
+        const wallToolRef = useRef<WallToolApi | null>(null);
+        const handleCanvasClick = async () => wallToolRef.current?.handleCanvasClick();
+        return { handleCanvasClick };
+      }
+      export function Workspace() {
+        const interaction = usePlanInteraction();
+        return <Canvas onCanvasClick={() => interaction.handleCanvasClick()} />;
+      }`,
+    "src/api/walls.ts": `export async function previewConsequence(jobId) {
+      return apiRequest(\`/api/building-model/${"${jobId}"}/consequence-preview\`, { method: "POST" });
+    }
+    export async function addWallChain(jobId, body) {
+      return apiRequest(\`/api/building-model/${"${jobId}"}/walls/chain\`, { method: "POST", body });
+    }`,
+  });
+  const draw = behaviors.find((item) => item.door.component === "Canvas");
+
+  assert.deepEqual(draw.invokes.map(({ method, path: routePath }) => ({ method, path: routePath })), [
+    { method: "POST", path: "/api/building-model/job/consequence-preview" },
+    { method: "POST", path: "/api/building-model/job/walls/chain" },
+  ]);
+  assert.ok(draw.invokes.every((invocation) => invocation.implementationPath.length >= 7));
+});
+
+test("separates mode-dispatched canvas behaviors by their observed tool condition", async () => {
+  const behaviors = await trace(`export function Canvas({ tool }) {
+    const handleCanvasClick = async () => {
+      if (tool === "wall") { await apiRequest("/api/walls", { method: "POST" }); return; }
+      if (tool === "stair") { await apiRequest("/api/stairs", { method: "POST" }); return; }
+    };
+    return <Stage onClick={handleCanvasClick} />;
+  }`);
+
+  const wall = behaviors.find((item) => item.door.action === "Wall on canvas");
+  const stair = behaviors.find((item) => item.door.action === "Stair on canvas");
+  assert.deepEqual(wall.invokes.map((item) => item.path), ["/api/walls"]);
+  assert.deepEqual(stair.invokes.map((item) => item.path), ["/api/stairs"]);
+  assert.equal(wall.guards.at(-1).condition, 'tool === "wall"');
 });

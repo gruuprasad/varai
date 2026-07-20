@@ -1,7 +1,7 @@
 import path from "node:path";
 
 const LANG_FOR_EXT = { ".js": "javascript", ".jsx": "javascript", ".ts": "tsx", ".tsx": "tsx" };
-const MAX_CALL_DEPTH = 6;
+const MAX_CALL_DEPTH = 8;
 
 export async function traceFrontendInteractions(files, ctx) {
   const trees = new Map();
@@ -17,6 +17,7 @@ export async function traceFrontendInteractions(files, ctx) {
   const callbackProps = indexCallbackProps(trees);
   const hookBindings = indexHookBindings(trees);
   const refHookBindings = indexRefHookBindings(trees);
+  const callableAliases = indexCallableAliases(trees, functions);
 
   const grouped = new Map();
   for (const [file, tree] of trees) {
@@ -27,7 +28,7 @@ export async function traceFrontendInteractions(files, ctx) {
         const callback = callbackFunction(node.childForFieldName("arguments")?.namedChildren?.[0]);
         if (!callback) return;
         const rootEvidence = { file, line: node.startPosition.row + 1 };
-        const invocations = apiInvocations(callback, file, rootEvidence, functions, callbackProps, hookBindings, refHookBindings, component.name);
+        const invocations = apiInvocations(callback, file, rootEvidence, functions, callbackProps, hookBindings, refHookBindings, callableAliases, component.name);
         if (!invocations.length) return;
         const action = firstCalledIdentifier(callback) ?? "Load";
         const key = JSON.stringify([file, component.name, "lifecycle", action]);
@@ -75,16 +76,55 @@ export async function traceFrontendInteractions(files, ctx) {
           }
           guard.evidence.push({ file, line: condition.line });
         }
-        const handler = event.node ?? localHandler(component.node, event.action);
+        const handler = localHandler(component.node, event.action) ?? event.node;
         for (const invocation of handler
-          ? apiInvocations(handler, file, rootEvidence, functions, callbackProps, hookBindings, refHookBindings, component.name)
+          ? apiInvocations(handler, file, rootEvidence, functions, callbackProps, hookBindings, refHookBindings, callableAliases, component.name)
           : []) {
           if (!behavior.invokes.some((item) => item.method === invocation.method && item.path === invocation.path)) behavior.invokes.push(invocation);
         }
       });
     }
   }
-  return [...grouped.values()];
+  return [...grouped.values()].flatMap(expandContextualBehaviors);
+}
+
+function expandContextualBehaviors(behavior) {
+  const contextual = new Map();
+  const unscoped = [];
+  for (const invocation of behavior.invokes) {
+    const context = (invocation.conditions ?? []).map((condition) => modeContext(condition)).find(Boolean);
+    if (!context) { unscoped.push(invocation); continue; }
+    const values = contextual.get(context.key) ?? { context, invocations: [] };
+    values.invocations.push(invocation);
+    contextual.set(context.key, values);
+  }
+  if (!contextual.size) return [behavior];
+  const result = [];
+  for (const { context, invocations } of contextual.values()) {
+    const evidence = invocations.flatMap((item) => item.conditions ?? [])
+      .filter((item) => item.text === context.condition).map((item) => item.evidence);
+    result.push({
+      ...behavior,
+      door: { ...behavior.door, action: `${humanize(context.value)} on canvas` },
+      guards: [...behavior.guards, {
+        kind: "visible_when", condition: context.condition,
+        evidence: evidence.length ? evidence : behavior.door.evidence, layer: "ast",
+      }],
+      invokes: invocations,
+    });
+  }
+  if (unscoped.length) result.push({ ...behavior, invokes: unscoped });
+  return result;
+}
+
+function modeContext(condition) {
+  const match = condition.text.match(/\b((?:[A-Za-z_$][\w$]*\.)*(?:tool|mode|kind))\s*={2,3}\s*["']([\w-]+)["']/);
+  if (!match) return null;
+  return { key: `${match[1]}:${match[2]}`, value: match[2], condition: condition.text };
+}
+
+function humanize(value) {
+  return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function interactionBinding(node, attributes) {
@@ -135,6 +175,10 @@ function indexCallbackProps(trees) {
       }
     });
   }
+  for (const [key, entries] of result) {
+    const production = entries.filter((entry) => !isTestFile(entry.file));
+    if (production.length) result.set(key, production);
+  }
   return result;
 }
 
@@ -184,6 +228,31 @@ function indexRefHookBindings(trees) {
   return result;
 }
 
+function indexCallableAliases(trees, functions) {
+  const result = new Map();
+  for (const [file, tree] of trees) {
+    walk(tree.rootNode, (node) => {
+      if (node.type !== "variable_declarator") return;
+      const name = node.childForFieldName("name")?.text;
+      const value = node.childForFieldName("value");
+      if (!name || !value || callbackFunction(value) || value.type === "call_expression") return;
+      const targets = new Set();
+      walk(value, (candidate) => {
+        if (candidate.type !== "identifier" || candidate === value) return;
+        if (isMemberProperty(candidate) || candidate.text === name) return;
+        if ((functions.get(candidate.text) ?? []).length === 1) targets.add(candidate.text);
+      });
+      if (!targets.size) return;
+      result.set(`${file}:${enclosingFunctionName(node) ?? ""}:${name}`, targets);
+    });
+  }
+  return result;
+}
+
+function isMemberProperty(node) {
+  return node.parent?.type === "member_expression" && node.parent.childForFieldName("property") === node;
+}
+
 function enclosingFunctionName(node) {
   let current = node.parent;
   while (current) {
@@ -216,7 +285,7 @@ function isLifecycleEffect(node) {
 
 function eventHandler(expression, openingNode) {
   const child = expressionValue(expression);
-  if (child?.type === "identifier") return { action: child.text, line: expression.startPosition.row + 1, node: null };
+  if (child?.type === "identifier") return { action: child.text, line: expression.startPosition.row + 1, node: child };
   if (!["arrow_function", "function_expression"].includes(child?.type)) return null;
   return {
     action: controlLabel(openingNode) || firstCalledIdentifier(child) || "Action",
@@ -327,29 +396,53 @@ function localHandler(componentNode, name) {
   return found;
 }
 
-function apiInvocations(handler, file, rootEvidence, functions, callbackProps, hookBindings, refHookBindings, componentName) {
+function apiInvocations(handler, file, rootEvidence, functions, callbackProps, hookBindings, refHookBindings, callableAliases, componentName) {
   const result = [];
   const visited = new Set();
-  function trace(node, currentFile, implementationPath, depth, bindings = new Map()) {
+  function trace(node, currentFile, implementationPath, depth, bindings = new Map(), currentOwner = componentName, pathConditions = []) {
     if (depth > MAX_CALL_DEPTH) return;
-    walkReachableCalls(node, bindings, (call) => {
+    if (node.type === "identifier" && /^on[A-Z]/.test(node.text)) {
+      const propBindings = callbackProps.get(`${componentName}:${node.text}`) ?? [];
+      if (propBindings.length === 1) {
+        const binding = propBindings[0];
+        trace(binding.node, binding.file, implementationPath, depth + 1, bindings, componentName, pathConditions);
+      }
+      return;
+    }
+    if (node.type === "identifier") {
+      const candidates = callableCandidates(functions.get(node.text) ?? [], currentFile);
+      if (candidates.length === 1) {
+        const target = candidates[0];
+        const key = `${target.file}:${target.owner ?? ""}:${target.name}:[]`;
+        if (!visited.has(key)) {
+          visited.add(key);
+          trace(target.node, target.file, implementationPath, depth + 1, bindings, target.owner, pathConditions);
+        }
+      }
+      return;
+    }
+    walkReachableCalls(node, bindings, (call, conditions) => {
       const fn = call.childForFieldName("function");
       const args = call.childForFieldName("arguments")?.namedChildren ?? [];
       if (!fn) return;
       const evidence = { file: currentFile, line: call.startPosition.row + 1 };
       const transport = transportInvocation(fn, args, bindings);
       if (transport) {
-        result.push({ ...transport, evidence, implementationPath: [...implementationPath, evidence], layer: "ast" });
+        result.push({ ...transport, evidence, implementationPath: [...implementationPath, evidence], conditions, layer: "ast" });
         return;
       }
       let candidates = [];
       if (fn.type === "identifier") {
-        candidates = functions.get(fn.text) ?? [];
+        candidates = callableCandidates(functions.get(fn.text) ?? [], currentFile);
+        if (candidates.length !== 1) {
+          const aliases = callableAliases.get(`${currentFile}:${currentOwner ?? ""}:${fn.text}`) ?? new Set();
+          candidates = callableCandidates([...aliases].flatMap((name) => functions.get(name) ?? []), currentFile);
+        }
         if (candidates.length !== 1 && /^on[A-Z]/.test(fn.text)) {
           const propBindings = callbackProps.get(`${componentName}:${fn.text}`) ?? [];
           if (propBindings.length === 1) {
             const binding = propBindings[0];
-            trace(binding.node, binding.file, [...implementationPath, evidence], depth + 1, bindArguments(binding.node, args, bindings));
+            trace(binding.node, binding.file, [...implementationPath, evidence], depth + 1, bindArguments(binding.node, args, bindings), componentName, conditions);
           }
           return;
         }
@@ -357,7 +450,8 @@ function apiInvocations(handler, file, rootEvidence, functions, callbackProps, h
         const property = fn.childForFieldName("property")?.text;
         const hook = hookOwner(fn.childForFieldName("object"), currentFile, hookBindings)
           ?? refHookOwner(fn.childForFieldName("object"), currentFile, refHookBindings);
-        if (property && hook) candidates = (functions.get(property) ?? []).filter((item) => item.owner === hook);
+        if (property && hook) candidates = callableCandidates(
+          (functions.get(property) ?? []).filter((item) => item.owner === hook), currentFile);
       } else return;
       if (candidates.length !== 1) return;
       const target = candidates[0];
@@ -365,11 +459,23 @@ function apiInvocations(handler, file, rootEvidence, functions, callbackProps, h
       const key = `${target.file}:${target.owner ?? ""}:${target.name}:${bindingKey(nextBindings)}`;
       if (visited.has(key)) return;
       visited.add(key);
-      trace(target.node, target.file, [...implementationPath, evidence], depth + 1, nextBindings);
-    });
+      trace(target.node, target.file, [...implementationPath, evidence], depth + 1, nextBindings, target.owner, conditions);
+    }, pathConditions, currentFile);
   }
   trace(handler, file, [rootEvidence], 0);
   return result;
+}
+
+function callableCandidates(entries, currentFile) {
+  if (entries.length <= 1) return entries;
+  const local = entries.filter((entry) => entry.file === currentFile);
+  if (local.length === 1) return local;
+  const production = entries.filter((entry) => !isTestFile(entry.file));
+  return production.length ? production : entries;
+}
+
+function isTestFile(file) {
+  return /(?:^|\/)(?:__tests__\/|test\/)|(?:\.test|\.spec)\.[cm]?[jt]sx?$/.test(file);
 }
 
 function callbackParameters(node) {
@@ -458,25 +564,49 @@ function routePattern(node, bindings = new Map()) {
   }).replace(/\/{2,}/g, "/");
 }
 
-function walkReachableCalls(node, bindings, visit) {
+function walkReachableCalls(node, bindings, visit, conditions = [], currentFile = "") {
   if (node.type === "ternary_expression") {
     const selected = selectedBranch(node.childForFieldName("condition"), bindings);
     if (selected !== null) {
       const branch = node.childForFieldName(selected ? "consequence" : "alternative");
-      if (branch) walkReachableCalls(branch, bindings, visit);
+      if (branch) walkReachableCalls(branch, bindings, visit, conditions, currentFile);
       return;
     }
+    const condition = node.childForFieldName("condition");
+    const consequence = node.childForFieldName("consequence");
+    const alternative = node.childForFieldName("alternative");
+    if (consequence) walkReachableCalls(consequence, bindings, visit,
+      [...conditions, conditionObservation(condition, false, currentFile)], currentFile);
+    if (alternative) walkReachableCalls(alternative, bindings, visit,
+      [...conditions, conditionObservation(condition, true, currentFile)], currentFile);
+    return;
   }
   if (node.type === "if_statement") {
     const selected = selectedBranch(node.childForFieldName("condition"), bindings);
     if (selected !== null) {
       const branch = node.childForFieldName(selected ? "consequence" : "alternative");
-      if (branch) walkReachableCalls(branch, bindings, visit);
+      if (branch) walkReachableCalls(branch, bindings, visit, conditions, currentFile);
       return;
     }
+    const condition = node.childForFieldName("condition");
+    const consequence = node.childForFieldName("consequence");
+    const alternative = node.childForFieldName("alternative");
+    if (consequence) walkReachableCalls(consequence, bindings, visit,
+      [...conditions, conditionObservation(condition, false, currentFile)], currentFile);
+    if (alternative) walkReachableCalls(alternative, bindings, visit,
+      [...conditions, conditionObservation(condition, true, currentFile)], currentFile);
+    return;
   }
-  if (node.type === "call_expression") visit(node);
-  for (const child of node.namedChildren ?? []) walkReachableCalls(child, bindings, visit);
+  if (node.type === "call_expression") visit(node, conditions);
+  for (const child of node.namedChildren ?? []) walkReachableCalls(child, bindings, visit, conditions, currentFile);
+}
+
+function conditionObservation(node, negated, file) {
+  const text = normalizeExpression(node?.text ?? "unknown condition");
+  return {
+    text: negated ? negateExpression(text) : text,
+    evidence: { file, line: (node?.startPosition.row ?? 0) + 1 },
+  };
 }
 
 function selectedBranch(condition, bindings) {

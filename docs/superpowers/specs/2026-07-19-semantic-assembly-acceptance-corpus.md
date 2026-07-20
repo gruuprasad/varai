@@ -462,7 +462,7 @@ deliberately contrast an authoring gesture with a read-only inspection surface.
 
 ## Corpus execution: 2026-07-20
 
-Executed against the current Kalakar `main` worktree through System Model analyzer `0.12.0`. The
+Executed against the current Kalakar `main` worktree through System Model analyzer `0.13.0`. The
 passes added generalized HTML form, React lifecycle, `useCallback`, uniquely wired callback-prop,
 and custom-hook member continuation. Frontend transport classification was also tightened. No
 scenario labels or semantic-region logic were added.
@@ -474,7 +474,7 @@ scenario labels or semantic-region logic were added.
 | Render building model | Partial | Render action -> render operation plus manifest check -> `BuildingModelDocument`; response and failures are present | Bind written GLB as an Artifact and classify the manifest check as part of the same action without flattening its contracts/effects |
 | Reset password | Open | Form submit -> reset-password operation; token visibility, request, and response are present | Bind query result `row` to `PasswordResetToken`, recover `User` field mutation and token removal, and lift explicit validation/failure branches |
 | Export plan drawing | Partial | Explicit Download DXF -> plan DXF -> `BuildingModelDocument`; response and 400/404/409 are present. The selected literal survives callback, hook, branch, and route-template boundaries | Bind PDF/DXF/DWG files as Artifacts and reduce derived implementation reads beneath the envelope |
-| Draw wall | Missing envelope | Canvas click reaches `usePlanInteraction`; uniquely typed ref-backed hook APIs are now resolvable in isolation, but the Kalakar behavior is a multi-event draft/finish/preview/commit protocol rather than one call chain | Model bounded interaction protocols so draft clicks and an explicit/automatic finish can assemble without claiming every click commits a wall |
+| Draw wall | Credible / partial | `Wall on canvas` is isolated from the shared canvas dispatcher by the observed `tool === "wall"` condition, then reaches consequence preview plus wall-chain/closed-shell operations and `BuildingModelDocument` | Reduce unresolved backend fan-out effects and distinguish chain from closed-shell mode without implying that every draft click commits |
 | Inspect quantities | Credible / closed | Reactive load -> quantities plus material-catalog operations -> `BuildingModelDocument`; both response contracts and 409 outcomes are present | Distinguish automatic load from manual Refresh in display and reduce derived-plan implementation reads beneath the envelope |
 
 ### Findings
@@ -490,6 +490,42 @@ scenario labels or semantic-region logic were added.
    Password. A UI-to-API join alone does not make an envelope semantically closed.
 5. Region experiments should remain deferred until the corpus contains several credible envelopes
    from mutation, read/inspection, artifact production, and form workflows—not only direct buttons.
-6. Literal argument flow and uniquely typed ref-backed hook continuation are now available. The
-   remaining Wall gap is no longer a missing call edge: it is behavioral assembly across a stateful,
-   multi-event protocol (draft points -> finish -> preview/review -> commit).
+6. Literal argument flow, direct callback forwarding, production-over-test wiring, scoped callable
+   fallbacks, and uniquely typed ref-backed hook continuation now recover the bounded Wall
+   preview-to-commit alternatives. The observed tool condition keeps Wall separate from stair, trim,
+   dimension, beam, and slab canvas actions; unresolved backend fan-out keeps it honestly partial.
+
+## Application-operation increment: 2026-07-20
+
+System Model analyzer `0.14.0` adds one framework-neutral lift for aggregate-member operations:
+
+```text
+typed aggregate parameter + typed containment + unique operation/result/interface match
+    -> Application operation -> contained Resource effect + aggregate effect
+```
+
+The neutral acceptance fixture uses `CatalogDocument -> Catalog -> Item`; no Kalakar name appears
+in the analyzer. REST paths contribute resource vocabulary only after a stable internal operation
+and typed containment exist. Route vocabulary alone does not create an Application operation.
+
+The Kalakar corpus now recovers seven Application operations. The Wall authoring path includes:
+
+```text
+Plan Canvas: Wall on canvas
+  -> POST /api/v1/building-model/{job_id}/walls/chain
+  -> Create Wall Chain
+       creates Wall
+       changes BuildingModelDocument
+```
+
+The wall-chain and closed-shell alternatives are closed paths. Consequence preview remains a
+separate partial alternative, as it does not itself establish the authored Wall.
+
+Three generic analyzer gaps were exposed and fixed during corpus execution:
+
+1. A costly earlier branch must not erase already-resolved local bindings when recursive analysis
+   reaches its work budget.
+2. Test-local declarations are fallback candidates when a production declaration of the same name
+   exists; multiple production declarations remain ambiguous.
+3. Exact lexical coverage ranks `Wall` above `CompoundWall`, `WallJoin`, and other partial token
+   matches when operation, result, and interface evidence agree.

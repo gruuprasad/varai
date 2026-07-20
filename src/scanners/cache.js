@@ -2,7 +2,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, readFile, rename } from "node:fs/promises";
 
-export const EXTRACTOR_VERSION = 16; // Continue through uniquely typed ref-backed hook APIs
+export const EXTRACTOR_VERSION = 18; // Recover typed aggregate-member application operations
 
 const CACHE_FORMAT_VERSION = 1;
 

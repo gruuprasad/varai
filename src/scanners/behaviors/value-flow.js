@@ -84,7 +84,19 @@ export function nearestFunction(node) {
 // Descendant nodes of a type that belong directly to fnNode's scope — i.e. not
 // nested inside a deeper function_definition.
 export function directDescendants(fnNode, type) {
-  return fnNode.descendantsOfType(type).filter((node) => nearestFunction(node) === fnNode);
+  // Native tree-sitter preserves wrapper identity while web-tree-sitter may
+  // return a fresh JS wrapper when walking through `parent`. Compare syntax
+  // coordinates as the backend-neutral node identity.
+  return fnNode.descendantsOfType(type).filter((node) => sameSyntaxNode(nearestFunction(node), fnNode));
+}
+
+function sameSyntaxNode(left, right) {
+  if (left === right) return true;
+  if (!left || !right || left.type !== right.type) return false;
+  return left.startPosition.row === right.startPosition.row &&
+    left.startPosition.column === right.startPosition.column &&
+    left.endPosition.row === right.endPosition.row &&
+    left.endPosition.column === right.endPosition.column;
 }
 
 export function createValueFlow({ resolver, budget = 6000 } = {}) {
@@ -131,11 +143,14 @@ export function createValueFlow({ resolver, budget = 6000 } = {}) {
   }
 
   async function evalExpr(node, env, file) {
-    if (!node || work++ > budget) return unknownV("budget");
+    if (!node) return unknownV("missing-expression");
+    // Environment bindings were already resolved while the scope was built.
+    // Reading one is constant work and must remain available after a costly
+    // earlier sibling branch spends the recursive resolution budget.
+    if (node.type === "identifier" && env.has(node.text)) return env.get(node.text);
+    if (work++ > budget) return unknownV("budget");
     switch (node.type) {
       case "identifier": {
-        const bound = env.get(node.text);
-        if (bound) return bound;
         const asClass = await classFor(file, node.text);
         if (asClass) return asClass;
         const asCallable = await resolveFreeCallable(node.text, file);

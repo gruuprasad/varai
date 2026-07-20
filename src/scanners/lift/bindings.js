@@ -1,3 +1,5 @@
+import { bindApplicationOperation } from "./application-operations.js";
+
 const INTERACTIONS = ["reads", "writes"];
 const CONVERGENCE_MAX_TRACE_DEPTH = 3;
 
@@ -42,9 +44,25 @@ export function bindBehaviorReferents(behaviors, registry) {
         return { ...clause, bindingState: "unverified" };
       });
     }
+    result.applicationCalls = (behavior.applicationCalls ?? [])
+      .map((candidate) => bindApplicationOperation({
+        ...candidate,
+        interfaceTerms: restResourceTerms(behavior.door),
+      }, registry))
+      .filter(Boolean);
     return result;
   });
   return { behaviors: bound, convergence, diagnostics };
+}
+
+function restResourceTerms(door = {}) {
+  if (!door.path || !door.method) return [];
+  return String(door.path)
+    .split("/")
+    .filter((segment) => segment && !/[{}:*]/.test(segment))
+    .flatMap((segment) => segment.split(/[^A-Za-z0-9]+/))
+    .map((term) => term.toLowerCase())
+    .filter((term) => term && term !== "api" && !/^v\d+$/.test(term) && !/^\d+$/.test(term));
 }
 
 export function doorKey(door = {}) {

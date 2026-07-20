@@ -1,4 +1,4 @@
-import { classifyAttributeEffect, classifyNamedEffect, isFileWriteName, operationAccess } from "./effects.js";
+import { classifyAttributeEffect, classifyNamedEffect, isFileWriteName, operationAccess, operationEffectRelation } from "./effects.js";
 import { implementationPath } from "../lift/provenance.js";
 import { privateNodeId } from "../lift/implementation-graph.js";
 import { createValueFlow, callableTargets, bindingSignature, directDescendants } from "./value-flow.js";
@@ -7,7 +7,7 @@ const STATUS_RE = /HTTP_(\d{3})\b/;
 const MAX_TRACE_DEPTH = 8;
 
 export async function traceBody(fnNode, file, ctx, resolver, factIndex, options = {}) {
-  const acc = { reads: [], writes: [], fails: [], untraced: [], helperCalls: [], trunkCall: null };
+  const acc = { reads: [], writes: [], fails: [], untraced: [], helperCalls: [], trunkCall: null, applicationCalls: [] };
   const info = resolver.describeFunction(file, fnNode);
   // Prefer the scan-wide value-flow (shared memos); reset its per-body work
   // counter so the previous route's spend doesn't starve this one.
@@ -116,6 +116,26 @@ async function walk(info, env, ctx, resolver, factIndex, acc, flow, graph, depth
       ? implementationPath(path, callEvidence, { file: resolvedInfo.file, line: resolvedInfo.line, symbol: resolvedInfo.name })
       : path;
     if (namedEffect) await recordEffect(namedEffect, callEvidence, effectPath, file, resolver, acc, graph, currentId, depth);
+    const applicationRelation = resolvedInfo && depth <= 1 && semanticTarget
+      ? operationEffectRelation(resolvedInfo.name)
+      : null;
+    if (applicationRelation && isStableApplicationBoundary(resolvedInfo, semanticTarget)) {
+      const candidate = {
+        name: resolvedInfo.name,
+        file: resolvedInfo.file,
+        line: resolvedInfo.line,
+        relation: applicationRelation,
+        subject: semanticTarget,
+        returnTypes: resolvedInfo.returnTypes ?? [],
+        evidence: callEvidence,
+        implementationPath: effectPath,
+        layer: "semantic",
+      };
+      const key = `${candidate.file}:${candidate.line}:${candidate.subject}:${candidate.relation}`;
+      if (!acc.applicationCalls.some((item) => `${item.file}:${item.line}:${item.subject}:${item.relation}` === key)) {
+        acc.applicationCalls.push(candidate);
+      }
+    }
 
     if (resolvedInfo) {
       if (acc.trunkCall === null) acc.trunkCall = name;
@@ -159,6 +179,13 @@ async function walk(info, env, ctx, resolver, factIndex, acc, flow, graph, depth
       });
     }
   }
+}
+
+function isStableApplicationBoundary(info, subject) {
+  if (!info?.name || info.name.startsWith("_") || !subject) return false;
+  const operation = info.name.replace(/_in_model$|_to_model$|_from_model$|_model$/g, "");
+  if (!/^(?:add|apply|archive|create|delete|discard|edit|insert|merge|move|remove|replace|reset|set|update)_\w+/i.test(operation)) return false;
+  return [...info.parameters.values()].includes(subject);
 }
 
 function declName(value) {

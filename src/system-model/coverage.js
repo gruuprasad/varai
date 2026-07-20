@@ -13,6 +13,7 @@ const EXTRACTOR_CAPABILITIES = Object.freeze({
 const TRACE_CAPABILITIES = Object.freeze({
   api: ["api.input", "api.output", "api.condition", "api.effect", "api.failure"],
   ui: ["ui.action", "ui.availability"],
+  application: ["application.operation", "application.effect"],
 });
 
 function record(lens, capability, state, detail) {
@@ -42,6 +43,11 @@ export function buildCoverage(observations, populatedLenses) {
   }
   if (behaviors.some((item) => item.door?.kind !== "ui_action")) {
     for (const capability of TRACE_CAPABILITIES.api) output.push(record("api", capability, "partial", "The current analyzer does not cover every behavior shape"));
+  }
+  if (populatedLenses.has("application")) {
+    for (const capability of TRACE_CAPABILITIES.application) {
+      output.push(record("application", capability, "partial", "Stable typed aggregate-member operations only"));
+    }
   }
 
   for (const diagnostic of observations.diagnostics ?? []) {

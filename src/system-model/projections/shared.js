@@ -22,7 +22,7 @@ export function interfacesForBehavior(behavior, index) {
   const ids = new Set();
   if (behavior.roles.includes("interface")) ids.add(behavior.id);
   for (const claim of index.incoming.get(behavior.id) ?? []) {
-    if (claim.relation !== "offers") continue;
+    if (!["offers", "invokes"].includes(claim.relation)) continue;
     const source = index.elements.get(claim.sourceId);
     if (source?.roles.includes("interface")) ids.add(source.id);
   }

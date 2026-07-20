@@ -52,6 +52,7 @@ export async function traceBehaviors(repoPath, files, ctx, observations, options
       untraced: body.untraced,
       helperCalls: body.helperCalls,
       trunkCall: body.trunkCall,
+      applicationCalls: body.applicationCalls,
     });
   }
   return behaviors;

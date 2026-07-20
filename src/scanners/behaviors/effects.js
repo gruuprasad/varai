@@ -50,6 +50,13 @@ export function operationAccess(name) {
   if (READ_RE.test(semanticName)) return "read";
   return null;
 }
+export function operationEffectRelation(name) {
+  const semanticName = normalizeOperationName(name);
+  if (/^(?:add|create|insert)(?:_|$)/i.test(semanticName)) return "creates";
+  if (/^(?:delete|discard|remove)(?:_|$)/i.test(semanticName)) return "removes";
+  if (MUTATION_RE.test(semanticName)) return "changes";
+  return null;
+}
 export function returnRepresentsReadTarget(name) { return LOAD_RETURN_RE.test(name); }
 
 function normalizeOperationName(name) { return String(name ?? "").replace(/^_+/, ""); }

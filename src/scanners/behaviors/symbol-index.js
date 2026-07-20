@@ -126,6 +126,7 @@ export function createSymbolIndex(files, ctx, { workBudget = 10_000 } = {}) {
       name,
       line: node.startPosition.row + 1,
       returnType: normalizeTypeName(node.childForFieldName("return_type")?.text),
+      returnTypes: extractTypeNames(node.childForFieldName("return_type")?.text),
       parameters,
       node,
     };
@@ -139,6 +140,16 @@ export function createSymbolIndex(files, ctx, { workBudget = 10_000 } = {}) {
     describeFunction,
     stats: () => ({ work, workBudget, exhausted: work > workBudget }),
   };
+}
+
+export function extractTypeNames(value) {
+  const excluded = new Set([
+    "Annotated", "Any", "Dict", "Iterable", "List", "Literal", "Mapping",
+    "MutableMapping", "MutableSequence", "None", "Optional", "Sequence", "Set",
+    "Tuple", "dict", "list", "set", "tuple",
+  ]);
+  return [...new Set(String(value ?? "").match(/[A-Za-z_]\w*/g) ?? [])]
+    .filter((name) => !excluded.has(name));
 }
 
 function classBases(node) {

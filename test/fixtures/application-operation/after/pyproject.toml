@@ -1,0 +1,3 @@
+[project]
+name = "application-operation-after"
+dependencies = ["fastapi", "pydantic"]

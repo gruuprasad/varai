@@ -72,6 +72,27 @@ function conditionalRequirement(condition) {
   return `${readableCondition(match[2])} when ${readableCondition(match[1])}`;
 }
 
+function applicationOperationName(candidate) {
+  const subjectTerms = String(candidate.subject ?? "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  const boundaryTerms = new Set([...subjectTerms, "model"]);
+  let value = String(candidate.name ?? candidate.relation ?? "operation").replace(/^_+/, "");
+  const suffix = value.match(/_(?:in|to|from)_([a-z0-9]+)$/i);
+  if (suffix && boundaryTerms.has(suffix[1].toLowerCase())) value = value.slice(0, suffix.index);
+  return value
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((word) => word[0].toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function applicationOperationKey(candidate) {
+  return `${candidate.relation}:${candidate.subject}:${candidate.resource}:${String(candidate.name).toLowerCase()}`;
+}
+
 export function matchingApiBehavior(invocation, behaviors) {
   const exactKey = normalizeHttpKey(invocation.method, invocation.path);
   const candidates = behaviors.filter((candidate) => candidate.door?.kind !== "ui_action" &&
@@ -105,6 +126,9 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
   const claims = [];
   const promoted = new Map();
   const publicContracts = boundaryContractNames(behaviors);
+  const applicationCalls = behaviors.flatMap((behavior) => behavior.applicationCalls ?? []);
+  const applicationSubjectIds = new Set(applicationCalls.map((item) => item.subjectDeclarationId));
+  const applicationResourceIds = new Set(applicationCalls.map((item) => item.resourceDeclarationId));
 
   function ensureSubsystem(key, name) {
     if (!subsystems.has(key)) subsystems.set(key, { key, lens: key, name, qualifiers: {}, evidence: [] });
@@ -144,8 +168,10 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
   for (const declaration of registry.values()) {
     const converged = (convergence.get(declaration.id)?.size ?? 0) >= CONVERGENCE_MIN_BEHAVIORS;
     const boundaryContract = declaration.schema && publicContracts.has(declaration.name);
-    if (!declaration.persisted && !converged && !boundaryContract) continue;
-    const kind = declaration.persisted ? "entity" : boundaryContract ? "contract" : "aggregate";
+    const applicationSubject = applicationSubjectIds.has(declaration.id);
+    const containedResource = applicationResourceIds.has(declaration.id);
+    if (!declaration.persisted && !converged && !boundaryContract && !applicationSubject && !containedResource) continue;
+    const kind = declaration.persisted || containedResource ? "entity" : applicationSubject ? "aggregate" : boundaryContract ? "contract" : "aggregate";
     const key = declarationKey(declaration, kind);
     promoted.set(declaration.id, { key, kind, declaration });
     addElement({
@@ -157,8 +183,8 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
       name: declaration.name,
       evidence: [{ file: declaration.file, line: declaration.line, symbol: declaration.name }],
       observationMethod: declaration.persisted || declaration.schema ? "ast" : "semantic",
-      claimState: converged && !declaration.persisted && !boundaryContract ? "inferred" : "observed",
-      capability: declaration.persisted ? "data.entity" : boundaryContract ? "data.contract" : "data.aggregate",
+      claimState: containedResource || applicationSubject || (converged && !declaration.persisted && !boundaryContract) ? "inferred" : "observed",
+      capability: declaration.persisted || containedResource ? "data.entity" : applicationSubject ? "data.aggregate" : boundaryContract ? "data.contract" : "data.aggregate",
     });
     expose("data", kind, key, [{ file: declaration.file, line: declaration.line, symbol: declaration.name }], "model.lift", "contains");
 
@@ -176,6 +202,26 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
         });
       }
     }
+  }
+
+  const containmentPairs = new Set();
+  for (const candidate of applicationCalls) {
+    const owner = promoted.get(candidate.subjectDeclarationId);
+    const member = promoted.get(candidate.resourceDeclarationId);
+    if (!owner || !member || owner.key === member.key) continue;
+    const pair = `${owner.declaration.id}:${member.declaration.id}`;
+    if (containmentPairs.has(pair)) continue;
+    containmentPairs.add(pair);
+    addClaim({
+      source: source("data", owner.kind, owner.key),
+      relation: "contains",
+      target: reference("data", member.kind, member.key),
+      slot: `contains:${member.kind}:${member.key}`,
+      evidence: candidate.containmentEvidence,
+      observationMethod: "semantic",
+      claimState: "inferred",
+      capability: "application.effect",
+    });
   }
 
   function targetForClause(clause, valueType = "resource") {
@@ -211,6 +257,7 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
     }
   }
 
+  const emittedApplicationOperations = new Set();
   for (const behavior of behaviors) {
     const door = behavior.door ?? {};
     if (door.kind === "ui_action") {
@@ -266,6 +313,65 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
       evidence: [door.evidence].flat(), implementationPath: [door.evidence].flat(), observationMethod: "semantic", claimState: "observed", capability: "api.operation",
     });
     expose("api", "operation", key, [door.evidence].flat(), "api.operation");
+
+    for (const candidate of behavior.applicationCalls ?? []) {
+      const aggregate = promoted.get(candidate.subjectDeclarationId);
+      const resource = promoted.get(candidate.resourceDeclarationId);
+      if (!aggregate || !resource) continue;
+      const operationKey = applicationOperationKey(candidate);
+      const operationSource = source("application", "operation", operationKey);
+      const definitionEvidence = [{ file: candidate.file, line: candidate.line, symbol: candidate.name }];
+      if (!emittedApplicationOperations.has(operationKey)) {
+        emittedApplicationOperations.add(operationKey);
+        addElement({
+          subsystemKey: "application",
+          subsystemName: "Application",
+          key: operationKey,
+          kind: "operation",
+          roles: ["behavior"],
+          name: applicationOperationName(candidate),
+          evidence: definitionEvidence,
+          implementationPath: candidate.implementationPath,
+          observationMethod: "semantic",
+          claimState: candidate.bindingState,
+          capability: "application.operation",
+        });
+        expose("application", "operation", operationKey, definitionEvidence, "application.operation", "contains");
+        addClaim({
+          source: operationSource,
+          relation: candidate.relation,
+          target: reference("data", resource.kind, resource.key),
+          slot: `${candidate.relation}:${resource.key}`,
+          evidence: candidate.bindingEvidence,
+          implementationPath: candidate.implementationPath,
+          observationMethod: "semantic",
+          claimState: candidate.bindingState,
+          capability: "application.effect",
+        });
+        if (aggregate.declaration.id !== resource.declaration.id) addClaim({
+          source: operationSource,
+          relation: "changes",
+          target: reference("data", aggregate.kind, aggregate.key),
+          slot: `changes:${aggregate.key}`,
+          evidence: candidate.bindingEvidence,
+          implementationPath: candidate.implementationPath,
+          observationMethod: "semantic",
+          claimState: candidate.bindingState,
+          capability: "application.effect",
+        });
+      }
+      addClaim({
+        source: behaviorSource,
+        relation: "invokes",
+        target: reference("application", "operation", operationKey),
+        slot: `invoke:${operationKey}`,
+        evidence: [candidate.evidence].flat(),
+        implementationPath: candidate.implementationPath,
+        observationMethod: "semantic",
+        claimState: candidate.bindingState,
+        capability: "application.operation",
+      });
+    }
 
     for (const clause of behavior.takes ?? []) addClaim({
       source: behaviorSource, relation: "accepts", target: targetForClause(clause, "contract"), slot: `input:${clause.schema ?? clause.name}`,
