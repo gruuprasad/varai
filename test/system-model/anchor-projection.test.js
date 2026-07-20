@@ -4,6 +4,7 @@ import test from "node:test";
 import { scanRepo } from "../../src/scanners/index.js";
 import {
   behaviorFrames,
+  behavioralEnvelopes,
   browseByThing,
   browseByCapability,
   systemPaths,
@@ -49,6 +50,42 @@ test("anchor projections are deterministic under collection ordering", async () 
   assert.deepEqual(browseByCapability(value), browseByCapability(reversed));
   assert.deepEqual(behaviorFrames(value), behaviorFrames(reversed));
   assert.deepEqual(systemPaths(value), systemPaths(reversed));
+  assert.deepEqual(behavioralEnvelopes(value), behavioralEnvelopes(reversed));
+});
+
+test("behavioral envelopes assemble evidence into semantic sections", async () => {
+  const value = await model();
+  const projection = behavioralEnvelopes(value);
+  const byId = new Map(value.elements.map((item) => [item.id, item]));
+  const claims = new Map(value.claims.map((item) => [item.id, item]));
+  const envelope = projection.envelopes.find((item) => item.name.toLowerCase().includes("delete storey"));
+
+  assert.ok(envelope);
+  assert.equal(envelope.behaviorIds.length, 2);
+  assert.ok(envelope.triggerClaimIds.length);
+  assert.ok(envelope.invocationClaimIds.length);
+  assert.ok(envelope.primaryEffectClaimIds.some((id) => ["changes", "creates", "removes"].includes(claims.get(id)?.relation)));
+  assert.ok(envelope.supportingEffectClaimIds.every((id) => claims.get(id)?.relation === "reads"));
+  assert.ok(envelope.primarySubjectIds.some((id) => byId.get(id)?.name === "BuildingDocument"));
+  assert.ok(!envelope.primarySubjectIds.some((id) => byId.get(id)?.kind === "contract"));
+  assert.ok(envelope.unresolvedClaimIds.length);
+  assert.equal(envelope.completeness, "partial");
+  assert.ok(envelope.completenessReasons.includes("unresolved-effect"));
+});
+
+test("private evidence movement does not change envelope identity or semantic membership", async () => {
+  const value = await model();
+  const moved = {
+    ...value,
+    claims: value.claims.map((claim) => ({
+      ...claim,
+      implementationPath: (claim.implementationPath ?? []).map((item) => ({ ...item, line: (item.line ?? 1) + 100 })),
+    })),
+  };
+  const original = behavioralEnvelopes(value).envelopes;
+  const changed = behavioralEnvelopes(moved).envelopes;
+  const semantic = ({ implementationEvidence, ...item }) => item;
+  assert.deepEqual(original.map(semantic), changed.map(semantic));
 });
 
 test("behavior frames separate effect subjects from contracts", async () => {

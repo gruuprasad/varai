@@ -72,25 +72,26 @@ function conditionalRequirement(condition) {
   return `${readableCondition(match[2])} when ${readableCondition(match[1])}`;
 }
 
-function matchingApiBehavior(invocation, behaviors) {
+export function matchingApiBehavior(invocation, behaviors) {
   const exactKey = normalizeHttpKey(invocation.method, invocation.path);
   const candidates = behaviors.filter((candidate) => candidate.door?.kind !== "ui_action" &&
     String(candidate.door?.method ?? "").toUpperCase() === String(invocation.method ?? "").toUpperCase());
   const exact = candidates.find((candidate) => normalizeHttpKey(candidate.door?.method, candidate.door?.path) === exactKey);
   if (exact) return exact;
   if (!String(invocation.path).includes("*")) return null;
-  const staticSegments = String(invocation.path).split("/").filter((segment) => segment && segment !== "*");
-  const matches = candidates.filter((candidate) => {
-    const routeSegments = String(candidate.door?.path ?? "").split("/").filter(Boolean);
-    let cursor = 0;
-    for (const segment of staticSegments) {
-      const next = routeSegments.indexOf(segment, cursor);
-      if (next < 0) return false;
-      cursor = next + 1;
-    }
-    return true;
-  });
+  const matches = candidates.filter((candidate) => pathPatternMatches(invocation.path, candidate.door?.path));
   return matches.length === 1 ? matches[0] : null;
+}
+
+function pathPatternMatches(pattern, routePath) {
+  const patternSegments = String(pattern ?? "").split("/").filter(Boolean);
+  const routeSegments = String(routePath ?? "").split("/").filter(Boolean);
+  const leadingRemainder = patternSegments[0] === "*";
+  const comparable = leadingRemainder ? patternSegments.slice(1) : patternSegments;
+  if (routeSegments.length < comparable.length) return false;
+  if (!leadingRemainder && routeSegments.length !== comparable.length) return false;
+  const routeTail = leadingRemainder ? routeSegments.slice(-comparable.length) : routeSegments;
+  return comparable.every((segment, index) => segment === "*" || segment === routeTail[index]);
 }
 
 function outcomeValue(clause) {

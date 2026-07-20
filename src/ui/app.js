@@ -65,6 +65,7 @@ function indexes() {
 function projectionIndexes() {
   const frames = scanData.projections?.frames?.frames ?? [];
   const paths = scanData.projections?.paths?.paths ?? [];
+  const envelopes = scanData.projections?.envelopes?.envelopes ?? [];
   const frameByBehavior = new Map(frames.map((item) => [item.behaviorId, item]));
   const pathsByBehavior = new Map();
   for (const path of paths) {
@@ -74,7 +75,7 @@ function projectionIndexes() {
       pathsByBehavior.set(step.behaviorId, values);
     }
   }
-  return { frames, paths, frameByBehavior, pathsByBehavior };
+  return { frames, paths, envelopes, frameByBehavior, pathsByBehavior };
 }
 
 function changedIds() {
@@ -322,8 +323,8 @@ function bindSnippets() {
 
 function renderCapabilities() {
   const projection = scanData.projections?.frames;
-  const pathProjection = scanData.projections?.paths;
-  if (!projection || !pathProjection) return renderEmpty("This scan does not include semantic frames yet");
+  const envelopeProjection = scanData.projections?.envelopes;
+  if (!projection || !envelopeProjection) return renderEmpty("This scan does not include semantic envelopes yet");
   const { byId, claimsBySource } = indexes();
   const changed = changedIds();
   const query = el.search.value.toLowerCase().trim();
@@ -332,24 +333,24 @@ function renderCapabilities() {
     const names = [item.name, byId.get(item.behaviorId)?.name, ...item.subjectIds.map((id) => byId.get(id)?.name)];
     return !query || names.some((name) => name?.toLowerCase().includes(query));
   });
-  const paths = pathProjection.paths.filter((item) => {
-    const names = [item.name, ...item.subjectIds.map((id) => byId.get(id)?.name)];
+  const envelopes = envelopeProjection.envelopes.filter((item) => {
+    const names = [item.name, ...item.primarySubjectIds.map((id) => byId.get(id)?.name)];
     return !query || names.some((name) => name?.toLowerCase().includes(query));
   });
-  el.searchCount.textContent = query ? `${items.length + paths.length} matches` : "";
-  let html = `<h2 class="group-heading">Observed system paths</h2>`;
-  html += paths.length ? paths.map((item) => {
+  el.searchCount.textContent = query ? `${items.length + envelopes.length} matches` : "";
+  let html = `<h2 class="group-heading">Static behavior envelopes</h2>`;
+  html += envelopes.length ? envelopes.map((item) => {
     const open = expandedId === item.id;
-    const steps = item.steps.map((step) =>
-      projection.frames.find((frame) => frame.behaviorId === step.behaviorId)?.name ?? byId.get(step.behaviorId)?.name).filter(Boolean);
-    const subjects = item.subjectIds.map((id) => byId.get(id)?.name).filter(Boolean);
+    const steps = item.behaviorIds.map((id) =>
+      projection.frames.find((frame) => frame.behaviorId === id)?.name ?? byId.get(id)?.name).filter(Boolean);
+    const subjects = item.primarySubjectIds.map((id) => byId.get(id)?.name).filter(Boolean);
     return `<article class="card${open ? " open" : ""}">` +
       `<button class="card-head" data-expand="${esc(item.id)}" aria-expanded="${open}">` +
       `<span class="card-title"><strong>${esc(item.name)}</strong>${pathStatus(item.completeness)}<small>${esc([...steps, ...subjects].join(" → "))}</small></span>` +
       `<span class="chevron">⌄</span></button>` +
-      (open ? `<div class="card-detail">${behaviorList(item.steps.map((step) => step.behaviorId), item.interfaceIds, byId, claimsBySource, changed)}</div>` : "") +
+      (open ? `<div class="card-detail">${envelopeDetail(item, byId)}</div>` : "") +
       `</article>`;
-  }).join("") : `<p class="empty-copy">No cross-interface path was fully resolved.</p>`;
+  }).join("") : `<p class="empty-copy">No cross-interface behavior envelope was resolved.</p>`;
   html += `<h2 class="group-heading">All behaviors</h2>`;
   html += items.map((item) => {
     const behavior = byId.get(item.behaviorId);
@@ -366,6 +367,24 @@ function renderCapabilities() {
   el.list.innerHTML = html;
   bindExpanders();
   bindSnippets();
+}
+
+function envelopeDetail(envelope, byId) {
+  const claims = new Map(scanData.model.claims.map((item) => [item.id, item]));
+  const sections = [
+    ["When", envelope.conditionClaimIds],
+    ["Sends", envelope.inputClaimIds],
+    ["Through", envelope.invocationClaimIds],
+    ["Changes", envelope.primaryEffectClaimIds],
+    ["Uses", envelope.supportingEffectClaimIds],
+    ["Returns", envelope.outputClaimIds],
+    ["May result", envelope.outcomeClaimIds],
+    ["Unresolved", envelope.unresolvedClaimIds],
+  ];
+  return `<p class="reach">Static behavior envelope · derived from source evidence, not a runtime trace</p>` +
+    sections.filter(([, ids]) => ids.length).map(([label, ids]) =>
+      `<section class="envelope-section"><h3>${label}</h3>${ids.map((id) => claims.get(id)).filter(Boolean).map((claim) => claimRow(claim, byId)).join("")}</section>`
+    ).join("");
 }
 
 function renderChanges() {

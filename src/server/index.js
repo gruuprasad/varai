@@ -11,6 +11,7 @@ import { diffSystemModels } from "../system-model/diff.js";
 import { readGitState } from "../snapshots/git-state.js";
 import {
   behaviorFrames,
+  behavioralEnvelopes,
   browseByThing,
   browseByCapability,
   systemPaths,
@@ -95,6 +96,7 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
           capabilities: browseByCapability(current.scan.model),
           frames: behaviorFrames(current.scan.model),
           paths: systemPaths(current.scan.model),
+          envelopes: behavioralEnvelopes(current.scan.model),
         },
       };
       const store = createSnapshotStore(current.git.semanticStoreRoot);

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import { scanRepo } from "../../src/scanners/index.js";
-import { behaviorFrames, systemPaths } from "../../src/system-model/projections/index.js";
+import { behavioralEnvelopes, behaviorFrames, systemPaths } from "../../src/system-model/projections/index.js";
 
 const fixture = path.resolve("test/fixtures/semantic-assembly-structural");
 
@@ -55,4 +55,44 @@ test("assembles structural-type UI, API, contract, and aggregate evidence", asyn
   assert.ok(assembled.subjectIds.some((id) => byId.get(id)?.name === "BuildingModelDocument"));
   assert.equal(assembled.completeness, "closed",
     "path is semantically closed on the aggregate it changes");
+
+  const envelope = behavioralEnvelopes(model).envelopes.find((item) => item.name === "Apply change");
+  const envelopeClaims = (field) => envelope[field].map((id) => model.claims.find((claim) => claim.id === id));
+  assert.ok(envelope);
+  assert.ok(envelopeClaims("conditionClaimIds").some((claim) =>
+    claim.target.value === "integrity changes acknowledged when preview has integrity changes"),
+  "availability preserves the preview acknowledgement guard");
+  assert.ok(envelopeClaims("inputClaimIds").some((claim) => targetName(claim) === "UpdateStructuralTypeRequest"));
+  assert.ok(envelopeClaims("outputClaimIds").some((claim) => targetName(claim) === "StructuralTypeMutationResponse"));
+  assert.ok(envelopeClaims("outcomeClaimIds").some((claim) =>
+    claim.relation === "fails_with" && String(claim.target.value) === "409"));
+  assert.deepEqual(envelope.primarySubjectIds.map((id) => byId.get(id)?.name), ["BuildingModelDocument"]);
+  assert.ok(!envelope.primarySubjectIds.some((id) =>
+    ["contract", "state"].includes(byId.get(id)?.kind) || ["JobContext", "file", "unknown"].includes(byId.get(id)?.name)));
+  assert.equal(envelope.completeness, "closed");
+});
+
+test("one action with multiple API reaches remains one behavioral envelope", async () => {
+  const model = (await scanRepo(fixture, { jobs: 1, cache: false })).model;
+  const action = model.elements.find((item) => item.name === "StructuralBasisTypesPanel Apply change");
+  const preview = model.elements.find((item) =>
+    item.name === "POST /api/v1/building-model/{job_id}/structural-types/{type_id}/preview");
+  const existing = model.claims.find((item) => item.sourceId === action.id && item.relation === "invokes");
+  const withPreparatoryCall = {
+    ...model,
+    claims: [...model.claims, {
+      ...existing,
+      id: "claim:test-preparatory-preview",
+      slot: "invoke:POST /api/v1/building-model/{job_id}/structural-types/{type_id}/preview",
+      target: { kind: "reference", id: preview.id },
+    }],
+  };
+
+  const matches = behavioralEnvelopes(withPreparatoryCall).envelopes.filter((item) => item.entryBehaviorId === action.id);
+  assert.equal(matches.length, 1, "a multi-call action is not split into competing complete stories");
+  assert.equal(matches[0].terminalBehaviorId, null);
+  assert.deepEqual(matches[0].terminalBehaviorIds.sort(), [preview.id,
+    model.elements.find((item) => item.name === "PUT /api/v1/building-model/{job_id}/structural-types/{type_id}").id].sort());
+  assert.ok(matches[0].behaviorIds.includes(preview.id));
+  assert.equal(matches[0].invocationClaimIds.length, 2);
 });

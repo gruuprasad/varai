@@ -28,8 +28,10 @@ test("map report is subjects-first with screens nesting panels", async () => {
   assert.ok(output.indexOf("## Subjects") < output.indexOf("## Screens"));
   assert.ok(output.indexOf("### BuildingDocument") < output.indexOf("## Screens"));
   assert.doesNotMatch(output, /## Browse by thing/);
-  assert.match(output, /## Observed system paths/);
-  assert.match(output, /\*\*delete Storey\*\*.*BuildingToolbar.*DELETE \/projects.*BuildingDocument/);
+  assert.match(output, /## Static behavior envelopes/);
+  assert.match(output, /not runtime traces/);
+  assert.match(output, /### delete Storey.*\(partial\)/);
+  assert.match(output, /delete Storey → DELETE \/projects.*BuildingDocument/);
 
   const wallCapability = output.split("\n").find((line) =>
     line.includes("POST /projects/{project_id}/building/walls") && line.includes("acts on"));

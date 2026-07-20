@@ -2,7 +2,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, readFile, rename } from "node:fs/promises";
 
-export const EXTRACTOR_VERSION = 9; // Bounded value-flow: aggregates through untyped wrappers, callable values, and closures
+export const EXTRACTOR_VERSION = 10; // Resolve wildcard frontend API paths by route shape, not loose subsequence
 
 const CACHE_FORMAT_VERSION = 1;
 

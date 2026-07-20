@@ -195,6 +195,10 @@ body {
 .claim { margin-top: 8px; }
 .claim p { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 14px; color: var(--text-mid); }
 .claim p strong { color: var(--text); font-weight: 500; }
+.envelope-section { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px 14px; padding: 10px 0; border-bottom: 1px dashed var(--border-mid); }
+.envelope-section:last-child { border-bottom: 0; }
+.envelope-section h3 { color: var(--text-bright); font-size: 13px; font-weight: 600; padding-top: 8px; }
+.envelope-section .claim { margin-top: 4px; }
 .evidence { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
 
 .trace { position: relative; display: grid; gap: 3px; margin-top: 8px; list-style: none; }

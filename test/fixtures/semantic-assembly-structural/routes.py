@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from domain import (
     ensure_document,
@@ -35,4 +35,6 @@ def put_structural_type(job_id: str, type_id: str, request: UpdateStructuralType
     ctx = load_context(job_id)
     document = ensure_document(ctx)
     perform(ctx, document, update_structural_type)
+    if request.preview_fingerprint == "required":
+        raise HTTPException(status_code=409, detail="preview required or stale")
     return StructuralTypeMutationResponse(revision=2, type_id=type_id)

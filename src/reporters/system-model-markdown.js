@@ -1,4 +1,4 @@
-import { behaviorFrames, browseByThing, systemPaths } from "../system-model/projections/index.js";
+import { behavioralEnvelopes, behaviorFrames, browseByThing } from "../system-model/projections/index.js";
 import { RELATION_LABELS, claimStateLabel, kindLabel } from "./display-language.js";
 
 const PATH_STATUS = { closed: " _(closed)_", partial: " _(partial)_", open: " _(open)_" };
@@ -35,7 +35,7 @@ function pathLabel(path) {
 export function renderSystemModel({ model }) {
   const thingView = browseByThing(model);
   const frameView = behaviorFrames(model);
-  const pathView = systemPaths(model);
+  const envelopeView = behavioralEnvelopes(model);
   const byId = new Map([
     [model.system.id, model.system],
     ...model.subsystems.map((item) => [item.id, item]),
@@ -123,16 +123,23 @@ export function renderSystemModel({ model }) {
     lines.push(`_${detail.length} further elements (data contracts, UI state, internal records) are available through structured model output and dashboard search._`, "");
   }
 
-  lines.push("## Observed system paths", "");
-  for (const item of pathView.paths) {
-    const steps = item.steps.map((step) => framesByBehavior.get(step.behaviorId)?.name ?? byId.get(step.behaviorId)?.name).filter(Boolean);
-    const subjects = item.subjectIds.map((id) => byId.get(id)?.name).filter(Boolean);
-    const interfaces = item.interfaceIds.map((id) => byId.get(id)?.name).filter(Boolean)
-      .filter((name) => !steps.includes(name));
+  lines.push("## Static behavior envelopes", "", "_Derived from source evidence; these are possible system behaviors, not runtime traces._", "");
+  for (const item of envelopeView.envelopes) {
+    const steps = item.behaviorIds.map((id) => framesByBehavior.get(id)?.name ?? byId.get(id)?.name).filter(Boolean);
+    const subjects = item.primarySubjectIds.map((id) => byId.get(id)?.name).filter(Boolean);
     const status = PATH_STATUS[item.completeness] ?? "";
-    lines.push(`- **${item.name}**${status} — ${[...interfaces, ...steps, ...subjects].join(" → ")}`);
+    lines.push(`### ${item.name}${status}`, "", `${[...steps, ...subjects].join(" → ")}`, "");
+    envelopeLine(lines, "When", item.conditionClaimIds, claimsById, byId);
+    envelopeLine(lines, "Sends", item.inputClaimIds, claimsById, byId);
+    envelopeLine(lines, "Through", item.invocationClaimIds, claimsById, byId);
+    envelopeLine(lines, "Changes", item.primaryEffectClaimIds, claimsById, byId);
+    envelopeLine(lines, "Uses", item.supportingEffectClaimIds, claimsById, byId);
+    envelopeLine(lines, "Returns", item.outputClaimIds, claimsById, byId);
+    envelopeLine(lines, "May result", item.outcomeClaimIds, claimsById, byId);
+    if (item.unresolvedClaimIds.length) envelopeLine(lines, "Unresolved", item.unresolvedClaimIds, claimsById, byId);
+    lines.push("");
   }
-  if (!pathView.paths.length) lines.push("No cross-interface path was fully resolved.");
+  if (!envelopeView.envelopes.length) lines.push("No cross-interface behavior envelope was resolved.");
 
   lines.push("", "## Capabilities", "");
   for (const frame of frameView.frames) {
@@ -156,6 +163,17 @@ export function renderSystemModel({ model }) {
   }
 
   return `${lines.join("\n").trimEnd()}\n`;
+}
+
+function envelopeLine(lines, label, ids, claimsById, byId) {
+  const claims = ids.map((id) => claimsById.get(id)).filter(Boolean);
+  if (!claims.length) return;
+  const values = claims.map((claim) => {
+    const target = targetLabel(claim.target, byId);
+    const state = claimStateLabel(claim.claimState);
+    return `${target}${qualifierLabel(claim.qualifiers)}${state ? ` [${state}]` : ""} — ${evidenceLabel(claim.evidence)}`;
+  });
+  lines.push(`- **${label}:** ${values.join("; ")}`);
 }
 
 function orderedFrameClaims(frame, claimsById, fallback) {
