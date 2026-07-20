@@ -18,6 +18,7 @@ export async function traceFrontendInteractions(files, ctx) {
   const hookBindings = indexHookBindings(trees);
   const refHookBindings = indexRefHookBindings(trees);
   const callableAliases = indexCallableAliases(trees, functions);
+  const navigationBindings = indexNavigationBindings(trees);
 
   const grouped = new Map();
   for (const [file, tree] of trees) {
@@ -38,7 +39,8 @@ export async function traceFrontendInteractions(files, ctx) {
             event: "lifecycle", action, evidence: [rootEvidence],
           },
           bundle: null, requires: [], takes: [], gives: [], reads: [], writes: [],
-          fails: [], untraced: [], guards: [], invokes: invocations, helperCalls: [], trunkCall: null,
+          fails: [], untraced: [], guards: [], invokes: invocations,
+          outcomes: navigationOutcomes(callback, file, rootEvidence, navigationBindings), helperCalls: [], trunkCall: null,
         });
       });
       walk(component.node, (node) => {
@@ -54,7 +56,7 @@ export async function traceFrontendInteractions(files, ctx) {
           behavior = {
             door: { kind: "ui_action", source: file, component: component.name, event: binding.event, action: event.action, evidence: [] },
             bundle: null, requires: [], takes: [], gives: [], reads: [], writes: [],
-            fails: [], untraced: [], guards: [], invokes: [], helperCalls: [], trunkCall: null,
+            fails: [], untraced: [], guards: [], invokes: [], outcomes: [], helperCalls: [], trunkCall: null,
           };
           grouped.set(key, behavior);
         }
@@ -77,6 +79,9 @@ export async function traceFrontendInteractions(files, ctx) {
           guard.evidence.push({ file, line: condition.line });
         }
         const handler = localHandler(component.node, event.action) ?? event.node;
+        for (const outcome of handler ? navigationOutcomes(handler, file, rootEvidence, navigationBindings) : []) {
+          if (!behavior.outcomes.some((item) => item.target === outcome.target)) behavior.outcomes.push(outcome);
+        }
         for (const invocation of handler
           ? apiInvocations(handler, file, rootEvidence, functions, callbackProps, hookBindings, refHookBindings, callableAliases, component.name)
           : []) {
@@ -86,6 +91,44 @@ export async function traceFrontendInteractions(files, ctx) {
     }
   }
   return [...grouped.values()].flatMap(expandContextualBehaviors);
+}
+
+function indexNavigationBindings(trees) {
+  const result = new Set();
+  for (const [file, tree] of trees) {
+    walk(tree.rootNode, (node) => {
+      if (node.type !== "variable_declarator") return;
+      const name = node.childForFieldName("name")?.text;
+      const value = node.childForFieldName("value");
+      if (name && value?.type === "call_expression" && value.childForFieldName("function")?.text === "useNavigate") {
+        result.add(`${file}:${name}`);
+      }
+    });
+  }
+  return result;
+}
+
+function navigationOutcomes(handler, file, rootEvidence, bindings) {
+  const outcomes = [];
+  walk(handler, (node) => {
+    if (node.type !== "call_expression") return;
+    const fn = node.childForFieldName("function");
+    if (fn?.type !== "identifier" || !bindings.has(`${file}:${fn.text}`)) return;
+    const targetNode = node.childForFieldName("arguments")?.namedChildren?.[0];
+    const target = navigationPattern(targetNode);
+    if (!target) return;
+    const evidence = { file, line: node.startPosition.row + 1 };
+    outcomes.push({
+      relation: "navigates_to", target, evidence, implementationPath: [rootEvidence, evidence], layer: "ast",
+    });
+  });
+  return outcomes;
+}
+
+function navigationPattern(node) {
+  if (!node || !["string", "string_fragment", "template_string"].includes(node.type)) return null;
+  if (node.type !== "template_string") return node.text.replace(/^["'`]|["'`]$/g, "");
+  return node.text.replace(/^`|`$/g, "").replace(/\$\{[^}]+\}/g, "{value}");
 }
 
 function expandContextualBehaviors(behavior) {

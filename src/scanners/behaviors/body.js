@@ -28,6 +28,22 @@ async function walk(info, env, ctx, resolver, factIndex, acc, flow, graph, depth
   const currentId = addFunctionNode(graph, info);
   await flow.buildScopeEnv(info, env);
 
+  // A direct field assignment on a declaration-valued local is an entity
+  // mutation even when no domain helper call wraps it (record.status = ...).
+  for (const assignment of directDescendants(fnNode, "assignment")) {
+    const left = assignment.childForFieldName("left");
+    if (left?.type !== "attribute") continue;
+    const receiver = left.childForFieldName("object");
+    if (receiver?.type !== "identifier") continue;
+    const target = declName(env.get(receiver.text));
+    if (!target || isInfrastructureType(target)) continue;
+    const evidence = { file, line: assignment.startPosition.row + 1 };
+    await recordEffect({
+      access: "write", relation: "changes", target, kind: "db_model", medium: "memory",
+      via: left.text, observationMethod: "semantic",
+    }, evidence, path, file, resolver, acc, graph, currentId, depth);
+  }
+
   for (const raise of directDescendants(fnNode, "raise_statement")) {
     const text = raise.text;
     const line = raise.startPosition.row + 1;
@@ -73,6 +89,13 @@ async function walk(info, env, ctx, resolver, factIndex, acc, flow, graph, depth
           const decl = arg0 ? declName(await flow.evalExpr(arg0, env, file)) : null;
           if (decl && !isInfrastructureType(decl)) { effect.target = decl; delete effect.mechanism; }
         }
+        // delete(local) inherits the declaration identity recovered from an ORM
+        // query chain or constructor assignment.
+        if (method === "delete" && receiver.type === "identifier") {
+          const arg0 = call.childForFieldName("arguments")?.namedChildren?.[0];
+          const decl = arg0 ? declName(await flow.evalExpr(arg0, env, file)) : null;
+          if (decl && !isInfrastructureType(decl)) effect.target = decl;
+        }
         await recordEffect(effect, callEvidence, path, file, resolver, acc, graph, currentId, depth);
       }
       continue;
@@ -109,7 +132,12 @@ async function walk(info, env, ctx, resolver, factIndex, acc, flow, graph, depth
       semanticTarget = declName(returned) ?? await subjectArg(call, resolvedInfo, env, file, flow);
     }
     const namedEffect = resolvedInfo
-      ? (isInfrastructureType(semanticTarget) ? null : semanticTarget ? classifyNamedEffect(resolvedInfo.name ?? name, semanticTarget) : null)
+      // Private named wrappers need semantic affinity with their typed subject.
+      // This preserves generic `_mutate(document, context)` helpers while not
+      // attributing `_create_resource(..., user)` to User merely because User is
+      // the only domain-typed argument at the wrapper boundary.
+      ? (!namedEffectMatchesSubject(resolvedInfo.name, semanticTarget) || isInfrastructureType(semanticTarget)
+          ? null : semanticTarget ? classifyNamedEffect(resolvedInfo.name ?? name, semanticTarget) : null)
       : classifyNamedEffect(name);
     // The effect derivation reaches the resolved domain operation; record it in the path.
     const effectPath = resolvedInfo
@@ -195,6 +223,22 @@ function declName(value) {
 // Execution contexts, sessions, and connections are mechanism, not domain subjects.
 function isInfrastructureType(name) {
   return /(?:Context|Session|Connection|Client)$/.test(name ?? "");
+}
+
+function namedEffectMatchesSubject(operationName, subjectName) {
+  if (!operationName || !subjectName) return true;
+  // Ordinary mutation verbs prove an aggregate change even when the operation
+  // names a contained concept (apply_structural_type(document)). Lifecycle
+  // verbs are stricter because create_resource(..., user) must not become a
+  // change to User merely from argument typing.
+  if (operationEffectRelation(operationName) === "changes") return true;
+  const words = (value) => String(value).replace(/^_+/, "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const generic = new Set(["add", "apply", "archive", "change", "create", "delete", "discard", "edit", "insert", "merge", "move", "mutate", "mutation", "operation", "patch", "remove", "replace", "reset", "save", "set", "update", "write"]);
+  const operationTerms = words(operationName).filter((word) => !generic.has(word));
+  if (!operationTerms.length) return true;
+  const subjectTerms = new Set(words(subjectName));
+  return operationTerms.some((word) => subjectTerms.has(word));
 }
 
 // Choose the aggregate a mutation acts on: the declaration-valued argument whose
@@ -287,7 +331,13 @@ const KNOWN_NOISE = new Set([
 function firstArgIdent(call) {
   const args = call.childForFieldName("arguments");
   if (!args) return null;
-  for (const arg of args.namedChildren) if (arg.type === "identifier") return arg.text;
+  for (const arg of args.namedChildren) {
+    if (arg.type === "identifier") return arg.text;
+    if (arg.type === "attribute") {
+      const object = arg.childForFieldName("object");
+      if (object?.type === "identifier") return object.text;
+    }
+  }
   return null;
 }
 

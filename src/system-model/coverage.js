@@ -12,7 +12,7 @@ const EXTRACTOR_CAPABILITIES = Object.freeze({
 
 const TRACE_CAPABILITIES = Object.freeze({
   api: ["api.input", "api.output", "api.artifact-output", "api.condition", "api.effect", "api.failure"],
-  ui: ["ui.action", "ui.availability"],
+  ui: ["ui.action", "ui.availability", "ui.navigation"],
   application: ["application.operation", "application.effect"],
 });
 

@@ -11,7 +11,7 @@ export function classifyAttributeEffect({ method, receiver, call, firstArgIdent,
   }
   if (method === "delete") {
     const target = receiver.type === "identifier" ? (firstArgIdent(call) || null) : chainedTarget(receiver, modelNames);
-    return { access: "write", target, kind: "db_model", medium: "db", via: `${receiverText}.delete`, observationMethod: "semantic" };
+    return { access: "write", relation: "removes", target, kind: "db_model", medium: "db", via: `${receiverText}.delete`, observationMethod: "semantic" };
   }
   if (["add", "commit", "refresh"].includes(method) && receiver.type === "identifier") {
     const target = method === "add" ? firstArgModel(call, modelNames) : null;
@@ -20,7 +20,7 @@ export function classifyAttributeEffect({ method, receiver, call, firstArgIdent,
     // almost always a local set/dict add. Keep it as implementation evidence but
     // flag it so the model does not surface `changes unknown`.
     const mechanism = !target;
-    return { access: "write", target, kind: "db_model", medium: "db", via: `${receiverText}.${method}`, observationMethod: "semantic", ...(mechanism ? { mechanism: true } : {}) };
+    return { access: "write", relation: method === "add" ? "creates" : "changes", target, kind: "db_model", medium: "db", via: `${receiverText}.${method}`, observationMethod: "semantic", ...(mechanism ? { mechanism: true } : {}) };
   }
   if (/^(?:write_bytes|write_text)$/.test(method) ||
       (receiverType === "Path" && /^(?:touch|rename|replace|unlink)$/.test(method))) {
@@ -38,7 +38,11 @@ export function classifyAttributeEffect({ method, receiver, call, firstArgIdent,
 export function classifyNamedEffect(name, target = null) {
   const semanticName = normalizeOperationName(name);
   if (target && MUTATION_RE.test(semanticName)) {
-    return { access: "write", target, kind: "aggregate", medium: "memory", detail: name, observationMethod: "semantic" };
+    // A named in-memory operation proves that the aggregate changes. Its verb
+    // alone does not prove aggregate creation/removal; member lifecycle is
+    // lifted separately from typed containment, and persistence helpers carry
+    // their own stronger create/remove evidence.
+    return { access: "write", relation: "changes", target, kind: "aggregate", medium: "memory", detail: name, observationMethod: "semantic" };
   }
   if (target && READ_RE.test(semanticName)) {
     return { access: "read", target, kind: "aggregate", medium: "memory", detail: name, observationMethod: "semantic" };

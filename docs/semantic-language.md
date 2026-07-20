@@ -164,6 +164,20 @@ A relationship is one atomic semantic statement from a source Element to a targe
 
 Silence never proves read-only. Varai may render “reads only” only when effect coverage for that Behavior is complete.
 
+Resource lifecycle is expressed with the existing effect and outcome relationships; it is not a
+separate kernel primitive. An analyzer may infer `creates` or `removes` from a concrete persistence
+operation only after the persisted value resolves to a declared Resource. A transaction flush,
+generic write, operation name, or route verb alone is insufficient. A direct field assignment on a
+query-result or constructor-bound Resource may establish `changes` when value flow preserves that
+Resource identity. Query-result identity may pass through a bounded query chain, but the query
+mechanism remains private analyzer evidence.
+
+UI navigation is an observable outcome. An analyzer may emit `navigates_to` when a recognized
+navigation binding is invoked with a statically recoverable location pattern. Dynamic segments are
+represented as placeholders; Varai does not evaluate application data to manufacture a concrete
+location. Navigation on an entry action and outcomes on reached operations both belong to the
+assembled behavioral envelope.
+
 ### Outcomes
 
 | Relationship | Meaning |

@@ -304,6 +304,17 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
           capability: "ui.api-link",
         });
       }
+      for (const outcome of behavior.outcomes ?? []) addClaim({
+        source: source("ui", "action", actionKey),
+        relation: outcome.relation,
+        target: literal("location", outcome.target),
+        slot: `${outcome.relation}:${outcome.target}`,
+        evidence: [outcome.evidence].flat(),
+        implementationPath: outcome.implementationPath,
+        observationMethod: methodFor(outcome),
+        claimState: stateFor(outcome),
+        capability: "ui.navigation",
+      });
       continue;
     }
 
@@ -424,11 +435,12 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
       source: behaviorSource, relation: "requires", target: literal("condition", clause.name ?? "unknown requirement"), slot: `requirement:${clause.kind ?? "dependency"}:${clause.name}`,
       evidence: [clause.evidence].flat(), implementationPath: clause.implementationPath, observationMethod: methodFor(clause), claimState: stateFor(clause), capability: "api.condition",
     });
-    for (const [collection, relation] of [["reads", "reads"], ["writes", "changes"]]) {
+    for (const [collection, defaultRelation] of [["reads", "reads"], ["writes", "changes"]]) {
       for (const clause of behavior[collection] ?? []) {
         // Transaction ceremony (commit/refresh) is implementation evidence in the
         // graph, not a domain effect; it must not surface as `changes unknown`.
         if (clause.mechanism) continue;
+        const relation = clause.relation ?? defaultRelation;
         addClaim({
         source: behaviorSource,
         relation,

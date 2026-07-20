@@ -2,7 +2,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, readFile, rename } from "node:fs/promises";
 
-export const EXTRACTOR_VERSION = 19; // Recover evidence-backed produced artifacts
+export const EXTRACTOR_VERSION = 20; // Recover resource lifecycle effects and navigation outcomes
 
 const CACHE_FORMAT_VERSION = 1;
 

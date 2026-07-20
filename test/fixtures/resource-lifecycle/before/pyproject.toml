@@ -1,0 +1,4 @@
+[project]
+name = "resource-lifecycle-before"
+version = "0.1.0"
+dependencies = ["fastapi", "sqlalchemy"]

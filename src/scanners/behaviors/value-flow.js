@@ -172,7 +172,17 @@ export function createValueFlow({ resolver, budget = 6000 } = {}) {
 
   async function evalCall(callNode, env, file) {
     const callee = callNode.childForFieldName("function");
-    if (!callee || callee.type !== "identifier") return unknownV("non-identifier-callee");
+    if (!callee) return unknownV("missing-callee");
+    if (callee.type === "attribute") {
+      // ORM query chains retain the declaration selected at their root:
+      // query(Entity).filter(...).first() still denotes an Entity value. The
+      // chain is private analyzer evidence; only the resolved entity effect is
+      // promoted into the System Model.
+      const queryTarget = queryDeclarationName(callNode);
+      if (queryTarget) return await classFor(file, queryTarget) ?? unknownV("unresolved-query-target");
+      return unknownV("attribute-callee");
+    }
+    if (callee.type !== "identifier") return unknownV("non-identifier-callee");
     const asClass = await classFor(file, callee.text);
     if (asClass) return asClass; // constructor call yields its declaration
     const callable = await resolveCallable(callee.text, env, file);
@@ -270,4 +280,21 @@ export function createValueFlow({ resolver, budget = 6000 } = {}) {
     resetWork: () => { work = 0; },
     stats: () => ({ work, budget, exhausted: work > budget }),
   };
+}
+
+function queryDeclarationName(node) {
+  if (!node) return null;
+  if (node.type === "call") {
+    const callee = node.childForFieldName("function");
+    if (callee?.type === "attribute") {
+      const method = callee.childForFieldName("attribute")?.text;
+      if (method === "query") {
+        const first = node.childForFieldName("arguments")?.namedChildren?.[0];
+        return first?.type === "identifier" ? first.text : null;
+      }
+      return queryDeclarationName(callee.childForFieldName("object"));
+    }
+  }
+  if (node.type === "attribute") return queryDeclarationName(node.childForFieldName("object"));
+  return null;
 }

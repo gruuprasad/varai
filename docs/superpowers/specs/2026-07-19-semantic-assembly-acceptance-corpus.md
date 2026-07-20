@@ -554,3 +554,28 @@ Render -> render operation -> produces glTF model
 Both remain honestly partial for independent pre-existing reasons: Export still carries derived
 projection effects, while Render still promotes implementation subjects such as `RenderScene`.
 Artifact identity is no longer the missing link; effect-role reduction is a separate later slice.
+
+## Resource-lifecycle increment: 2026-07-20
+
+System Model analyzer `0.16.0` adds four framework-bounded evidence mechanisms without adding a
+new lifecycle primitive:
+
+```text
+constructor-bound value + persistence add -> creates Resource
+query-result identity + field assignment -> changes Resource
+query-result identity + persistence delete -> removes Resource
+recognized navigation binding + static location pattern -> navigates to location
+```
+
+The neutral fixture uses `Workspace` and `AccessGrant`. It proves canonical model output,
+coverage, evidence, semantic diff, native/WASM parity, and serial/worker parity. It also preserves
+the refactor invariant: names such as `add_*` and `delete_*` prove only an aggregate change unless
+typed containment or concrete persistence independently proves member lifecycle.
+
+On Kalakar, Reset Password is now closed: it changes `User`, removes `PasswordResetToken`, and
+retains its observed failures. Create Project now creates `Project` and `JobOwnership` and records
+the editor navigation pattern. It remains honestly incomplete as a product-level lifecycle because
+the initial `BuildingModelDocument` is passed and persisted as an untyped dictionary; current
+source evidence does not yet bind that value to the declared aggregate without a further semantic
+factory/value-representation rule. Supporting-effect presentation is also deferred rather than
+encoded as domain-name heuristics.

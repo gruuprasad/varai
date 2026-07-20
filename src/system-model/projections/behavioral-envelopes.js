@@ -43,7 +43,10 @@ function assemble(paths, frames, index, claims) {
   const conditionClaimIds = uniqueSorted([...(entry?.conditionClaimIds ?? []), ...terminals.flatMap((frame) => frame.conditionClaimIds)]);
   const inputClaimIds = uniqueSorted(terminals.flatMap((frame) => frame.inputClaimIds));
   const outputClaimIds = uniqueSorted(terminals.flatMap((frame) => frame.outputClaimIds));
-  const outcomeClaimIds = uniqueSorted(terminals.flatMap((frame) => frame.outcomeClaimIds));
+  // UI completion (for example navigation after a successful form submit)
+  // belongs to the entry behavior, while API failures and responses belong to
+  // terminal behaviors. An envelope represents both ends of that observation.
+  const outcomeClaimIds = uniqueSorted([...(entry?.outcomeClaimIds ?? []), ...terminals.flatMap((frame) => frame.outcomeClaimIds)]);
   const terminalEffects = uniqueSorted(terminals.flatMap((frame) => frame.effectClaimIds)).map((id) => claims.get(id)).filter(Boolean);
   const primaryEffects = terminalEffects.filter((claim) =>
     MUTATION_RELATIONS.has(claim.relation) && claim.target.kind === "reference");
