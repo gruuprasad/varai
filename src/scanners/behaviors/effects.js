@@ -15,7 +15,12 @@ export function classifyAttributeEffect({ method, receiver, call, firstArgIdent,
   }
   if (["add", "commit", "refresh"].includes(method) && receiver.type === "identifier") {
     const target = method === "add" ? firstArgModel(call, modelNames) : null;
-    return { access: "write", target, kind: "db_model", medium: "db", via: `${receiverText}.${method}`, observationMethod: "semantic" };
+    // A db write that names no subject is ceremony: commit/refresh are the
+    // transaction flush, and an `.add()` whose argument is not a known model is
+    // almost always a local set/dict add. Keep it as implementation evidence but
+    // flag it so the model does not surface `changes unknown`.
+    const mechanism = !target;
+    return { access: "write", target, kind: "db_model", medium: "db", via: `${receiverText}.${method}`, observationMethod: "semantic", ...(mechanism ? { mechanism: true } : {}) };
   }
   if (receiverType && MUTATION_RE.test(method)) {
     return { access: "write", target: receiverType, kind: "aggregate", medium: "memory", via: `${receiverText}.${method}`, observationMethod: "semantic" };

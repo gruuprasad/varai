@@ -1,6 +1,8 @@
 import { behaviorFrames, browseByThing, systemPaths } from "../system-model/projections/index.js";
 import { RELATION_LABELS, claimStateLabel, kindLabel } from "./display-language.js";
 
+const PATH_STATUS = { closed: " _(closed)_", partial: " _(partial)_", open: " _(open)_" };
+
 function evidenceLabel(evidence) {
   const values = (evidence ?? []).map((item) => {
     const location = `${item.file}${item.line ? `:${item.line}` : ""}`;
@@ -127,7 +129,8 @@ export function renderSystemModel({ model }) {
     const subjects = item.subjectIds.map((id) => byId.get(id)?.name).filter(Boolean);
     const interfaces = item.interfaceIds.map((id) => byId.get(id)?.name).filter(Boolean)
       .filter((name) => !steps.includes(name));
-    lines.push(`- **${item.name}** — ${[...interfaces, ...steps, ...subjects].join(" → ")}`);
+    const status = PATH_STATUS[item.completeness] ?? "";
+    lines.push(`- **${item.name}**${status} — ${[...interfaces, ...steps, ...subjects].join(" → ")}`);
   }
   if (!pathView.paths.length) lines.push("No cross-interface path was fully resolved.");
 

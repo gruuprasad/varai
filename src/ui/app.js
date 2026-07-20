@@ -155,6 +155,11 @@ function changeBadge() {
   return `<span class="change-badge">changed</span>`;
 }
 
+function pathStatus(completeness) {
+  if (!completeness) return "";
+  return `<span class="path-status path-${esc(completeness)}">${esc(completeness)}</span>`;
+}
+
 function matchRoot(root, byId, query) {
   if (!query) return true;
   const names = [byId.get(root.elementId)?.name,
@@ -340,7 +345,7 @@ function renderCapabilities() {
     const subjects = item.subjectIds.map((id) => byId.get(id)?.name).filter(Boolean);
     return `<article class="card${open ? " open" : ""}">` +
       `<button class="card-head" data-expand="${esc(item.id)}" aria-expanded="${open}">` +
-      `<span class="card-title"><strong>${esc(item.name)}</strong><small>${esc([...steps, ...subjects].join(" → "))}</small></span>` +
+      `<span class="card-title"><strong>${esc(item.name)}</strong>${pathStatus(item.completeness)}<small>${esc([...steps, ...subjects].join(" → "))}</small></span>` +
       `<span class="chevron">⌄</span></button>` +
       (open ? `<div class="card-detail">${behaviorList(item.steps.map((step) => step.behaviorId), item.interfaceIds, byId, claimsBySource, changed)}</div>` : "") +
       `</article>`;

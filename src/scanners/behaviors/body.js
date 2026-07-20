@@ -1,6 +1,7 @@
-import { classifyAttributeEffect, classifyNamedEffect, isFileWriteName, operationAccess, returnRepresentsReadTarget } from "./effects.js";
-import { implementationPath, evidenceForNode } from "../lift/provenance.js";
+import { classifyAttributeEffect, classifyNamedEffect, isFileWriteName, operationAccess } from "./effects.js";
+import { implementationPath } from "../lift/provenance.js";
 import { privateNodeId } from "../lift/implementation-graph.js";
+import { createValueFlow, callableTargets, bindingSignature, directDescendants } from "./value-flow.js";
 
 const STATUS_RE = /HTTP_(\d{3})\b/;
 const MAX_TRACE_DEPTH = 8;
@@ -8,22 +9,26 @@ const MAX_TRACE_DEPTH = 8;
 export async function traceBody(fnNode, file, ctx, resolver, factIndex, options = {}) {
   const acc = { reads: [], writes: [], fails: [], untraced: [], helperCalls: [], trunkCall: null };
   const info = resolver.describeFunction(file, fnNode);
-  const rootEvidence = options.rootEvidence ?? evidenceForNode(info);
-  await walk(info, ctx, resolver, factIndex, acc, options.graph, 0, new Set(), implementationPath(rootEvidence));
+  // Prefer the scan-wide value-flow (shared memos); reset its per-body work
+  // counter so the previous route's spend doesn't starve this one.
+  const flow = options.flow ?? createValueFlow({ resolver });
+  flow.resetWork?.();
+  const rootEvidence = options.rootEvidence ?? { file: info.file, line: info.line, symbol: info.name };
+  const env = await flow.seedParams(info, null, null, file);
+  await walk(info, env, ctx, resolver, factIndex, acc, flow, options.graph, 0, new Set(), implementationPath(rootEvidence));
   return acc;
 }
 
-async function walk(info, ctx, resolver, factIndex, acc, graph, depth, seen, path) {
+async function walk(info, env, ctx, resolver, factIndex, acc, flow, graph, depth, seen, path) {
   const fnNode = info.node;
   const file = info.file;
   const body = fnNode.childForFieldName("body");
   if (!body) return;
 
   const currentId = addFunctionNode(graph, info);
-  const localTypes = new Map(info.parameters);
-  await inferAssignedTypes(body, file, resolver, localTypes);
+  await flow.buildScopeEnv(info, env);
 
-  for (const raise of body.descendantsOfType("raise_statement")) {
+  for (const raise of directDescendants(fnNode, "raise_statement")) {
     const text = raise.text;
     const line = raise.startPosition.row + 1;
     const named = text.match(STATUS_RE);
@@ -39,7 +44,7 @@ async function walk(info, ctx, resolver, factIndex, acc, graph, depth, seen, pat
     }
   }
 
-  for (const call of body.descendantsOfType("call")) {
+  for (const call of directDescendants(fnNode, "call")) {
     const callee = call.childForFieldName("function");
     if (!callee) continue;
     const line = call.startPosition.row + 1;
@@ -49,7 +54,7 @@ async function walk(info, ctx, resolver, factIndex, acc, graph, depth, seen, pat
       const method = callee.childForFieldName("attribute")?.text;
       const receiver = callee.childForFieldName("object");
       if (!method || !receiver) continue;
-      const receiverType = receiver.type === "identifier" ? localTypes.get(receiver.text) : null;
+      const receiverType = receiver.type === "identifier" ? declName(env.get(receiver.text)) : null;
       const effect = classifyAttributeEffect({
         method,
         receiver,
@@ -60,43 +65,81 @@ async function walk(info, ctx, resolver, factIndex, acc, graph, depth, seen, pat
         modelNames: factIndex.modelNames,
         receiverType,
       });
-      if (effect) await recordEffect(effect, callEvidence, path, file, resolver, acc, graph, currentId, depth);
+      if (effect) {
+        // A db `.add()` whose argument value-flow resolves to a declaration is a
+        // real ORM insert, not a local-collection add: bind it and un-suppress.
+        if (effect.mechanism && method === "add") {
+          const arg0 = call.childForFieldName("arguments")?.namedChildren?.[0];
+          const decl = arg0 ? declName(await flow.evalExpr(arg0, env, file)) : null;
+          if (decl && !isInfrastructureType(decl)) { effect.target = decl; delete effect.mechanism; }
+        }
+        await recordEffect(effect, callEvidence, path, file, resolver, acc, graph, currentId, depth);
+      }
       continue;
     }
 
     if (callee.type !== "identifier") continue;
     const name = callee.text;
-    const resolved = await resolver.resolveFunction(file, name);
-    const resolvedInfo = resolved ? resolver.describeFunction(resolved.file, resolved.node) : null;
-    const typedTarget = await targetTypeForCall(call, localTypes, resolvedInfo, file, resolver);
-    const returnedType = resolvedInfo?.returnType ?? null;
-    const access = operationAccess(name);
-    const semanticTarget = access
-      ? (typedTarget ?? (access === "read" && returnRepresentsReadTarget(name) ? returnedType : null))
-      : null;
+
+    // Resolve the callable through the value-flow environment (closures, callable
+    // parameters) before falling back to name resolution.
+    const callable = await flow.resolveCallable(name, env, file);
+    const targets = callableTargets(callable);
+    // More than one target, or a known target shadowed by an unknown alternative,
+    // is ambiguous: report it and invent no subject rather than pick a branch.
+    const ambiguous = targets.length > 1 || (callable.kind === "union" && Boolean(callable.hasUnknown));
+    if (ambiguous) {
+      acc.untraced.push({
+        call: name,
+        reason: "ambiguous callable target",
+        evidence: callEvidence,
+        implementationPath: implementationPath(path, callEvidence),
+      });
+      continue;
+    }
+    const resolvedInfo = targets.length === 1 ? targets[0].info : null;
+    const capturedEnv = targets.length === 1 ? targets[0].capturedEnv : null;
+
+    const access = operationAccess(resolvedInfo?.name ?? name);
+    let semanticTarget = null;
+    if (access === "write") {
+      semanticTarget = await subjectArg(call, resolvedInfo, env, file, flow);
+    } else if (access === "read") {
+      const returned = await flow.evalExpr(call, env, file);
+      semanticTarget = declName(returned) ?? await subjectArg(call, resolvedInfo, env, file, flow);
+    }
     const namedEffect = resolvedInfo
-      ? (semanticTarget ? classifyNamedEffect(name, semanticTarget) : null)
+      ? (isInfrastructureType(semanticTarget) ? null : semanticTarget ? classifyNamedEffect(resolvedInfo.name ?? name, semanticTarget) : null)
       : classifyNamedEffect(name);
-    if (namedEffect) await recordEffect(namedEffect, callEvidence, path, file, resolver, acc, graph, currentId, depth);
+    // The effect derivation reaches the resolved domain operation; record it in the path.
+    const effectPath = resolvedInfo
+      ? implementationPath(path, callEvidence, { file: resolvedInfo.file, line: resolvedInfo.line, symbol: resolvedInfo.name })
+      : path;
+    if (namedEffect) await recordEffect(namedEffect, callEvidence, effectPath, file, resolver, acc, graph, currentId, depth);
 
     if (resolvedInfo) {
       if (acc.trunkCall === null) acc.trunkCall = name;
       if (!acc.helperCalls.includes(name)) acc.helperCalls.push(name);
       const childId = addFunctionNode(graph, resolvedInfo);
       graph?.addEdge({ from: currentId, to: childId, kind: "calls", evidence: [callEvidence] });
-      const key = resolvedInfo.id;
+      const argBindings = await flow.bindArguments(call, resolvedInfo, env, file);
+      const seed = await flow.seedParams(resolvedInfo, argBindings, capturedEnv, resolvedInfo.file);
+      const key = `${resolvedInfo.id}#${bindingSignature(seed)}`;
+      const calleeEvidence = { file: resolvedInfo.file, line: resolvedInfo.line, symbol: resolvedInfo.name };
       if (depth < MAX_TRACE_DEPTH && !seen.has(key)) {
         seen.add(key);
         await walk(
           resolvedInfo,
+          seed,
           ctx,
           resolver,
           factIndex,
           acc,
+          flow,
           graph,
           depth + 1,
           seen,
-          implementationPath(path, callEvidence, evidenceForNode(resolvedInfo)),
+          implementationPath(path, callEvidence, calleeEvidence),
         );
       } else if (depth >= MAX_TRACE_DEPTH) {
         acc.untraced.push({
@@ -118,42 +161,38 @@ async function walk(info, ctx, resolver, factIndex, acc, graph, depth, seen, pat
   }
 }
 
-async function inferAssignedTypes(body, file, resolver, localTypes) {
-  for (const assignment of body.descendantsOfType("assignment")) {
-    const left = assignment.childForFieldName("left");
-    const right = assignment.childForFieldName("right");
-    if (left?.type !== "identifier" || right?.type !== "call") continue;
-    const callee = right.childForFieldName("function");
-    if (!callee) continue;
-    if (callee.type === "identifier") {
-      const resolved = await resolver.resolveFunction(file, callee.text);
-      const type = resolved ? resolver.describeFunction(resolved.file, resolved.node).returnType : callee.text;
-      const declaration = type ? await resolver.resolveDeclaration(resolved?.file ?? file, type) : null;
-      if (declaration) localTypes.set(left.text, declaration.name);
-    }
-  }
+function declName(value) {
+  return value?.kind === "declaration" ? value.name : null;
 }
 
-async function targetTypeForCall(call, localTypes, resolvedInfo, file, resolver) {
-  const args = call.childForFieldName("arguments")?.namedChildren ?? [];
-  const parameters = [...(resolvedInfo?.parameters?.entries() ?? [])];
+// Execution contexts, sessions, and connections are mechanism, not domain subjects.
+function isInfrastructureType(name) {
+  return /(?:Context|Session|Connection|Client)$/.test(name ?? "");
+}
+
+// Choose the aggregate a mutation acts on: the declaration-valued argument whose
+// parameter/argument names read as a subject, never an execution context.
+async function subjectArg(callNode, calleeInfo, env, file, flow) {
+  const args = callNode.childForFieldName("arguments")?.namedChildren ?? [];
+  const params = calleeInfo ? [...calleeInfo.parameters.keys()] : [];
   const candidates = [];
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    const localType = arg.type === "identifier" ? localTypes.get(arg.text) : null;
-    const [parameterName, parameterType] = parameters[index] ?? [null, null];
-    const candidate = localType ?? parameterType ?? null;
-    if (!candidate) continue;
-    const declaration = await resolver.resolveDeclaration(resolvedInfo?.file ?? file, candidate) ??
-      await resolver.resolveDeclaration(file, candidate);
-    if (!declaration) continue;
-    candidates.push({
-      name: declaration.name,
-      score: targetCandidateScore(parameterName, arg.type === "identifier" ? arg.text : null, declaration.name),
-      index,
-    });
+  let positional = 0;
+  for (const arg of args) {
+    let parameterName = null;
+    let value = null;
+    if (arg.type === "keyword_argument") {
+      parameterName = arg.childForFieldName("name")?.text ?? null;
+      value = await flow.evalExpr(arg.childForFieldName("value"), env, file);
+    } else {
+      parameterName = params[positional] ?? null;
+      positional += 1;
+      value = await flow.evalExpr(arg, env, file);
+    }
+    const name = declName(value);
+    if (!name) continue;
+    candidates.push({ name, score: targetCandidateScore(parameterName, arg.type === "identifier" ? arg.text : null, name) });
   }
-  candidates.sort((a, b) => b.score - a.score || a.index - b.index || a.name.localeCompare(b.name));
+  candidates.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
   return candidates[0]?.name ?? null;
 }
 

@@ -69,6 +69,26 @@ test("db.add(Model()) captures model name; db.commit() target is null", async ()
   assert.ok(dbWrites.some((w) => w.via === "db.commit" && w.target === null), "commit has null target");
 });
 
+test("db.add(instance) resolves the instance's declaration as the write subject", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-body-db4-"));
+  await writeFile(join(dir, "h.py"), `class Project:
+    pass
+def handler(db):
+    instance = Project()
+    db.add(instance)
+`);
+  const { fn, ctx } = await fnAndCtx(dir, "h.py");
+  const resolver = createResolver(["h.py"], ctx);
+  const factIndex = { schemaNames: new Set(), modelNames: new Set(["Project"]), envNames: new Set() };
+
+  const out = await traceBody(fn, "h.py", ctx, resolver, factIndex);
+
+  const write = out.writes.find((w) => w.medium === "db" && w.via === "db.add");
+  assert.ok(write, "db.add produces a db write");
+  assert.equal(write.target, "Project", "value flow resolves the added instance to its declaration");
+  assert.ok(!write.mechanism, "a named ORM insert is not suppressed as ceremony");
+});
+
 test("chained db.query(X).filter().delete() extracts X as write target", async () => {
   const dir = await mkdtemp(join(tmpdir(), "varai-body-db3-"));
   await writeFile(join(dir, "h.py"), `def handler(db):

@@ -2,6 +2,7 @@ import { findHandlers } from "./handlers.js";
 import { traceSignature } from "./signature.js";
 import { traceBody } from "./body.js";
 import { createResolver } from "./resolver.js";
+import { createValueFlow } from "./value-flow.js";
 import { privateNodeId } from "../lift/implementation-graph.js";
 
 export function buildObservationIndex(observations) {
@@ -21,6 +22,11 @@ export async function traceBehaviors(repoPath, files, ctx, observations, options
   const factIndex = buildObservationIndex(observations);
   const resolver = options.resolver ?? createResolver(files, ctx);
   const graph = options.graph ?? null;
+  // One value-flow instance for the whole scan: its declaration/callable/return
+  // memos amortize the shared backend helpers (_mutate, apply_mutation, …) that
+  // hundreds of routes re-enter, so the resolver work budget is not re-spent
+  // resolving the same helpers per route.
+  const flow = createValueFlow({ resolver });
   const handlers = await findHandlers(routeFacts, ctx);
 
   const behaviors = [];
@@ -32,7 +38,7 @@ export async function traceBehaviors(repoPath, files, ctx, observations, options
     graph?.addEdge({ from: interfaceId, to: handler.id, kind: "binds", evidence: [h.door.evidence] });
     const decoratorText = decoratorTextFor(h.handlerNode);
     const sig = traceSignature(h.handlerNode, decoratorText, h.file, factIndex, { rootEvidence: h.door.evidence });
-    const body = await traceBody(h.handlerNode, h.file, ctx, resolver, factIndex, { rootEvidence: h.door.evidence, graph });
+    const body = await traceBody(h.handlerNode, h.file, ctx, resolver, factIndex, { rootEvidence: h.door.evidence, graph, flow });
     behaviors.push({
       door: h.door,
       handler: { id: handler.id, file: handler.file, line: handler.line, symbol: handler.name },

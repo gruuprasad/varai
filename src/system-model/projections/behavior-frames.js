@@ -26,6 +26,7 @@ export function behaviorFrames(model) {
       interfaceIds,
       subjectIds: [],
       supportingResourceIds: [],
+      unresolvedEffectClaimIds: [],
       triggerClaimIds: [],
       conditionClaimIds: [],
       inputClaimIds: [],
@@ -48,7 +49,8 @@ export function behaviorFrames(model) {
       if (!grouped) frame.unresolvedClaimIds.push(claim.id);
 
       if (!EFFECT_RELATIONS.has(claim.relation)) continue;
-      if (claim.target.kind !== "reference") continue;
+      // An effect that never bound to a declaration (still a literal) is unresolved.
+      if (claim.target.kind !== "reference") { frame.unresolvedEffectClaimIds.push(claim.id); continue; }
       const target = index.elements.get(claim.target.id);
       if (target?.roles.includes("resource")) frame.subjectIds.push(target.id);
       else frame.supportingResourceIds.push(claim.target.id);
@@ -57,6 +59,7 @@ export function behaviorFrames(model) {
     for (const field of Object.keys(GROUPS)) frame[field].sort();
     frame.subjectIds = [...new Set(frame.subjectIds)].sort();
     frame.supportingResourceIds = [...new Set(frame.supportingResourceIds)].sort();
+    frame.unresolvedEffectClaimIds = [...new Set(frame.unresolvedEffectClaimIds)].sort();
     frame.unresolvedClaimIds = [...new Set(frame.unresolvedClaimIds)].sort();
     frames.push(frame);
 

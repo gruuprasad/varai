@@ -45,12 +45,14 @@ export function systemPaths(model) {
 
   function emit(steps) {
     const pathFrames = steps.map((step) => frameByBehavior.get(step.behaviorId)).filter(Boolean);
+    const terminal = frameByBehavior.get(steps.at(-1).behaviorId);
     paths.push({
       id: `path:${steps.map((step) => step.behaviorId).join(">")}`,
       name: pathFrames[0]?.name ?? index.elements.get(steps[0].behaviorId)?.name ?? "Observed path",
       entryBehaviorId: steps[0].behaviorId,
       terminalBehaviorId: steps.at(-1).behaviorId,
       steps,
+      completeness: completenessOf(terminal),
       interfaceIds: [...new Set(pathFrames.flatMap((frame) => frame.interfaceIds))].sort(),
       subjectIds: [...new Set(pathFrames.flatMap((frame) => frame.subjectIds))].sort(),
       claimIds: [...new Set(pathFrames.flatMap((frame) => frame.claimIds))].sort(),
@@ -63,6 +65,19 @@ export function systemPaths(model) {
     paths: dedupePaths(paths),
     diagnostics: diagnostics.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
   };
+}
+
+// A path's completeness is derived from its terminal frame:
+// - closed: the terminal frame resolves a subject effect or an outcome;
+// - partial: it has useful terminal claims but also unresolved effects/calls;
+// - open: it stops at an interface with no resolved subject or outcome.
+function completenessOf(frame) {
+  if (!frame) return "open";
+  const hasSubject = frame.subjectIds.length > 0;
+  const hasOutcome = frame.outcomeClaimIds.length > 0;
+  const hasUnresolved = (frame.unresolvedEffectClaimIds?.length ?? 0) > 0;
+  if (hasSubject || hasOutcome) return hasUnresolved ? "partial" : "closed";
+  return "open";
 }
 
 function referenceInvocations(frame, model) {

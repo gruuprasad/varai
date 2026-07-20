@@ -76,6 +76,9 @@ test("system paths compose a UI action through its API operation to its subject"
   assert.equal(byId.get(path.steps[0].behaviorId)?.kind, "action");
   assert.equal(byId.get(path.steps[1].behaviorId)?.kind, "operation");
   assert.ok(path.subjectIds.some((id) => byId.get(id)?.name === "BuildingDocument"));
+  // Resolves the subject but also carries an unresolved `changes file` effect, so it is
+  // partial, not open — the subject was reached, uncertainty remains.
+  assert.equal(path.completeness, "partial");
 });
 
 test("subjects are tier 0, screens nest surfaces, unplaced surfaces stay honest", async () => {
