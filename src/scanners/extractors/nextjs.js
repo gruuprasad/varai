@@ -1,6 +1,9 @@
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 const APP_ROUTE_RE = /(?:^|\/)app\/(.+)\/route\.[jt]sx?$/i;
 const PAGES_API_RE = /(?:^|\/)pages\/api\/(.+)\.[jt]sx?$/i;
+// Direct exports only (`export async function GET` / `export const POST`).
+// Re-exports such as `export { GET } from "./handlers"` are intentionally not
+// recovered yet — Next apps that only re-export handlers remain a known blind spot.
 const APP_EXPORT_RE = /\bexport\s+(?:async\s+)?(?:function\s+|const\s+)(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/g;
 const PAGES_METHOD_RE = /\breq\.method\s*===?\s*["'](GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)["']/gi;
 const PAGES_CASE_RE = /\bcase\s+["'](GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)["']\s*:/gi;

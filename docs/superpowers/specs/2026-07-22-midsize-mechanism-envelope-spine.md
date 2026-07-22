@@ -25,14 +25,17 @@ Literal `invokes` never enter paths. Missing operation extraction therefore yiel
 
 ## Analyzer changes
 
-1. **FastAPI named routers** (`fastapi.routes.v1`, extractor version 21→22 with Next)
+1. **FastAPI named routers** (`fastapi.routes.v1`)
    - Decorators such as `@api_content.get` / `@auth_router.post` extract as `api_route`.
    - Empty paths `""` are allowed and combine with `include_router` prefixes.
+   - Route arguments must be URL paths (`""` or `/…`); receivers such as `mock` /
+     `responses` / `cache` / `limiter` are rejected so test decorators do not become operations.
 2. **Next.js routes** (`nextjs.routes.v1`)
    - App Router `app/**/route.ts` exported HTTP handlers.
    - Pages Router `pages/api/**` method branches (`req.method === …`).
    - Dynamic segments `[param]` → `*`; route groups `(ee)` stripped from URLs.
    - Unhandled (non-Python) routes still become API behavior doors so UI matching works.
+   - Concrete UI paths (e.g. `/api/teams/42/documents`) uniquely bind to patterned doors.
 
 Fixture proof: `test/fixtures/nextjs-api-join/` and
 `test/system-model/mechanism-envelope-spine.test.js`.

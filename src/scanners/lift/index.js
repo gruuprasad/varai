@@ -99,9 +99,26 @@ export function matchingApiBehavior(invocation, behaviors) {
     String(candidate.door?.method ?? "").toUpperCase() === String(invocation.method ?? "").toUpperCase());
   const exact = candidates.find((candidate) => normalizeHttpKey(candidate.door?.method, candidate.door?.path) === exactKey);
   if (exact) return exact;
-  if (!String(invocation.path).includes("*")) return null;
-  const matches = candidates.filter((candidate) => pathPatternMatches(invocation.path, candidate.door?.path));
-  return matches.length === 1 ? matches[0] : null;
+
+  const invocationPath = String(invocation.path ?? "");
+  // UI wildcard patterns (*/storeys) against concrete or {param} doors.
+  if (invocationPath.includes("*")) {
+    const matches = candidates.filter((candidate) =>
+      pathPatternMatches(invocationPath, candidate.door?.path));
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+  // Concrete UI paths against patterned doors (Next * or FastAPI {param}).
+  const patterned = candidates.filter((candidate) => {
+    const doorPath = String(candidate.door?.path ?? "");
+    if (!doorPath.includes("*") && !/\{[^}]+\}/.test(doorPath)) return false;
+    return pathPatternMatches(doorPathToPattern(doorPath), invocationPath);
+  });
+  return patterned.length === 1 ? patterned[0] : null;
+}
+
+function doorPathToPattern(routePath) {
+  return String(routePath ?? "").replace(/\{[^}]+\}/g, "*");
 }
 
 function pathPatternMatches(pattern, routePath) {

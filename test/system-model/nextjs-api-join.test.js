@@ -38,10 +38,22 @@ test("Next.js API routes bind UI invokes into system paths and envelopes", async
   const pagesPost = model.elements.find((item) => item.name === "POST /api/teams/*/documents");
   assert.ok(pagesPost, "Pages API dynamic route operation");
 
+  const upload = model.elements.find((item) => item.name === "UploadDocumentButton handle Click");
+  assert.ok(upload, "concrete dynamic-path UI action");
+  const dynamicInvoke = model.claims.find((claim) =>
+    claim.sourceId === upload.id &&
+    claim.relation === "invokes" &&
+    claim.target.kind === "reference" &&
+    claim.target.id === pagesPost.id);
+  assert.ok(dynamicInvoke, "concrete /api/teams/42/documents must bind to POST /api/teams/*/documents");
+
   const paths = systemPaths(model).paths.filter((item) => item.entryBehaviorId === form.id);
   assert.ok(paths.length >= 1, "system path from form to API");
 
   const envelope = behavioralEnvelopes(model).envelopes.find((item) => item.entryBehaviorId === form.id);
   assert.ok(envelope, "behavioral envelope for form submit");
   assert.ok(envelope.invocationClaimIds.includes(invoke.id));
+
+  const uploadEnvelope = behavioralEnvelopes(model).envelopes.find((item) => item.entryBehaviorId === upload.id);
+  assert.ok(uploadEnvelope, "envelope for concrete dynamic-path upload");
 });
