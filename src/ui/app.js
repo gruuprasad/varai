@@ -7,7 +7,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
 (function setupTheme() {
-  document.documentElement.dataset.theme = localStorage.getItem("varai-theme") || "dark";
+  document.documentElement.dataset.theme = localStorage.getItem("varai-theme") || "light";
   document.addEventListener("DOMContentLoaded", () => $("theme-toggle")?.addEventListener("click", () => {
     const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
@@ -17,8 +17,17 @@ const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;"
 
 const el = {
   statusDot: $("status-dot"), statusText: $("status-text"), topbarStats: $("topbar-stats"),
-  sidebarNav: $("sidebar-nav"), search: $("search"), searchCount: $("search-count"), list: $("elements-list"),
+  sidebarNav: $("sidebar-nav"), search: $("search"), searchClear: $("search-clear"), searchCount: $("search-count"),
+  bentoGrid: $("bento-grid"), focusContent: $("focus-content"), 
+  gridLayer: $("grid-layer"), focusLayer: $("focus-layer"), backBtn: $("back-btn"),
 };
+
+if (el.backBtn) {
+  el.backBtn.addEventListener("click", () => {
+    expandedId = null;
+    render();
+  });
+}
 
 let activeView = "system";
 let expandedId = null;
@@ -44,8 +53,8 @@ fetch("/api/model").then((response) => response.json()).then((data) => {
 fetch("/api/diff").then((response) => response.json()).then((data) => { diffData = data; render(); }).catch(() => {});
 
 function setStatus(kind, text) {
-  el.statusDot.className = `status-dot ${kind}`;
-  el.statusText.textContent = text;
+  if (el.statusDot) el.statusDot.className = `status-dot ${kind}`;
+  if (el.statusText) el.statusText.textContent = text;
 }
 
 function language() {
@@ -101,6 +110,29 @@ function rootChanged(root, changed) {
     root.surfaceIds.some((id) => changed.has(id));
 }
 
+function renderPanes(masterHtml, detailHtml) {
+  if (el.bentoGrid) el.bentoGrid.innerHTML = masterHtml;
+  if (el.focusContent) el.focusContent.innerHTML = detailHtml || emptyDetailPlaceholder();
+  
+  if (expandedId) {
+    el.gridLayer?.classList.remove("active");
+    el.focusLayer?.classList.add("active");
+  } else {
+    el.focusLayer?.classList.remove("active");
+    el.gridLayer?.classList.add("active");
+  }
+
+  bindExpanders();
+  bindSnippets();
+}
+
+function emptyDetailPlaceholder(title = "Select an item", message = "Select an item from the list to view full details.") {
+  return `<div class="detail-placeholder">` +
+    `<div class="empty-icon"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="14" y1="9" x2="18" y2="9"/><line x1="14" y1="13" x2="18" y2="13"/><line x1="14" y1="17" x2="18" y2="17"/></svg></div>` +
+    `<h3>${esc(title)}</h3>` +
+    `<p class="empty-copy">${esc(message)}</p></div>`;
+}
+
 function render() {
   if (!scanData?.model) return;
   renderTopbar();
@@ -119,10 +151,19 @@ function renderTopbar() {
   const operations = areas.reduce((sum, area) => sum + area.operationCount, 0);
   const primaryOperations = areas.reduce((sum, area) => sum + (area.primaryOperationCount ?? area.operationCount), 0);
   el.topbarStats.innerHTML =
-    `<span>${areas.length} observed areas</span>` +
-    `<span>${primaryOperations} primary · ${operations} observed operations</span>` +
-    `<span>${cores.length} shared parts</span>`;
+    `<span class="stat-pill"><strong>${areas.length}</strong> observed areas</span>` +
+    `<span class="stat-pill"><strong>${primaryOperations}</strong> primary · ${operations} operations</span>` +
+    `<span class="stat-pill"><strong>${cores.length}</strong> shared parts</span>`;
 }
+
+const NAV_ICONS = {
+  system: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>`,
+  subjects: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
+  capabilities: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+  changes: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>`,
+  everything: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
+  unknowns: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+};
 
 function renderNav() {
   const changes = diffData?.diff?.summary?.semanticChanges ?? 0;
@@ -140,13 +181,15 @@ function renderNav() {
     expandedId = null;
     changesOnly = false;
     el.search.value = "";
+    if (el.searchClear) el.searchClear.hidden = true;
     render();
   }));
 }
 
-function navItem(view, icon, name, count) {
+function navItem(view, fallbackIcon, name, count) {
+  const iconSvg = NAV_ICONS[view] || esc(fallbackIcon);
   return `<button class="nav-item${activeView === view ? " active" : ""}" data-view="${view}">` +
-    `<span class="nav-icon">${esc(icon)}</span><span class="nav-name">${esc(name)}</span>` +
+    `<span class="nav-icon">${iconSvg}</span><span class="nav-name">${esc(name)}</span>` +
     `${count == null ? "" : `<span class="nav-count">${count}</span>`}</button>`;
 }
 
@@ -216,9 +259,8 @@ function renderObservedAreas() {
     : diffData?.error ? `<p class="baseline-note">${esc(diffData.error)}</p>` : "";
 
   el.searchCount.textContent = query ? `${rendered.matchCount} matches` : "";
-  el.list.innerHTML = strip + rendered.html;
-  bindExpanders();
-  bindSnippets();
+
+  renderPanes(strip + (rendered.masterHtml || rendered.html), rendered.detailHtml);
   $("change-strip")?.addEventListener("click", () => { changesOnly = !changesOnly; render(); });
 }
 
@@ -234,7 +276,9 @@ function renderSubjects() {
   const subjects = projection.roots.filter((root) => root.tier === 0 && visible(root));
   const screens = projection.roots.filter((root) => root.tier === 1 && byId.get(root.elementId)?.kind === "screen" && visible(root));
   const unplaced = projection.roots.filter((root) => root.tier === 1 && byId.get(root.elementId)?.kind === "surface" && visible(root));
-  el.searchCount.textContent = query ? `${subjects.length + screens.length + unplaced.length} matches` : "";
+  const allRoots = [...subjects, ...screens, ...unplaced];
+
+  el.searchCount.textContent = query ? `${allRoots.length} matches` : "";
 
   const changedRootCount = projection.roots.filter((root) => root.tier <= 1 && rootChanged(root, changed)).length;
   const strip = diffData?.diff?.summary?.hasChanges
@@ -243,59 +287,92 @@ function renderSubjects() {
       `<span>${changesOnly ? "show everything" : "show only changes"}</span></button>`
     : diffData?.error ? `<p class="baseline-note">${esc(diffData.error)}</p>` : "";
 
-  let html = strip + `<h2 class="group-heading">Subjects</h2>`;
-  html += subjects.length
-    ? subjects.map((root) => subjectCard(root, byId, claimsBySource, changed)).join("")
+  let masterHtml = strip + `<h2 class="group-heading">Subjects</h2>`;
+  masterHtml += subjects.length
+    ? subjects.map((root) => subjectMasterCard(root, byId, changed)).join("")
     : `<p class="empty-copy">No system subjects recovered.</p>`;
-  html += `<h2 class="group-heading">Screens</h2>`;
-  html += screens.length
-    ? screens.map((root) => screenCard(root, byId, claimsBySource, changed)).join("")
+  masterHtml += `<h2 class="group-heading">Screens</h2>`;
+  masterHtml += screens.length
+    ? screens.map((root) => screenMasterCard(root, byId, changed)).join("")
     : `<p class="empty-copy">No screens recovered.</p>`;
   if (unplaced.length) {
-    html += `<h3 class="subgroup-heading">Not placed on a screen</h3>` +
-      unplaced.map((root) => subjectCard(root, byId, claimsBySource, changed)).join("");
+    masterHtml += `<h3 class="subgroup-heading">Not placed on a screen</h3>` +
+      unplaced.map((root) => subjectMasterCard(root, byId, changed)).join("");
   }
-  el.list.innerHTML = html;
-  bindExpanders();
-  bindSnippets();
+
+  const selectedRoot = allRoots.find((r) => r.elementId === expandedId);
+  let detailHtml = "";
+  if (selectedRoot) {
+    const isScreen = byId.get(selectedRoot.elementId)?.kind === "screen";
+    detailHtml = isScreen
+      ? screenDetail(selectedRoot, byId, claimsBySource, changed)
+      : subjectDetail(selectedRoot, byId, claimsBySource, changed);
+  } else {
+    detailHtml = emptyDetailPlaceholder("Select a Subject or Screen", "Select a subject or screen from the list to view detailed behaviors.");
+  }
+
+  renderPanes(masterHtml, detailHtml);
   $("change-strip")?.addEventListener("click", () => { changesOnly = !changesOnly; render(); });
 }
 
-function subjectCard(root, byId, claimsBySource, changed) {
+function subjectMasterCard(root, byId, changed) {
   const item = byId.get(root.elementId);
-  const open = expandedId === root.elementId;
-  return `<article class="card${open ? " open" : ""}">` +
-    `<button class="card-head" data-expand="${esc(root.elementId)}" aria-expanded="${open}">` +
+  const selected = expandedId === root.elementId;
+  return `<article class="card${selected ? " selected open" : ""}">` +
+    `<button class="card-head" data-expand="${esc(root.elementId)}" aria-expanded="${selected}">` +
     `<span class="card-title"><strong>${esc(item.name)}</strong><small>${esc(kindLabel(item.kind))}</small></span>` +
     `${rootChanged(root, changed) ? changeBadge() : ""}` +
     `${item.claimState !== "observed" ? stateMark(item.claimState) : ""}` +
     `<span class="count">${root.behaviorIds.length} ${root.behaviorIds.length === 1 ? "behavior" : "behaviors"}</span>` +
-    `<span class="chevron">⌄</span></button>` +
-    (open ? `<div class="card-detail">${behaviorList(root.behaviorIds, root.interfaceIds, byId, claimsBySource, changed)}</div>` : "") +
+    `<span class="chevron">›</span></button>` +
     `</article>`;
 }
 
-function screenCard(root, byId, claimsBySource, changed) {
+function subjectDetail(root, byId, claimsBySource, changed) {
   const item = byId.get(root.elementId);
-  const open = expandedId === root.elementId;
-  let detail = "";
-  if (open) {
-    const panels = root.surfaceIds.map((surfaceId) => {
-      const surface = byId.get(surfaceId);
-      const offers = (claimsBySource.get(surfaceId) ?? [])
-        .filter((claim) => claim.relation === "offers" && claim.target.kind === "reference")
-        .map((claim) => claim.target.id);
-      return `<section class="panel-block"><h4>${esc(surface.name)} <small>${esc(kindLabel(surface.kind))}</small></h4>` +
-        behaviorList(offers, [surfaceId], byId, claimsBySource, changed) + `</section>`;
-    }).join("");
-    detail = `<div class="card-detail">${panels || `<p class="empty-copy">No panels were resolved into this screen.</p>`}</div>`;
-  }
-  return `<article class="card${open ? " open" : ""}">` +
-    `<button class="card-head" data-expand="${esc(root.elementId)}" aria-expanded="${open}">` +
+  return `<div class="detail-content">` +
+    `<header class="detail-header">` +
+    `<div class="detail-title-wrap">` +
+    `<h1 class="detail-title">${esc(item.name)}</h1>` +
+    `<span class="detail-role">${esc(kindLabel(item.kind))} · ${root.behaviorIds.length} behaviors</span>` +
+    `</div>` +
+    `${item.claimState !== "observed" ? stateMark(item.claimState) : ""}` +
+    `</header>` +
+    behaviorList(root.behaviorIds, root.interfaceIds, byId, claimsBySource, changed) +
+    `</div>`;
+}
+
+function screenMasterCard(root, byId, changed) {
+  const item = byId.get(root.elementId);
+  const selected = expandedId === root.elementId;
+  return `<article class="card${selected ? " selected open" : ""}">` +
+    `<button class="card-head" data-expand="${esc(root.elementId)}" aria-expanded="${selected}">` +
     `<span class="card-title"><strong>${esc(item.name)}</strong><small>screen</small></span>` +
     `${rootChanged(root, changed) ? changeBadge() : ""}` +
     `<span class="count">${root.surfaceIds.length} ${root.surfaceIds.length === 1 ? "panel" : "panels"} · ${root.behaviorIds.length} ${root.behaviorIds.length === 1 ? "behavior" : "behaviors"}</span>` +
-    `<span class="chevron">⌄</span></button>${detail}</article>`;
+    `<span class="chevron">›</span></button></article>`;
+}
+
+function screenDetail(root, byId, claimsBySource, changed) {
+  const item = byId.get(root.elementId);
+  const panels = root.surfaceIds.map((surfaceId) => {
+    const surface = byId.get(surfaceId);
+    const offers = (claimsBySource.get(surfaceId) ?? [])
+      .filter((claim) => claim.relation === "offers" && claim.target.kind === "reference")
+      .map((claim) => claim.target.id);
+    return `<section class="panel-block"><h4>${esc(surface.name)} <small>${esc(kindLabel(surface.kind))}</small></h4>` +
+      behaviorList(offers, [surfaceId], byId, claimsBySource, changed) + `</section>`;
+  }).join("");
+
+  return `<div class="detail-content">` +
+    `<header class="detail-header">` +
+    `<div class="detail-title-wrap">` +
+    `<h1 class="detail-title">${esc(item.name)}</h1>` +
+    `<span class="detail-role">screen · ${root.surfaceIds.length} panels · ${root.behaviorIds.length} behaviors</span>` +
+    `</div>` +
+    `</header>` +
+    (panels || `<p class="empty-copy">No panels were resolved into this screen.</p>`) +
+    `</div>`;
 }
 
 function behaviorList(behaviorIds, interfaceIds, byId, claimsBySource, changed) {
@@ -335,10 +412,11 @@ function claimRow(claim, byId) {
   const trace = claim.implementationPath ?? [];
   const steps = trace.map((step, index) =>
     `<li><button class="trace-step" data-file="${esc(step.file)}" data-line="${step.line ?? 1}">` +
-    `<span>${index + 1}</span><code>${esc(step.symbol ? `${step.symbol} · ${step.file}` : step.file)}${step.line ? `:${step.line}` : ""}</code></button>` +
+    `<span class="step-num">${index + 1}</span><code class="trace-code">${esc(step.symbol ? `${step.symbol} · ${step.file}` : step.file)}${step.line ? `:${step.line}` : ""}</code></button>` +
     `<div class="snippet" data-snippet="${esc(`${step.file}:${step.line ?? 1}`)}" hidden></div></li>`).join("");
   const fallback = (claim.evidence ?? []).map((entry) => `${esc(entry.file)}${entry.line ? `:${entry.line}` : ""}`).join(", ");
-  return `<div class="claim"><p>${esc(relationLabel(claim.relation))} <strong>${esc(target)}</strong>${stateMark(claim.claimState)}</p>` +
+  const rel = esc(claim.relation);
+  return `<div class="claim"><p><span class="relation-chip rel-${rel}">${esc(relationLabel(claim.relation))}</span> <strong class="claim-target">${esc(target)}</strong>${stateMark(claim.claimState)}</p>` +
     (steps ? `<ol class="trace">${steps}</ol>` : fallback ? `<small class="evidence">${fallback}</small>` : "") + `</div>`;
 }
 
@@ -368,7 +446,7 @@ async function toggleSnippet(button) {
 }
 
 function bindSnippets() {
-  el.list.querySelectorAll(".trace-step").forEach((button) => button.addEventListener("click", (event) => {
+  document.querySelectorAll(".trace-step").forEach((button) => button.addEventListener("click", (event) => {
     event.stopPropagation();
     toggleSnippet(button);
   }));
@@ -382,44 +460,75 @@ function renderCapabilities() {
   const changed = changedIds();
   const query = el.search.value.toLowerCase().trim();
   showSearch(`Find a behavior across ${projection.frames.length} capabilities...`);
-  const items = projection.frames.filter((item) => {
-    const names = [item.name, byId.get(item.behaviorId)?.name, ...item.subjectIds.map((id) => byId.get(id)?.name)];
-    return !query || names.some((name) => name?.toLowerCase().includes(query));
-  });
+
   const envelopes = envelopeProjection.envelopes.filter((item) => {
     const names = [item.name, ...item.primarySubjectIds.map((id) => byId.get(id)?.name)];
     return !query || names.some((name) => name?.toLowerCase().includes(query));
   });
-  el.searchCount.textContent = query ? `${items.length + envelopes.length} matches` : "";
-  let html = `<h2 class="group-heading">Static behavior envelopes</h2>`;
-  html += envelopes.length ? envelopes.map((item) => {
-    const open = expandedId === item.id;
+  const items = projection.frames.filter((item) => {
+    const names = [item.name, byId.get(item.behaviorId)?.name, ...item.subjectIds.map((id) => byId.get(id)?.name)];
+    return !query || names.some((name) => name?.toLowerCase().includes(query));
+  });
+
+  const allCaps = [...envelopes.map(e => ({ type: "envelope", id: e.id, item: e })), ...items.map(i => ({ type: "behavior", id: i.behaviorId, item: i }))];
+
+  el.searchCount.textContent = query ? `${envelopes.length + items.length} matches` : "";
+
+  let masterHtml = `<h2 class="group-heading">Static behavior envelopes</h2>`;
+  masterHtml += envelopes.length ? envelopes.map((item) => {
+    const selected = expandedId === item.id;
     const steps = item.behaviorIds.map((id) =>
       projection.frames.find((frame) => frame.behaviorId === id)?.name ?? byId.get(id)?.name).filter(Boolean);
     const subjects = item.primarySubjectIds.map((id) => byId.get(id)?.name).filter(Boolean);
-    return `<article class="card${open ? " open" : ""}">` +
-      `<button class="card-head" data-expand="${esc(item.id)}" aria-expanded="${open}">` +
+    return `<article class="card${selected ? " selected open" : ""}">` +
+      `<button class="card-head" data-expand="${esc(item.id)}" aria-expanded="${selected}">` +
       `<span class="card-title"><strong>${esc(item.name)}</strong>${pathStatus(item.completeness)}<small>${esc([...steps, ...subjects].join(" → "))}</small></span>` +
-      `<span class="chevron">⌄</span></button>` +
-      (open ? `<div class="card-detail">${envelopeDetail(item, byId)}</div>` : "") +
+      `<span class="chevron">›</span></button>` +
       `</article>`;
   }).join("") : `<p class="empty-copy">No cross-interface behavior envelope was resolved.</p>`;
-  html += `<h2 class="group-heading">All behaviors</h2>`;
-  html += items.map((item) => {
+
+  masterHtml += `<h2 class="group-heading">All behaviors</h2>`;
+  masterHtml += items.map((item) => {
     const behavior = byId.get(item.behaviorId);
-    const open = expandedId === behavior.id;
+    const selected = expandedId === behavior?.id;
     const resources = item.subjectIds.map((id) => byId.get(id)?.name).filter(Boolean);
-    return `<article class="card${open ? " open" : ""}">` +
-      `<button class="card-head" data-expand="${esc(behavior.id)}" aria-expanded="${open}">` +
+    return `<article class="card${selected ? " selected open" : ""}">` +
+      `<button class="card-head" data-expand="${esc(behavior?.id)}" aria-expanded="${selected}">` +
       `<span class="card-title"><strong>${esc(item.name)}</strong>` +
       `<small>${resources.length ? `acts on ${esc(resources.join(", "))}` : "no resolved subject"}</small></span>` +
-      `${changed.has(behavior.id) ? changeBadge() : ""}<span class="chevron">⌄</span></button>` +
-      (open ? `<div class="card-detail">${behaviorList([behavior.id], item.interfaceIds, byId, claimsBySource, changed)}</div>` : "") +
+      `${changed.has(behavior?.id) ? changeBadge() : ""}<span class="chevron">›</span></button>` +
       `</article>`;
-  }).join("") || emptyMarkup("No behaviors match this search");
-  el.list.innerHTML = html;
-  bindExpanders();
-  bindSnippets();
+  }).join("");
+
+  const selectedCap = allCaps.find((c) => c.id === expandedId);
+  let detailHtml = "";
+  if (selectedCap?.type === "envelope") {
+    detailHtml = `<div class="detail-content">` +
+      `<header class="detail-header">` +
+      `<div class="detail-title-wrap">` +
+      `<h1 class="detail-title">${esc(selectedCap.item.name)}</h1>` +
+      `<span class="detail-role">Static behavior envelope</span>` +
+      `</div>` +
+      `${pathStatus(selectedCap.item.completeness)}` +
+      `</header>` +
+      envelopeDetail(selectedCap.item, byId) +
+      `</div>`;
+  } else if (selectedCap?.type === "behavior") {
+    const behavior = byId.get(selectedCap.item.behaviorId);
+    detailHtml = `<div class="detail-content">` +
+      `<header class="detail-header">` +
+      `<div class="detail-title-wrap">` +
+      `<h1 class="detail-title">${esc(selectedCap.item.name)}</h1>` +
+      `<span class="detail-role">Behavior · ${esc(behavior?.kind ?? "action")}</span>` +
+      `</div>` +
+      `</header>` +
+      behaviorList([selectedCap.item.behaviorId], selectedCap.item.interfaceIds, byId, claimsBySource, changed) +
+      `</div>`;
+  } else {
+    detailHtml = emptyDetailPlaceholder("Select a Capability", "Select a static envelope or behavior to inspect claims and effects.");
+  }
+
+  renderPanes(masterHtml, detailHtml);
 }
 
 function envelopeDetail(envelope, byId) {
@@ -449,13 +558,19 @@ function renderChanges() {
   const label = (id) => diff.labels[id] ?? id;
   const claimText = (item) =>
     `${relationLabel(item.relation)} ${item.target.kind === "reference" ? label(item.target.id) : item.target.value}`;
-  let html = `<h2 class="group-heading">${diff.summary.semanticChanges} semantic ${diff.summary.semanticChanges === 1 ? "change" : "changes"}</h2>`;
-  for (const item of diff.elements.added) html += changeCard("added", "+", item.name, kindLabel(item.kind));
-  for (const item of diff.elements.removed) html += changeCard("removed", "−", item.name, kindLabel(item.kind));
-  for (const item of diff.claims.added) html += changeCard("added", "+", label(item.sourceId), claimText(item));
-  for (const item of diff.claims.removed) html += changeCard("removed", "−", label(item.sourceId), claimText(item));
-  for (const item of diff.claims.changed) html += changeCard("changed", "~", label(item.after.sourceId), claimText(item.after));
-  el.list.innerHTML = html;
+  let masterHtml = `<h2 class="group-heading">${diff.summary.semanticChanges} semantic ${diff.summary.semanticChanges === 1 ? "change" : "changes"}</h2>`;
+  for (const item of diff.elements.added) masterHtml += changeCard("added", "+", item.name, kindLabel(item.kind));
+  for (const item of diff.elements.removed) masterHtml += changeCard("removed", "−", item.name, kindLabel(item.kind));
+  for (const item of diff.claims.added) masterHtml += changeCard("added", "+", label(item.sourceId), claimText(item));
+  for (const item of diff.claims.removed) masterHtml += changeCard("removed", "−", label(item.sourceId), claimText(item));
+  for (const item of diff.claims.changed) masterHtml += changeCard("changed", "~", label(item.after.sourceId), claimText(item.after));
+  
+  const detailHtml = `<div class="detail-content">` +
+    `<header class="detail-header"><div class="detail-title-wrap"><h1 class="detail-title">Semantic Diff Summary</h1><span class="detail-role">Comparison against baseline checkpoint</span></div></header>` +
+    `<p class="reach">Below are the semantic elements and claims modified since the last snapshot.</p>` +
+    `</div>`;
+
+  renderPanes(masterHtml, detailHtml);
 }
 
 function changeCard(kind, symbol, name, detail) {
@@ -472,40 +587,91 @@ function renderEverything() {
   showSearch(`Search all ${scanData.model.elements.length} elements and source paths...`);
   el.searchCount.textContent = query ? `${elements.length} matches` : "";
   if (!elements.length) return renderEmpty("Nothing matches this search");
-  el.list.innerHTML = elements.slice(0, 200).map((item) =>
-    `<article class="card"><div class="card-head static">` +
-    `<span class="card-title"><strong>${esc(item.name)}</strong><small>${esc(kindLabel(item.kind))}</small></span></div>` +
-    `<div class="card-detail open-static">` +
-    (claimsBySource.get(item.id) ?? []).map((claim) => claimRow(claim, byId)).join("") +
-    `<small class="evidence">${(item.evidence ?? []).map((entry) => `${esc(entry.file)}${entry.line ? `:${entry.line}` : ""}`).join(", ") || "no direct evidence"}</small>` +
-    `</div></article>`).join("") +
-    (elements.length > 200 ? `<p class="empty-copy">${elements.length - 200} more — narrow the search.</p>` : "");
-  bindSnippets();
+
+  let masterHtml = elements.slice(0, 200).map((item) => {
+    const selected = expandedId === item.id;
+    return `<article class="card${selected ? " selected open" : ""}">` +
+      `<button class="card-head" data-expand="${esc(item.id)}">` +
+      `<span class="card-title"><strong>${esc(item.name)}</strong><small>${esc(kindLabel(item.kind))}</small></span>` +
+      `<span class="chevron">›</span></button></article>`;
+  }).join("") + (elements.length > 200 ? `<p class="empty-copy">${elements.length - 200} more — narrow search.</p>` : "");
+
+  const selectedItem = elements.find((e) => e.id === expandedId);
+  let detailHtml = "";
+  if (selectedItem) {
+    detailHtml = `<div class="detail-content">` +
+      `<header class="detail-header"><div class="detail-title-wrap"><h1 class="detail-title">${esc(selectedItem.name)}</h1><span class="detail-role">${esc(kindLabel(selectedItem.kind))}</span></div></header>` +
+      (claimsBySource.get(selectedItem.id) ?? []).map((claim) => claimRow(claim, byId)).join("") +
+      `<small class="evidence">${(selectedItem.evidence ?? []).map((entry) => `${esc(entry.file)}${entry.line ? `:${entry.line}` : ""}`).join(", ") || "no direct evidence"}</small>` +
+      `</div>`;
+  } else {
+    detailHtml = emptyDetailPlaceholder("Select an Element", "Select an element to view its claims and source evidence.");
+  }
+
+  renderPanes(masterHtml, detailHtml);
 }
 
 function renderUnknowns() {
   el.search.closest(".search-wrap").hidden = true;
-  el.list.innerHTML = `<h2 class="group-heading">What varai couldn't determine</h2>` +
+  let masterHtml = `<h2 class="group-heading">What varai couldn't determine</h2>` +
     (scanData.model.coverage.length ? scanData.model.coverage.map((item) =>
       `<article class="card"><div class="card-head static">` +
       `<span class="card-title"><strong>${esc(item.capability)}</strong><small>${esc(item.state)}</small></span></div>` +
       `${item.details.length ? `<div class="card-detail open-static"><p>${esc(item.details.join("; "))}</p></div>` : ""}</article>`).join("")
       : emptyMarkup("Nothing was declared out of reach"));
+
+  const detailHtml = `<div class="detail-content">` +
+    `<header class="detail-header"><div class="detail-title-wrap"><h1 class="detail-title">Coverage & Unknowns</h1><span class="detail-role">Declared analyzer boundaries</span></div></header>` +
+    `<p class="reach">Varai reports explicit boundaries where repository information could not be conclusively extracted.</p>` +
+    `</div>`;
+
+  renderPanes(masterHtml, detailHtml);
 }
 
 function bindExpanders() {
-  el.list.querySelectorAll("[data-expand]").forEach((button) => button.addEventListener("click", () => {
-    expandedId = expandedId === button.dataset.expand ? null : button.dataset.expand;
+  document.querySelectorAll("[data-expand]").forEach((button) => button.addEventListener("click", (e) => {
+    e.stopPropagation();
+    expandedId = button.dataset.expand;
     render();
-    if (expandedId) requestAnimationFrame(() => el.list.querySelector(`[data-expand="${CSS.escape(expandedId)}"]`)?.focus());
   }));
 }
 
-function renderEmpty(message) { el.list.innerHTML = emptyMarkup(message); }
-function emptyMarkup(message) { return `<div class="empty-state"><span class="empty-icon">◌</span><span>${esc(message)}</span></div>`; }
+function renderEmpty(message) {
+  renderPanes(emptyMarkup(message), emptyDetailPlaceholder());
+}
+
+function emptyMarkup(message) {
+  return `<div class="empty-state">` +
+    `<div class="empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg></div>` +
+    `<span class="empty-text">${esc(message)}</span></div>`;
+}
 
 let searchTimer = null;
-el.search.addEventListener("input", () => {
+el.search?.addEventListener("input", () => {
+  if (el.searchClear) el.searchClear.hidden = !el.search.value;
   clearTimeout(searchTimer);
   searchTimer = setTimeout(render, 120);
+});
+
+el.searchClear?.addEventListener("click", () => {
+  el.search.value = "";
+  if (el.searchClear) el.searchClear.hidden = true;
+  render();
+  el.search.focus();
+});
+
+document.addEventListener("keydown", (event) => {
+  if ((event.key === "/" || (event.key === "k" && (event.metaKey || event.ctrlKey))) && document.activeElement !== el.search) {
+    event.preventDefault();
+    el.search?.focus();
+    el.search?.select();
+  } else if (event.key === "Escape" && document.activeElement === el.search) {
+    el.search.value = "";
+    if (el.searchClear) el.searchClear.hidden = true;
+    render();
+    el.search.blur();
+  } else if (event.key === "Escape" && expandedId) {
+    expandedId = null;
+    render();
+  }
 });
