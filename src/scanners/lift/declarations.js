@@ -10,13 +10,15 @@ export async function createDeclarationRegistry({ observations, symbolIndex }) {
       sourceKinds,
       persisted: sourceKinds.includes("db_model"),
       schema: sourceKinds.includes("schema"),
-      fields: extractFields(item.node, item.file),
+      fields: item.node ? extractFields(item.node, item.file) : [],
     };
     declarations.set(declaration.id, declaration);
     const named = byName.get(declaration.name) ?? [];
     named.push(declaration);
     byName.set(declaration.name, named);
   }
+
+  seedPersistedFromObservations(observations, declarations, byName);
 
   for (const values of byName.values()) values.sort((a, b) => a.id.localeCompare(b.id));
 
@@ -31,6 +33,39 @@ export async function createDeclarationRegistry({ observations, symbolIndex }) {
     },
     values: () => [...declarations.values()].sort((a, b) => a.id.localeCompare(b.id)),
   };
+}
+
+function seedPersistedFromObservations(observations, declarations, byName) {
+  const byModel = new Map();
+  for (const item of observations ?? []) {
+    if (item.kind !== "db_model") continue;
+    const evidence = [...(item.evidence ?? [])]
+      .filter((entry) => entry?.file)
+      .sort((a, b) => String(a.file).localeCompare(String(b.file)) || (a.line ?? 0) - (b.line ?? 0));
+    if (!evidence.length) continue;
+    const existing = byName.get(item.name) ?? [];
+    if (existing.some((declaration) => declaration.persisted)) continue;
+    if (byModel.has(item.name)) continue;
+    byModel.set(item.name, { name: item.name, evidence: evidence[0] });
+  }
+
+  for (const { name, evidence } of [...byModel.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+    const declaration = {
+      id: `prisma:${evidence.file}:${name}`,
+      name,
+      file: evidence.file,
+      line: evidence.line ?? 1,
+      node: null,
+      sourceKinds: ["db_model"],
+      persisted: true,
+      schema: false,
+      fields: [],
+    };
+    declarations.set(declaration.id, declaration);
+    const named = byName.get(name) ?? [];
+    named.push(declaration);
+    byName.set(name, named);
+  }
 }
 
 function indexObservationKinds(observations) {
