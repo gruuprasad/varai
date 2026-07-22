@@ -89,7 +89,7 @@ export function classifyPrismaEffects(tree, file, delegateToModel, options = {})
 }
 
 export function looksLikePrismaClientModule(content) {
-  return /@prisma\/client|from\s+['"][^'"]*prisma['"]|require\(\s*['"][^'"]*prisma['"]\s*\)/.test(content);
+  return /@prisma\/client|from\s+['"][^'"]*prisma[^'"]*['"]|require\(\s*['"][^'"]*prisma[^'"]*['"]\s*\)/.test(content);
 }
 
 function parsePrismaCall(fnNode) {

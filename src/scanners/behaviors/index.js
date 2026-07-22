@@ -1,3 +1,4 @@
+import path from "node:path";
 import { findHandlers } from "./handlers.js";
 import { traceSignature } from "./signature.js";
 import { traceBody } from "./body.js";
@@ -5,6 +6,8 @@ import { createResolver } from "./resolver.js";
 import { createValueFlow } from "./value-flow.js";
 import { privateNodeId } from "../lift/implementation-graph.js";
 import { boundaryArtifactOutputs, writtenArtifactOutputs } from "./artifact-outputs.js";
+import { classifyPrismaEffects } from "./prisma-effects.js";
+import { modelNamesFromPrisma } from "../extractors/prisma.js";
 
 export function buildObservationIndex(observations) {
   const schemaNames = new Set();
@@ -90,7 +93,36 @@ export async function traceBehaviors(repoPath, files, ctx, observations, options
       artifactOutputs: [],
     });
   }
+
+  await enrichStubDoorPrismaEffects(behaviors, factIndex, ctx);
   return behaviors;
+}
+
+async function enrichStubDoorPrismaEffects(behaviors, factIndex, ctx) {
+  if (!factIndex.modelNames.size) return;
+  const delegateMap = modelNamesFromPrisma([...factIndex.modelNames]);
+  const cache = new Map();
+
+  for (const behavior of behaviors) {
+    if (behavior.handler) continue;
+    if ((behavior.writes?.length || 0) + (behavior.reads?.length || 0) > 0) continue;
+    const file = behavior.door?.evidence?.file;
+    if (!file || !/\.(ts|tsx|js|jsx)$/.test(file)) continue;
+
+    let effects = cache.get(file);
+    if (!effects) {
+      const ext = path.extname(file);
+      const lang = ext === ".ts" || ext === ".tsx" ? "tsx" : "javascript";
+      const tree = await ctx.tree(file, lang);
+      const content = await ctx.read(file);
+      effects = tree
+        ? classifyPrismaEffects(tree, file, delegateMap, { content: content ?? "" })
+        : { reads: [], writes: [] };
+      cache.set(file, effects);
+    }
+    behavior.reads = effects.reads;
+    behavior.writes = effects.writes;
+  }
 }
 
 function decoratorTextFor(fnNode) {
