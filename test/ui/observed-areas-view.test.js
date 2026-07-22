@@ -218,7 +218,7 @@ test("change overlay marks areas, operations, and shared cores from claim and el
   assert.equal(areaIsChanged(projection.areas[1], new Set(["el:action-qty"]), new Set()), true);
 });
 
-test("outline renders populated, partial, ungrouped, empty, and changed-only states", () => {
+test("outline grid shows cards without auto-selected focus", () => {
   const populated = renderObservedAreasOutline({
     projection,
     byId,
@@ -238,22 +238,64 @@ test("outline renders populated, partial, ungrouped, empty, and changed-only sta
     claimRow,
     esc,
   });
-  assert.match(populated.html, /Observed areas/);
-  assert.match(populated.html, /Plan Canvas/);
-  assert.match(populated.html, /Quantities/);
-  assert.match(populated.html, /area-role/);
-  assert.match(populated.html, /Mainly changes Building Model/);
-  assert.match(populated.html, /Mainly produces Quantity Summary/);
-  assert.match(populated.html, /partial/);
-  assert.match(populated.html, /Shared system parts/);
-  assert.match(populated.html, /Building Model/);
-  assert.match(populated.html, /Uses shared parts/);
-  assert.match(populated.html, /Not placed in an observed area/);
-  assert.match(populated.html, /Orphan export/);
-  assert.match(populated.html, /changed/);
-  assert.equal(populated.html.includes("changes Building Model · changes Building Model"), false);
+  assert.equal(populated.activeId, null);
+  assert.match(populated.masterHtml, /Observed areas/);
+  assert.match(populated.masterHtml, /Plan Canvas/);
+  assert.match(populated.masterHtml, /Quantities/);
+  assert.match(populated.masterHtml, /area-role/);
+  assert.match(populated.masterHtml, /Mainly changes Building Model/);
+  assert.match(populated.masterHtml, /path-status/);
+  assert.match(populated.masterHtml, /partial/);
+  assert.match(populated.masterHtml, /area-summary/);
+  assert.match(populated.masterHtml, /area-card/);
+  assert.match(populated.masterHtml, /Shared system parts/);
+  assert.match(populated.masterHtml, /Building Model/);
+  assert.match(populated.masterHtml, /Not placed in an observed area/);
+  assert.match(populated.masterHtml, /Orphan export/);
+  assert.match(populated.masterHtml, /changed/);
+  assert.equal(populated.masterHtml.includes("selected"), false);
+  assert.equal(populated.masterHtml.includes("detail-content"), false);
+  assert.match(populated.detailHtml, /Select an item/);
+  assert.equal(populated.detailHtml.includes("Observed path"), false);
+  assert.equal(populated.detailHtml.includes("Uses shared system parts"), false);
   assert.equal(populated.changedAreaCount, 1);
+  assert.equal(populated.html.includes("changes Building Model · changes Building Model"), false);
+});
 
+test("outline focus opens only when an area is selected", () => {
+  const expanded = renderObservedAreasOutline({
+    projection,
+    byId,
+    envelopesById,
+    pathsById,
+    claimsById,
+    query: "",
+    changesOnly: false,
+    changedElements: new Set(),
+    changedClaims: new Set(),
+    expandedId: projection.areas[0].id,
+    relationLabel,
+    kindLabel,
+    stateMark,
+    changeBadge,
+    pathStatus,
+    claimRow,
+    esc,
+  });
+  assert.equal(expanded.activeId, projection.areas[0].id);
+  assert.match(expanded.masterHtml, /selected/);
+  assert.match(expanded.detailHtml, /detail-title/);
+  assert.match(expanded.detailHtml, /area-summary/);
+  assert.match(expanded.detailHtml, /detail-role/);
+  assert.match(expanded.detailHtml, /Add wall/);
+  assert.match(expanded.detailHtml, /Observed path/);
+  assert.match(expanded.detailHtml, /Uses shared system parts/);
+  assert.match(expanded.detailHtml, /ops-preview/);
+  assert.match(expanded.detailHtml, /changes Building Model/);
+  assert.match(expanded.detailHtml, /<section class="envelope-section"><h3>Changes<\/h3>/);
+});
+
+test("outline renders changed-only, empty, and supporting states", () => {
   const changedOnly = renderObservedAreasOutline({
     projection,
     byId,
@@ -298,31 +340,6 @@ test("outline renders populated, partial, ungrouped, empty, and changed-only sta
   });
   assert.match(empty.html, /No observed interaction areas were recovered/);
 
-  const expanded = renderObservedAreasOutline({
-    projection,
-    byId,
-    envelopesById,
-    pathsById,
-    claimsById,
-    query: "",
-    changesOnly: false,
-    changedElements: new Set(),
-    changedClaims: new Set(),
-    expandedId: projection.areas[0].id,
-    relationLabel,
-    kindLabel,
-    stateMark,
-    changeBadge,
-    pathStatus,
-    claimRow,
-    esc,
-  });
-  assert.match(expanded.html, /Uses shared system parts/);
-  assert.match(expanded.html, /changes Building Model/);
-  assert.match(expanded.html, /Observed path/);
-  assert.match(expanded.html, /Add wall/);
-  assert.match(expanded.html, /<section class="envelope-section"><h3>Changes<\/h3>/);
-
   const withSupporting = {
     ...projection,
     areas: [{
@@ -365,9 +382,9 @@ test("outline renders populated, partial, ungrouped, empty, and changed-only sta
     claimRow,
     esc,
   });
-  assert.match(supporting.html, /<details class="supporting-observations"/);
-  assert.match(supporting.html, /Support read/);
-  const changesAt = supporting.html.indexOf("<h3>Changes</h3>");
-  const usesAt = supporting.html.indexOf("<h3>Uses</h3>");
+  assert.match(supporting.detailHtml, /<details class="supporting-observations"/);
+  assert.match(supporting.detailHtml, /Support read/);
+  const changesAt = supporting.detailHtml.indexOf("<h3>Changes</h3>");
+  const usesAt = supporting.detailHtml.indexOf("<h3>Uses</h3>");
   assert.equal(changesAt >= 0 && usesAt > changesAt, true);
 });

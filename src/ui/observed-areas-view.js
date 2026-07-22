@@ -197,34 +197,51 @@ export function renderObservedAreasOutline({
     }, changedElements, changedClaims);
   });
 
-  let html = `<h2 class="group-heading">Observed areas</h2>`;
+  const activeId = expandedId || null;
+  const ctx = {
+    areasById, byId, envelopesById, pathsById, claimsById, coresById, activeId, expandedId,
+    changedElements, changedClaims, relationLabel, kindLabel, stateMark, changeBadge, pathStatus, claimRow, esc,
+  };
+
+  let masterHtml = `<h2 class="group-heading">Observed areas</h2>`;
   if (!areas.length && !ungrouped.length) {
-    html += `<p class="empty-copy">${changesOnly ? "No observed areas changed since the last snapshot." : "No observed interaction areas were recovered."}</p>`;
+    masterHtml += `<p class="empty-copy">${changesOnly ? "No observed areas changed since the last snapshot." : "No observed interaction areas were recovered."}</p>`;
   } else {
-    html += areas.map((area) => renderArea(area, {
-      byId, envelopesById, pathsById, claimsById, coresById, expandedId, changedElements, changedClaims,
-      relationLabel, kindLabel, stateMark, changeBadge, pathStatus, claimRow, esc,
-    })).join("");
+    masterHtml += areas.map((area) => renderArea(area, ctx)).join("");
   }
 
   if (cores.length) {
-    html += `<h2 class="group-heading">Shared system parts</h2>`;
-    html += cores.map((core) => renderSharedCore(core, {
-      areasById, byId, envelopesById, claimsById, expandedId, changedElements, changedClaims,
-      relationLabel, kindLabel, stateMark, changeBadge, pathStatus, claimRow, esc,
-    })).join("");
+    masterHtml += `<h2 class="group-heading">Shared system parts</h2>`;
+    masterHtml += cores.map((core) => renderSharedCore(core, ctx)).join("");
   }
 
   if (ungrouped.length) {
-    html += `<h2 class="group-heading">Not placed in an observed area</h2>`;
-    html += ungrouped.map((item) => renderUngrouped(item, {
-      byId, envelopesById, claimsById, expandedId, changedElements, changedClaims,
-      relationLabel, stateMark, changeBadge, pathStatus, claimRow, esc,
-    })).join("");
+    masterHtml += `<h2 class="group-heading">Not placed in an observed area</h2>`;
+    masterHtml += ungrouped.map((item) => renderUngrouped(item, ctx)).join("");
+  }
+
+  let detailHtml = "";
+  const selectedArea = areasById.get(activeId);
+  const selectedCore = coresById.get(activeId);
+  const selectedUngrouped = ungrouped.find((u) => u.envelopeId === activeId);
+
+  if (selectedArea) {
+    detailHtml = renderAreaDetail(selectedArea, ctx);
+  } else if (selectedCore) {
+    detailHtml = renderSharedCoreDetail(selectedCore, ctx);
+  } else if (selectedUngrouped) {
+    detailHtml = renderUngroupedDetail(selectedUngrouped, ctx);
+  } else {
+    detailHtml = `<div class="detail-placeholder">` +
+      `<div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="14" y1="9" x2="18" y2="9"/><line x1="14" y1="13" x2="18" y2="13"/><line x1="14" y1="17" x2="18" y2="17"/></svg></div>` +
+      `<h3>Select an item</h3><p class="empty-copy">Select an observed area from the list to inspect operations and evidence.</p></div>`;
   }
 
   return {
-    html,
+    html: masterHtml + detailHtml,
+    masterHtml,
+    detailHtml,
+    activeId,
     matchCount: areas.length + cores.length + ungrouped.length,
     changedAreaCount: projection.areas.filter((area) => areaIsChanged(area, changedElements, changedClaims)).length,
   };
@@ -232,58 +249,81 @@ export function renderObservedAreasOutline({
 
 function renderArea(area, ctx) {
   const {
-    byId, envelopesById, claimsById, coresById, expandedId, changedElements, changedClaims,
-    relationLabel, kindLabel, changeBadge, pathStatus, claimRow, esc,
+    byId, envelopesById, claimsById, activeId, changedElements, changedClaims,
+    relationLabel, kindLabel, changeBadge, pathStatus, esc,
   } = ctx;
   const anchor = byId.get(area.anchorElementId);
-  const open = expandedId === area.id;
+  const open = activeId === area.id;
   const changed = areaIsChanged(area, changedElements, changedClaims);
   const role = areaRoleLine(area, byId, kindLabel);
   const summary = areaSummarySentences(area, claimsById, byId, relationLabel)
+    .slice(0, 2)
+    .map((line) => `<p class="area-summary">${esc(line)}</p>`)
+    .join("");
+
+  return `<article class="area-card${open ? " open selected" : ""}${changed ? " area-changed" : ""}">` +
+    `<button class="area-head" data-expand="${esc(area.id)}" aria-expanded="${open}">` +
+    `<span class="area-title-row">` +
+    `<span class="area-title"><strong>${esc(anchor?.name ?? area.anchorElementId)}</strong>` +
+    `<small class="area-role">${esc(role)}</small></span>` +
+    `${pathStatus(area.completeness)}` +
+    `${changed ? changeBadge() : ""}` +
+    `</span>` +
+    `<span class="area-card-body">${summary}</span>` +
+    `<span class="chevron">›</span></button></article>`;
+}
+
+export function renderAreaDetail(area, ctx) {
+  const {
+    byId, envelopesById, claimsById, relationLabel, kindLabel,
+    pathStatus, esc,
+  } = ctx;
+  const anchor = byId.get(area.anchorElementId);
+  const role = areaRoleLine(area, byId, kindLabel);
+  const summary = areaSummarySentences(area, claimsById, byId, relationLabel)
     .map((line) => `<p class="area-summary">${esc(line)}</p>`).join("");
-  const preview = area.operations.slice(0, 4).map((operation) => {
-    const envelope = envelopesById.get(operation.envelopeId);
-    const effect = operationPreviewSummary(operation, claimsById, byId, relationLabel);
-    return `<li class="area-op-preview${operationIsChanged(operation, changedElements, changedClaims) ? " changed" : ""}">` +
-      `<span class="op-name">${esc(envelope?.name ?? operation.envelopeId)}</span>` +
-      `<span class="op-effect">${esc(effect)}</span>` +
-      `${pathStatus(operation.completeness)}</li>`;
-  }).join("");
+
+  const primary = area.operations.filter((item) => item.prominence === "primary");
+  const supporting = area.operations.filter((item) => item.prominence !== "primary");
+  const previewOps = primary.length ? primary : area.operations;
+  const opsPreview = previewOps.length
+    ? `<section class="ops-preview"><h2 class="group-heading">Operations</h2><ul class="op-preview-list">` +
+      previewOps.map((operation) => {
+        const envelope = envelopesById.get(operation.envelopeId);
+        const preview = operationPreviewSummary(operation, claimsById, byId, relationLabel);
+        return `<li><strong>${esc(envelope?.name ?? operation.envelopeId)}</strong> · ${esc(preview)}</li>`;
+      }).join("") +
+      `</ul></section>`
+    : "";
+  const primaryHtml = previewOps
+    .map((operation) => renderOperation(operation, ctx)).join("");
+  const supportingHtml = primary.length && supporting.length
+    ? `<details class="supporting-observations"><summary class="supporting-heading">Supporting observations</summary>` +
+      supporting.map((operation) => renderOperation(operation, ctx)).join("") +
+      `</details>`
+    : supporting.map((operation) => renderOperation(operation, ctx)).join("");
 
   const shared = area.sharedCoreIds.map((id) => {
-    const core = coresById.get(id);
+    const core = ctx.coresById.get(id);
     if (!core) return "";
     const label = sharedCoreLabel(core.anchorElementIds, byId, { compact: true });
     return `<button class="core-link" data-expand="${esc(id)}" title="${esc(sharedCoreLabel(core.anchorElementIds, byId))}">${esc(label)}</button>`;
   }).join("");
 
-  let detail = "";
-  if (open) {
-    const primary = area.operations.filter((item) => item.prominence === "primary");
-    const supporting = area.operations.filter((item) => item.prominence !== "primary");
-    const primaryHtml = (primary.length ? primary : area.operations)
-      .map((operation) => renderOperation(operation, ctx)).join("");
-    const supportingHtml = primary.length && supporting.length
-      ? `<details class="supporting-observations"><summary class="supporting-heading">Supporting observations</summary>` +
-        supporting.map((operation) => renderOperation(operation, ctx)).join("") +
-        `</details>`
-      : supporting.map((operation) => renderOperation(operation, ctx)).join("");
-    detail = `<div class="card-detail area-detail">` +
-      summary +
-      primaryHtml +
-      supportingHtml +
-      (shared ? `<section class="area-shared"><h3>Uses shared system parts</h3><div class="core-links">${shared}</div></section>` : "") +
-      `</div>`;
-  }
-
-  return `<article class="area-block${open ? " open" : ""}${changed ? " area-changed" : ""}">` +
-    `<button class="area-head" data-expand="${esc(area.id)}" aria-expanded="${open}">` +
-    `<span class="area-title"><strong>${esc(anchor?.name ?? area.anchorElementId)}</strong>` +
-    `<small class="area-role">${esc(role)}</small></span>` +
-    `${changed ? changeBadge() : ""}` +
-    `<span class="chevron">⌄</span></button>` +
-    (open ? detail : `${summary}<ul class="area-preview">${preview}</ul>${shared ? `<div class="core-links landing"><span class="shared-label">Uses shared parts</span>${shared}</div>` : ""}`) +
-    `</article>`;
+  return `<div class="detail-content area-detail-view">` +
+    `<header class="detail-header">` +
+    `<div class="detail-title-wrap">` +
+    `<h1 class="detail-title">${esc(anchor?.name ?? area.anchorElementId)}</h1>` +
+    `<span class="detail-role">${esc(role)}</span>` +
+    `</div>` +
+    `${pathStatus(area.completeness)}` +
+    `</header>` +
+    summary +
+    opsPreview +
+    primaryHtml +
+    supportingHtml +
+    (shared ? `<section class="area-shared"><h3>Uses shared system parts</h3><div class="core-links">${shared}</div></section>` : "") +
+    `</div>`;
 }
 
 function renderOperation(operation, ctx) {
@@ -330,57 +370,67 @@ function renderObservedPaths(paths, byId, claimsById, claimRow, esc) {
 
 function renderSharedCore(core, ctx) {
   const {
-    areasById, byId, envelopesById, claimsById, expandedId, changedElements, changedClaims,
-    changeBadge, pathStatus, claimRow, esc,
+    byId, activeId, changedElements, changedClaims, changeBadge, esc,
   } = ctx;
-  const open = expandedId === core.id;
+  const open = activeId === core.id;
   const changed = coreIsChanged(core, changedElements, changedClaims);
-  const label = sharedCoreLabel(core.anchorElementIds, byId, { compact: !open });
+  const label = sharedCoreLabel(core.anchorElementIds, byId, { compact: true });
+  const fullLabel = sharedCoreLabel(core.anchorElementIds, byId);
+
+  return `<article class="area-card area-block core-block${open ? " open selected" : ""}${changed ? " area-changed" : ""}">` +
+    `<button class="area-head" data-expand="${esc(core.id)}" aria-expanded="${open}" title="${esc(fullLabel)}">` +
+    `<span class="area-title"><strong>${esc(label)}</strong><small>shared system part · used by ${core.usedByAreaIds.length}</small></span>` +
+    `${changed ? changeBadge() : ""}` +
+    `<span class="chevron">›</span></button>` +
+    `</article>`;
+}
+
+export function renderSharedCoreDetail(core, ctx) {
+  const {
+    areasById, byId, envelopesById, claimsById, pathStatus, claimRow, esc,
+  } = ctx;
   const fullLabel = sharedCoreLabel(core.anchorElementIds, byId);
   const usedBy = core.usedByAreaIds.map((areaId) => {
     const area = areasById.get(areaId);
     const name = byId.get(area?.anchorElementId)?.name ?? areaId;
     return `<button class="core-link" data-expand="${esc(areaId)}">${esc(name)}</button>`;
   }).join("");
-  let detail = "";
-  if (open) {
-    const operations = core.envelopeIds
-      .map((id) => envelopesById.get(id))
-      .filter(Boolean)
-      .map((envelope) => {
-        const claimIds = [
-          ...(envelope.primaryEffectClaimIds ?? []),
-          ...(envelope.outputClaimIds ?? []),
-          ...(envelope.outcomeClaimIds ?? []),
-        ];
-        return `<section class="behavior">` +
-          `<h3>${esc(envelope.name)}${pathStatus(envelope.completeness)}</h3>` +
-          claimIds.map((id) => claimsById.get(id)).filter(Boolean).map((claim) => claimRow(claim, byId)).join("") +
-          `</section>`;
-      }).join("");
-    detail = `<div class="card-detail">` +
-      `<p class="reach">Shared across independent observed areas · not a merged parent</p>` +
-      `<p class="reach">${esc(fullLabel)}</p>` +
-      `<section class="area-shared"><h3>Used by</h3><div class="core-links">${usedBy || `<p class="empty-copy">No leaf areas currently reference this core.</p>`}</div></section>` +
-      operations +
-      `</div>`;
-  }
-  return `<article class="area-block core-block${open ? " open" : ""}${changed ? " area-changed" : ""}">` +
-    `<button class="area-head" data-expand="${esc(core.id)}" aria-expanded="${open}" title="${esc(fullLabel)}">` +
-    `<span class="area-title"><strong>${esc(label)}</strong><small>shared system part · used by ${core.usedByAreaIds.length}</small></span>` +
-    `${changed ? changeBadge() : ""}` +
-    `<span class="chevron">⌄</span></button>` +
-    (open ? detail : `<div class="core-links landing">${usedBy}</div>`) +
-    `</article>`;
+
+  const operations = core.envelopeIds
+    .map((id) => envelopesById.get(id))
+    .filter(Boolean)
+    .map((envelope) => {
+      const claimIds = [
+        ...(envelope.primaryEffectClaimIds ?? []),
+        ...(envelope.outputClaimIds ?? []),
+        ...(envelope.outcomeClaimIds ?? []),
+      ];
+      return `<section class="behavior">` +
+        `<h3>${esc(envelope.name)}${pathStatus(envelope.completeness)}</h3>` +
+        claimIds.map((id) => claimsById.get(id)).filter(Boolean).map((claim) => claimRow(claim, byId)).join("") +
+        `</section>`;
+    }).join("");
+
+  return `<div class="detail-content core-detail-view">` +
+    `<header class="detail-header">` +
+    `<div class="detail-title-wrap">` +
+    `<h1 class="detail-title">${esc(fullLabel)}</h1>` +
+    `<span class="detail-role">Shared system part · used by ${core.usedByAreaIds.length} areas</span>` +
+    `</div>` +
+    `</header>` +
+    `<p class="reach">Shared across independent observed areas · not a merged parent</p>` +
+    `<section class="area-shared"><h3>Used by</h3><div class="core-links">${usedBy || `<p class="empty-copy">No leaf areas currently reference this core.</p>`}</div></section>` +
+    operations +
+    `</div>`;
 }
 
 function renderUngrouped(item, ctx) {
   const {
-    byId, envelopesById, claimsById, expandedId, changedElements, changedClaims,
-    changeBadge, pathStatus, claimRow, esc,
+    byId, envelopesById, activeId, changedElements, changedClaims,
+    changeBadge, pathStatus, esc,
   } = ctx;
   const envelope = envelopesById.get(item.envelopeId);
-  const open = expandedId === item.envelopeId;
+  const open = activeId === item.envelopeId;
   const operation = {
     entryBehaviorId: envelope?.entryBehaviorId,
     behaviorIds: envelope?.behaviorIds ?? [],
@@ -393,20 +443,43 @@ function renderUngrouped(item, ctx) {
     ],
   };
   const changed = operationIsChanged(operation, changedElements, changedClaims);
-  let detail = "";
-  if (open && envelope) {
-    const claimIds = operation.claimIds;
-    detail = `<div class="card-detail">` +
-      `<p class="reach">${esc(reasonLabel(item.reason))}</p>` +
-      claimIds.map((id) => claimsById.get(id)).filter(Boolean).map((claim) => claimRow(claim, byId)).join("") +
-      `</div>`;
-  }
-  return `<article class="area-block${open ? " open" : ""}${changed ? " area-changed" : ""}">` +
+  return `<article class="area-card area-block${open ? " open selected" : ""}${changed ? " area-changed" : ""}">` +
     `<button class="area-head" data-expand="${esc(item.envelopeId)}" aria-expanded="${open}">` +
     `<span class="area-title"><strong>${esc(envelope?.name ?? item.envelopeId)}</strong>` +
     `<small>${esc(reasonLabel(item.reason))}</small></span>` +
     `${changed ? changeBadge() : ""}${pathStatus(envelope?.completeness)}` +
-    `<span class="chevron">⌄</span></button>${detail}</article>`;
+    `<span class="chevron">›</span></button></article>`;
+}
+
+export function renderUngroupedDetail(item, ctx) {
+  const {
+    byId, envelopesById, claimsById, pathStatus, claimRow, esc,
+  } = ctx;
+  const envelope = envelopesById.get(item.envelopeId);
+  const operation = {
+    entryBehaviorId: envelope?.entryBehaviorId,
+    behaviorIds: envelope?.behaviorIds ?? [],
+    claimIds: [
+      ...(envelope?.primaryEffectClaimIds ?? []),
+      ...(envelope?.outputClaimIds ?? []),
+      ...(envelope?.outcomeClaimIds ?? []),
+      ...(envelope?.conditionClaimIds ?? []),
+      ...(envelope?.unresolvedClaimIds ?? []),
+    ],
+  };
+  const claimIds = operation.claimIds;
+  return `<div class="detail-content ungrouped-detail-view">` +
+    `<header class="detail-header">` +
+    `<div class="detail-title-wrap">` +
+    `<h1 class="detail-title">${esc(envelope?.name ?? item.envelopeId)}</h1>` +
+    `<span class="detail-role">${esc(reasonLabel(item.reason))}</span>` +
+    `</div>` +
+    `${pathStatus(envelope?.completeness)}` +
+    `</header>` +
+    `<section class="behavior">` +
+    claimIds.map((id) => claimsById.get(id)).filter(Boolean).map((claim) => claimRow(claim, byId)).join("") +
+    `</section>` +
+    `</div>`;
 }
 
 function reasonLabel(reason) {
