@@ -60,3 +60,104 @@ test("ignores non-python files", async () => {
   await writeFile(join(dir, "README.md"), "@app.get('/foo')");
   assert.equal((await extract(dir, ["README.md"])).length, 0);
 });
+
+test("extracts routes from named APIRouter variables", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-fastapi-"));
+  await mkdir(join(dir, "routers"), { recursive: true });
+  await writeFile(join(dir, "routers/content.py"), `from fastapi import APIRouter
+api_content = APIRouter()
+
+@api_content.get("/github")
+async def github():
+    pass
+
+@api_content.put("")
+async def put_root():
+    pass
+`);
+
+  const facts = await extract(dir, ["routers/content.py"]);
+  const routes = facts.filter((f) => f.kind === "api_route");
+  assert.equal(routes.length, 2);
+  assert.ok(routes.some((r) => r.name === "GET /github"));
+  assert.ok(routes.some((r) => r.name === "PUT /"), "empty path becomes PUT /");
+});
+
+test("applies include_router prefix to named router routes", async () => {
+  const { buildPrefixMap } = await import("../../src/scanners/router-prefix.js");
+  const { createScanContext } = await import("../../src/scanners/context.js");
+
+  const dir = await mkdtemp(join(tmpdir(), "varai-fastapi-"));
+  await mkdir(join(dir, "routers"), { recursive: true });
+  await writeFile(join(dir, "main.py"), `from routers.content import api_content
+app.include_router(api_content, prefix="/api/content")
+`);
+  await writeFile(join(dir, "routers/content.py"), `from fastapi import APIRouter
+api_content = APIRouter()
+
+@api_content.put("")
+async def put_root():
+    pass
+
+@api_content.get("/github")
+async def github():
+    pass
+`);
+
+  const files = ["main.py", "routers/content.py"];
+  const ctx = createScanContext(dir);
+  ctx.prefixMap = await buildPrefixMap(files, ctx);
+  const facts = await extract(dir, files, ctx);
+  const routes = facts.filter((f) => f.kind === "api_route");
+  assert.ok(routes.some((r) => r.name === "PUT /api/content" && r.layer === "semantic"));
+  assert.ok(routes.some((r) => r.name === "GET /api/content/github" && r.layer === "semantic"));
+});
+
+test("does not treat mock/responses/cache decorators as routes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-fastapi-"));
+  await mkdir(join(dir, "tests"), { recursive: true });
+  await writeFile(join(dir, "tests/test_mail.py"), `import mock
+import responses
+from unittest import mock as umock
+
+@mock.patch("app.services.send_email")
+def test_send(mock_send):
+    pass
+
+@responses.get("https://example.com/data")
+def test_fetch():
+    pass
+
+@cache.get("key")
+def test_cache():
+    pass
+
+@limiter.get("")
+def test_limiter():
+    pass
+
+@umock.patch("app.services.other")
+def test_other(mock_other):
+    pass
+`);
+
+  const facts = await extract(dir, ["tests/test_mail.py"]);
+  assert.equal(facts.filter((f) => f.kind === "api_route").length, 0,
+    "test/mock/cache decorators must not become api_route operations");
+});
+
+test("rejects absolute-URL and non-path decorator arguments", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-fastapi-"));
+  await writeFile(join(dir, "weird.py"), `api = object()
+
+@api.get("https://evil.example/x")
+async def absolute():
+    pass
+
+@api.post("not-a-path")
+async def bare():
+    pass
+`);
+  const facts = await extract(dir, ["weird.py"]);
+  assert.equal(facts.filter((f) => f.kind === "api_route").length, 0);
+});

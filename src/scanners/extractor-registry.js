@@ -1,14 +1,18 @@
 import { createHash } from "node:crypto";
 import { extract as extractFastapi } from "./extractors/fastapi.js";
 import { extract as extractSqlalchemy } from "./extractors/sqlalchemy.js";
+import { extract as extractPrisma } from "./extractors/prisma.js";
 import { extract as extractReactVite } from "./extractors/react-vite.js";
+import { extract as extractNextjs } from "./extractors/nextjs.js";
 import { extract as extractRunnable } from "./extractors/runnable.js";
 import { extract as extractSchema } from "./extractors/schema.js";
 
 export const EXTRACTOR_REGISTRY = Object.freeze([
   { id: "fastapi.routes.v1", stack: "fastapi", extract: extractFastapi },
   { id: "sqlalchemy.models.v1", stack: "sqlalchemy", extract: extractSqlalchemy },
+  { id: "prisma.models.v1", stack: "prisma", extract: extractPrisma },
   { id: "react-vite.ui.v2", stack: "react-vite", extract: extractReactVite },
+  { id: "nextjs.routes.v1", stack: "nextjs", extract: extractNextjs },
   { id: "python.schemas.v1", stack: "python-common", extract: extractSchema },
   { id: "base.runnables.v1", stack: "base", extract: extractRunnable },
 ]);

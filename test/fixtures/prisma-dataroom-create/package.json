@@ -1,0 +1,10 @@
+{
+  "name": "prisma-dataroom-create-fixture",
+  "private": true,
+  "dependencies": {
+    "next": "15.0.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "@prisma/client": "5.0.0"
+  }
+}

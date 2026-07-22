@@ -667,3 +667,20 @@ Presentation findings:
    experiment, not something the visualization invents away.
 
 Stop before promoting Region into the canonical language. Improve parent-boundary evidence first.
+
+## Mid-size mechanism → envelope spine: 2026-07-22
+
+See `docs/superpowers/specs/2026-07-22-midsize-mechanism-envelope-spine.md`.
+
+FastAPI named routers and Next.js App/Pages API extraction restore the join spine on Khoj and
+Papermark (operations, reference invokes, paths, envelopes). Envelopes on Papermark were mostly
+`open` until Resource/effect closure.
+
+## Papermark Resource/effect binding: 2026-07-22
+
+See `docs/superpowers/specs/2026-07-22-papermark-resource-effect-binding.md`.
+
+Prisma model inventory plus same-file `prisma.<model>.create|update|…` enrichment on Next stub
+doors binds Document/Dataroom (and peers) as primary subjects. Live Papermark moved most envelopes
+to `closed` when the matched route file contains Prisma calls. Region promotion remains deferred;
+helper-follow for `lib/**`-only routes is the next evidence question.

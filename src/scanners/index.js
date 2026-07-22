@@ -153,7 +153,7 @@ export async function scanRepo(repoPath, options = {}) {
   const resolver = createResolver(files, ctx, { workBudget: 100_000 });
   let apiBehaviors = [];
   let frontendBehaviors = [];
-  if (stacks.has("fastapi")) {
+  if (stacks.has("fastapi") || stacks.has("nextjs")) {
     try {
       apiBehaviors = await traceBehaviors(repoPath, files, ctx, observations, { graph, resolver });
     } catch (err) {
