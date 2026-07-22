@@ -667,3 +667,11 @@ Presentation findings:
    experiment, not something the visualization invents away.
 
 Stop before promoting Region into the canonical language. Improve parent-boundary evidence first.
+
+## Mid-size mechanism → envelope spine: 2026-07-22
+
+See `docs/superpowers/specs/2026-07-22-midsize-mechanism-envelope-spine.md`.
+
+FastAPI named routers and Next.js App/Pages API extraction restore the join spine on Khoj and
+Papermark (operations, reference invokes, paths, envelopes). Envelopes on Papermark are mostly
+`open`; Resource/effect closure and Region promotion remain separate follow-ons.

@@ -24,8 +24,11 @@ export async function detectStacks(repoPath, files = []) {
       }
       if ("vite" in allDeps || "react" in allDeps) {
         stacks.add("react-vite");
-        break;
       }
+      if ("next" in allDeps) {
+        stacks.add("nextjs");
+      }
+      if (stacks.has("react-vite") || stacks.has("nextjs")) break;
     } catch { /* malformed package.json — skip */ }
   }
 

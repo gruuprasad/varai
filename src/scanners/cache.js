@@ -2,7 +2,8 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, readFile, rename } from "node:fs/promises";
 
-export const EXTRACTOR_VERSION = 20; // Recover resource lifecycle effects and navigation outcomes
+export const EXTRACTOR_VERSION = 22; // Next.js App Router + Pages API route extraction
+
 
 const CACHE_FORMAT_VERSION = 1;
 

@@ -29,6 +29,7 @@ export async function traceBehaviors(repoPath, files, ctx, observations, options
   // resolving the same helpers per route.
   const flow = createValueFlow({ resolver });
   const handlers = await findHandlers(routeFacts, ctx);
+  const handledKeys = new Set(handlers.map((h) => `${h.door.method} ${h.door.path}`));
 
   const behaviors = [];
   for (const h of handlers) {
@@ -59,6 +60,34 @@ export async function traceBehaviors(repoPath, files, ctx, observations, options
       trunkCall: body.trunkCall,
       applicationCalls: body.applicationCalls,
       artifactOutputs,
+    });
+  }
+
+  // Routes without a Python handler (e.g. Next.js route.ts / pages/api) still become
+  // operation doors so UI→API invoke matching and envelopes can form.
+  for (const fact of routeFacts) {
+    if (handledKeys.has(fact.name)) continue;
+    const spaceIdx = fact.name.indexOf(" ");
+    if (spaceIdx === -1) continue;
+    const method = fact.name.slice(0, spaceIdx);
+    const routePath = fact.name.slice(spaceIdx + 1);
+    const evidence = fact.evidence?.[0];
+    if (!evidence) continue;
+    behaviors.push({
+      door: { method, path: routePath, evidence: { ...evidence } },
+      handler: null,
+      bundle: null,
+      requires: [],
+      takes: [],
+      gives: [],
+      reads: [],
+      writes: [],
+      fails: [],
+      untraced: [],
+      helperCalls: [],
+      trunkCall: null,
+      applicationCalls: [],
+      artifactOutputs: [],
     });
   }
   return behaviors;

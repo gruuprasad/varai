@@ -46,3 +46,13 @@ test("empty dir returns only the base stack", async () => {
   assert.equal(stacks.size, 1);
   assert.ok(stacks.has("base"));
 });
+
+test("detects nextjs when next is a dependency", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-detect-"));
+  await writeFile(join(dir, "package.json"), JSON.stringify({
+    dependencies: { next: "15.0.0", react: "19.0.0" },
+  }));
+  const stacks = await detectStacks(dir);
+  assert.ok(stacks.has("nextjs"));
+  assert.ok(stacks.has("react-vite"));
+});

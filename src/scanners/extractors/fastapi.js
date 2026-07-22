@@ -2,7 +2,10 @@ import path from "node:path";
 import { createScanContext } from "../context.js";
 import { queryTree } from "../treesitter.js";
 
-const ROUTE_RE = /^@(?:app|router)\.(get|post|put|patch|delete|head|options)\s*\(\s*["']([^"']+)["']/i;
+// Any identifier receiver (@app, @router, @api_content, @auth_router, …).
+// Empty path "" is allowed (common for include_router-mounted roots).
+const ROUTE_RE = /^@(\w+)\.(get|post|put|patch|delete|head|options)\s*\(\s*["']([^"']*)["']/i;
+const ROUTE_HINT_RE = /@\w+\.(get|post|put|patch|delete|head|options)\s*\(/i;
 
 export async function extract(repoPath, files, ctx = createScanContext(repoPath)) {
   const facts = [];
@@ -10,7 +13,7 @@ export async function extract(repoPath, files, ctx = createScanContext(repoPath)
     if (path.extname(file) !== ".py") continue;
     const content = await ctx.read(file);
     if (!content) continue;
-    if (!content.includes("@app.") && !content.includes("@router.")) continue;
+    if (!ROUTE_HINT_RE.test(content)) continue;
 
     const tree = await ctx.tree(file, "python");
     if (!tree) continue;
@@ -18,15 +21,16 @@ export async function extract(repoPath, files, ctx = createScanContext(repoPath)
     for (const { node } of await queryTree(tree, "python", "(decorator) @dec")) {
       const m = node.text.match(ROUTE_RE);
       if (!m) continue;
-      const method = m[1].toUpperCase();
-      const routePath = m[2];
-      let name = `${method} ${routePath}`;
+      const method = m[2].toUpperCase();
+      const routePath = m[3];
+      const displayPath = routePath === "" ? "/" : routePath;
+      let name = `${method} ${displayPath}`;
       let layer = "ast";
 
       if (ctx.prefixMap) {
         const resolved = resolvePrefix(ctx.prefixMap, file);
         if (resolved !== null) {
-          name = `${method} ${resolved}${routePath === "/" ? "" : routePath}`;
+          name = `${method} ${resolved}${routePath === "/" || routePath === "" ? "" : routePath}`;
           layer = "semantic";
         }
       }
