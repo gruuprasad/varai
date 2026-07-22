@@ -2,7 +2,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, readFile, rename } from "node:fs/promises";
 
-export const EXTRACTOR_VERSION = 23; // FastAPI route-path gate + concrete→patterned HTTP join
+export const EXTRACTOR_VERSION = 24; // Prisma model inventory (db_model)
 
 
 const CACHE_FORMAT_VERSION = 1;

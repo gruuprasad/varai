@@ -28,8 +28,15 @@ export async function detectStacks(repoPath, files = []) {
       if ("next" in allDeps) {
         stacks.add("nextjs");
       }
+      if ("@prisma/client" in allDeps || "prisma" in allDeps) {
+        stacks.add("prisma");
+      }
       if (stacks.has("react-vite") || stacks.has("nextjs")) break;
     } catch { /* malformed package.json — skip */ }
+  }
+
+  if (files.some((file) => String(file).endsWith(".prisma"))) {
+    stacks.add("prisma");
   }
 
   if (pyprojectToml !== null) {

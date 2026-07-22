@@ -1,0 +1,5 @@
+model Dataroom {
+  id     String @id @default(cuid())
+  name   String
+  teamId String
+}

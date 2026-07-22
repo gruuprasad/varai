@@ -6,6 +6,7 @@ const EXTRACTOR_CAPABILITIES = Object.freeze({
   "fastapi.routes.v1": [["api", "api.operation"]],
   "nextjs.routes.v1": [["api", "api.operation"]],
   "sqlalchemy.models.v1": [["data", "data.entity"]],
+  "prisma.models.v1": [["data", "data.entity"]],
   "react-vite.ui.v2": [["ui", "ui.screen"], ["ui", "ui.component"], ["ui", "ui.action"], ["ui", "ui.availability"], ["data", "data.state"]],
   "python.schemas.v1": [["data", "data.contract"]],
   "base.runnables.v1": [["cli", "cli.command"], ["service", "service.process"]],
