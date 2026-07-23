@@ -127,7 +127,7 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
 
   const watcher = createWatcher(absRepo, () => {
     console.error("[server] change detected, rescanning...");
-    runScan();
+    runScan().then(() => console.error("[server] rescan complete"));
   });
 
   const seedGetModel = seedModel ?? (async () => latestScan?.model ?? (await analyzeCurrent(absRepo, scanOptions)).scan.model);
@@ -229,6 +229,7 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
       console.error(`[server] scanning ${absRepo}...`);
 
       runScan().then(() => {
+        console.error(`[server] ready — open ${url}  (Ctrl+C to stop)`);
         if (open) openBrowser(url);
       });
 
