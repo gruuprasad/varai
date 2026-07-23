@@ -288,7 +288,7 @@ function queryDeclarationName(node) {
     const callee = node.childForFieldName("function");
     if (callee?.type === "attribute") {
       const method = callee.childForFieldName("attribute")?.text;
-      if (method === "query") {
+      if (method === "query" || method === "get") {
         const first = node.childForFieldName("arguments")?.namedChildren?.[0];
         return first?.type === "identifier" ? first.text : null;
       }

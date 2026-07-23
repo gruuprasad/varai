@@ -129,3 +129,35 @@ def _persist_document(ctx: JobContext, document):
   assert.ok(!out.writes.some((item) => item.target === "JobContext"),
     "execution context is not the mutation subject");
 });
+
+test("db.get(Model, pk) is a read that types the bound variable", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-body-get-"));
+  await writeFile(join(dir, "h.py"), `class Booking:
+    pass
+class Slot:
+    pass
+def cancel(db, booking_id):
+    booking = db.get(Booking, booking_id)
+    slot = db.get(Slot, booking.slot_id)
+    slot.available = True
+    db.delete(booking)
+    db.commit()
+    label = payload.get("label")
+`);
+  const { fn, ctx } = await fnAndCtx(dir, "h.py");
+  const resolver = createResolver(["h.py"], ctx);
+  const factIndex = { schemaNames: new Set(), modelNames: new Set(["Booking", "Slot"]), envNames: new Set() };
+
+  const out = await traceBody(fn, "h.py", ctx, resolver, factIndex);
+
+  assert.ok(out.reads.some((item) => item.target === "Booking" && item.via === "db.get"),
+    "db.get(Booking, ...) is an entity read");
+  assert.ok(out.reads.some((item) => item.target === "Slot" && item.via === "db.get"),
+    "db.get(Slot, ...) is an entity read");
+  assert.ok(out.writes.some((item) => item.relation === "changes" && item.target === "Slot"),
+    "attribute assignment on the get-loaded instance changes the entity");
+  assert.ok(out.writes.some((item) => item.relation === "removes" && item.target === "Booking"),
+    "db.delete of the get-loaded instance removes the entity");
+  assert.ok(!out.reads.some((item) => String(item.via).endsWith("payload.get")),
+    "dict .get() stays unclassified");
+});

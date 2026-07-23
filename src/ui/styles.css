@@ -1502,3 +1502,68 @@ body {
   .chevron, .card, .area-card, .area-block, .change-strip, .core-link { transition: none; transform: none; }
   .status-dot, .empty-spinner { animation: none; }
 }
+
+/* Seed Studio (Intent view) */
+.seed-status { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin: 12px 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.seed-status.seed-empty, .seed-status.seed-invalid { display: block; }
+.seed-badge { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; }
+.seed-badge.ratified { background: #dcfce7; color: #166534; }
+.seed-badge.draft { background: #fef9c3; color: #854d0e; }
+.seed-badge.git-dirty { background: #fee2e2; color: #991b1b; }
+.seed-hash { font-family: var(--mono, monospace); font-size: 12px; }
+.seed-counts { color: var(--muted); font-size: 12px; }
+.intent-conversation, .intent-questions, .intent-unsupported, .intent-problems, .intent-diff, .intent-structure, .intent-recon { margin: 12px 0; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.intent-conversation textarea, .intent-import textarea { width: 100%; box-sizing: border-box; margin: 8px 0; font-family: inherit; border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: var(--bg); color: inherit; }
+.intent-actions { display: flex; gap: 10px; align-items: center; margin: 10px 0; }
+.intent-actions button, .intent-import button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; font-weight: 600; }
+.intent-ratify { background: #166534; color: #fff; border-color: #166534; }
+.intent-ratify:disabled { opacity: 0.5; cursor: not-allowed; }
+.intent-reject { background: transparent; color: inherit; }
+.intent-note { color: var(--muted); font-size: 12px; margin: 4px 0; }
+.intent-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
+.intent-table th, .intent-table td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+.intent-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.diff-group ul { list-style: none; padding-left: 8px; font-family: var(--mono, monospace); font-size: 12px; }
+.diff-added { color: #166534; }
+.diff-removed { color: #991b1b; }
+.diff-changed { color: #854d0e; }
+.verdict-chip { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 1px 6px; border-radius: 999px; background: #e0e7ff; color: #3730a3; }
+.intent-unsupported li, .intent-questions li, .intent-problems li { margin: 4px 0; }
+
+/* Domain review */
+.review-overview { padding: 14px; margin: 12px 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.review-overview h2 { margin: 0 0 8px; }
+.review-overview-row { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+.review-counts { display: flex; gap: 14px; }
+.review-count strong { font-size: 18px; }
+.review-count.holds strong { color: #166534; }
+.review-count.violated strong { color: #991b1b; }
+.review-count.cannot strong { color: #854d0e; }
+.review-count.context strong { color: var(--muted); }
+.review-context { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+.seed-badge.missing { background: #fee2e2; color: #991b1b; }
+.verdict-chip.verdict-holds { background: #dcfce7; color: #166534; }
+.verdict-chip.verdict-violated { background: #fee2e2; color: #991b1b; }
+.verdict-chip.verdict-cannot_verify { background: #fef9c3; color: #854d0e; }
+.verdict-chip.verdict-not_checkable { background: #e5e7eb; color: #374151; }
+.group-score { color: var(--muted); font-size: 12px; font-weight: 500; }
+.review-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+.review-col { padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
+.review-col.testimony { border-style: dashed; }
+.review-col.observed { background: var(--surface); }
+.binding-list { list-style: none; padding: 0; font-size: 13px; }
+.binding-list li { margin: 6px 0; }
+.binding-resolved { color: #166534; }
+.binding-stale, .binding-ambiguous { color: #991b1b; }
+.coverage-chip { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 1px 6px; border-radius: 999px; }
+.coverage-chip.cov-analyzed { background: #dcfce7; color: #166534; }
+.coverage-chip.cov-partial { background: #fef9c3; color: #854d0e; }
+.coverage-chip.cov-unsupported, .coverage-chip.cov-failed { background: #fee2e2; color: #991b1b; }
+.reading-order { margin: 12px 0; }
+.reading-step { display: flex; align-items: center; gap: 8px; }
+.step-why { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--muted); min-width: 64px; }
+.coverage-limitations { margin: 12px 0; padding: 14px; border: 1px solid var(--border); border-radius: 10px; }
+.coverage-limitations li { margin: 6px 0; font-size: 13px; }
+.witness-warning { padding: 8px 12px; border-left: 3px solid #b45309; background: #fef9c3; font-size: 13px; }
+.reason-line, .coverage-line, .envelope-line { font-size: 13px; color: var(--muted); margin: 4px 0; }
+.commitment-sentence { font-size: 14px; margin: 8px 0; }

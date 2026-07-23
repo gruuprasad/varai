@@ -1,0 +1,83 @@
+{
+  "bindings": [
+    {
+      "artifact": {
+        "key": "StructuralBasisTypesPanel Apply change",
+        "kind": "action",
+        "lens": "ui"
+      },
+      "concept": "behavior.apply-change",
+      "id": "binding.apply-change-action"
+    },
+    {
+      "artifact": {
+        "key": "BuildingModelDocument",
+        "kind": "aggregate",
+        "lens": "data"
+      },
+      "concept": "resource.building-model-document",
+      "id": "binding.building-model-document"
+    },
+    {
+      "artifact": {
+        "key": "StructuralTypeMutationResponse",
+        "kind": "contract",
+        "lens": "data"
+      },
+      "concept": "resource.structural-type-mutation-response",
+      "id": "binding.mutation-response-contract"
+    },
+    {
+      "artifact": {
+        "key": "PUT /api/v1/building-model/{job_id}/structural-types/{type_id}",
+        "kind": "operation",
+        "lens": "api"
+      },
+      "concept": "behavior.put-structural-type",
+      "id": "binding.put-structural-type-operation"
+    }
+  ],
+  "builder": {
+    "tool": "manual-fixture",
+    "version": "1"
+  },
+  "formatVersion": 1,
+  "seedHash": "sha256:0a2566ba143ed4232458f0588a68572cc042f667a88c5aa7cf56b94f21a9ce68",
+  "witnesses": [
+    {
+      "commitment": "commitment.apply-change-invokes-put",
+      "sourceBinding": "binding.apply-change-action",
+      "target": {
+        "concept": "behavior.put-structural-type"
+      }
+    },
+    {
+      "commitment": "commitment.apply-change-requires-acknowledgement",
+      "sourceBinding": "binding.apply-change-action",
+      "target": {
+        "literal": "integrity changes acknowledged"
+      }
+    },
+    {
+      "commitment": "commitment.put-changes-document",
+      "sourceBinding": "binding.put-structural-type-operation",
+      "target": {
+        "concept": "resource.building-model-document"
+      }
+    },
+    {
+      "commitment": "commitment.put-fails-with-409",
+      "sourceBinding": "binding.put-structural-type-operation",
+      "target": {
+        "literal": "409"
+      }
+    },
+    {
+      "commitment": "commitment.put-produces-mutation-response",
+      "sourceBinding": "binding.put-structural-type-operation",
+      "target": {
+        "concept": "resource.structural-type-mutation-response"
+      }
+    }
+  ]
+}

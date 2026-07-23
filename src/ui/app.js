@@ -2,6 +2,22 @@ import {
   collectChangedClaimIds,
   renderObservedAreasOutline,
 } from "./observed-areas-view.js";
+import {
+  renderQuestions,
+  renderReviewActions,
+  renderSeedDiff,
+  renderSeedStatus,
+  renderDraftStructure,
+  renderProblems,
+  renderUnsupported,
+} from "./intent-view.js";
+import {
+  renderCardDetail,
+  renderCompactCard,
+  renderCoverageLimitations,
+  renderGroupHeading,
+  renderReviewOverview,
+} from "./review-view.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -34,14 +50,17 @@ let expandedId = null;
 let changesOnly = false;
 let scanData = null;
 let diffData = null;
+let seedData = null;
+let reconciliationData = null;
 const snippetCache = new Map();
 const openSnippets = new Set();
 
 const events = new EventSource("/api/events");
 events.addEventListener("message", (event) => {
   const message = JSON.parse(event.data);
-  if (message.type === "model") { scanData = message.data; setStatus("live", "Live"); render(); }
+  if (message.type === "model") { scanData = message.data; setStatus("live", "Live"); refreshSeed(); render(); }
   else if (message.type === "semantic-diff") { diffData = message.data; render(); }
+  else if (message.type === "seed") { refreshSeed(); }
   else if (message.type === "error") setStatus("error", "Error");
 });
 events.addEventListener("open", () => setStatus("scanning", "Connecting..."));
@@ -51,6 +70,12 @@ fetch("/api/model").then((response) => response.json()).then((data) => {
   if (data.model) { scanData = data; setStatus("live", "Live"); render(); }
 }).catch(() => setStatus("error", "Connection error"));
 fetch("/api/diff").then((response) => response.json()).then((data) => { diffData = data; render(); }).catch(() => {});
+
+function refreshSeed() {
+  fetch("/api/seed").then((response) => response.json()).then((data) => { seedData = data; render(); }).catch(() => {});
+  fetch("/api/reconciliation").then((response) => response.json()).then((data) => { reconciliationData = data; render(); }).catch(() => {});
+}
+refreshSeed();
 
 function setStatus(kind, text) {
   if (el.statusDot) el.statusDot.className = `status-dot ${kind}`;
@@ -134,6 +159,18 @@ function emptyDetailPlaceholder(title = "Select an item", message = "Select an i
 }
 
 function render() {
+  if (activeView === "intent") {
+    renderTopbar();
+    renderNav();
+    renderIntent();
+    return;
+  }
+  if (activeView === "review") {
+    renderTopbar();
+    renderNav();
+    renderReview();
+    return;
+  }
   if (!scanData?.model) return;
   renderTopbar();
   renderNav();
@@ -146,8 +183,8 @@ function render() {
 }
 
 function renderTopbar() {
-  const areas = scanData.projections?.observedAreas?.areas ?? [];
-  const cores = scanData.projections?.observedAreas?.sharedCores ?? [];
+  const areas = scanData?.projections?.observedAreas?.areas ?? [];
+  const cores = scanData?.projections?.observedAreas?.sharedCores ?? [];
   const operations = areas.reduce((sum, area) => sum + area.operationCount, 0);
   const primaryOperations = areas.reduce((sum, area) => sum + (area.primaryOperationCount ?? area.operationCount), 0);
   el.topbarStats.innerHTML =
@@ -168,13 +205,15 @@ const NAV_ICONS = {
 function renderNav() {
   const changes = diffData?.diff?.summary?.semanticChanges ?? 0;
   el.sidebarNav.innerHTML =
+    navItem("intent", "✦", "Intent", null) +
+    navItem("review", "✓", "Review", null) +
     navItem("system", "◎", "Observed areas", null) +
     navItem("subjects", "◈", "Subjects", null) +
     navItem("capabilities", "↳", "Capabilities", null) +
     navItem("changes", "∆", "Changes", changes || null) +
     `<div class="nav-group"><span class="nav-group-label">Advanced</span>` +
-    navItem("everything", "≡", "Everything", scanData.model.elements.length) +
-    navItem("unknowns", "◌", "Couldn't determine", scanData.model.coverage.length) +
+    navItem("everything", "≡", "Everything", scanData?.model?.elements?.length ?? 0) +
+    navItem("unknowns", "◌", "Couldn't determine", scanData?.model?.coverage?.length ?? 0) +
     `</div>`;
   el.sidebarNav.querySelectorAll("[data-view]").forEach((item) => item.addEventListener("click", () => {
     activeView = item.dataset.view;
@@ -262,6 +301,116 @@ function renderObservedAreas() {
 
   renderPanes(strip + (rendered.masterHtml || rendered.html), rendered.detailHtml);
   $("change-strip")?.addEventListener("click", () => { changesOnly = !changesOnly; render(); });
+}
+
+function renderIntent() {
+  showSearch("Seed Studio — author and ratify intent...");
+  el.searchCount.textContent = "";
+  const draft = seedData?.draft ?? null;
+  const assistant = seedData?.assistant ?? null;
+
+  let masterHtml = `<h2 class="group-heading">Seed Studio</h2>`;
+  masterHtml += renderSeedStatus(seedData);
+  masterHtml += `<section class="intent-conversation"><h3>Describe the system</h3>` +
+    `<textarea id="intent-message" rows="4" placeholder="Describe what the system must do, in your own words..."></textarea>` +
+    `<div class="intent-actions">` +
+    (assistant
+      ? `<button id="intent-ask" class="intent-ask" type="button">Ask assistant (${esc(assistant.provider)} · ${esc(assistant.model)})</button>`
+      : `<p class="intent-note">No assistant provider configured — paste a proposal JSON below.</p>`) +
+    `</div>` +
+    `<details class="intent-import"><summary>Import a proposal JSON</summary>` +
+    `<textarea id="intent-proposal" rows="8" placeholder='{"draft": {...}, "questions": [], "unsupported": []}'></textarea>` +
+    `<button id="intent-import-btn" type="button">Import proposal</button></details></section>`;
+  masterHtml += renderQuestions(draft?.questions);
+  masterHtml += renderUnsupported(draft?.unsupported);
+
+  const summary = reconciliationData?.report?.summary;
+  if (summary) {
+    masterHtml += `<section class="intent-recon"><h3>Latest check</h3>` +
+      `<p>${summary.holds} holds · ${summary.violated} violated · ${summary.cannotVerify} cannot verify · ${summary.notCheckable} not checkable</p></section>`;
+  }
+
+  const detailHtml = draft?.draft
+    ? `<h3 class="group-heading">Draft under review (${esc(draft.source)})</h3>` +
+      renderProblems(draft.problems) +
+      renderSeedDiff(draft.diff) +
+      renderDraftStructure(draft.draft) +
+      renderReviewActions(draft)
+    : emptyDetailPlaceholder("No draft under review", "Ask the assistant or import a proposal; review the diff here before ratifying.");
+  renderPanes(masterHtml, detailHtml);
+
+  $("intent-ask")?.addEventListener("click", async () => {
+    const message = $("intent-message").value.trim();
+    if (!message) return;
+    const response = await fetch("/api/seed/draft", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }),
+    });
+    const data = await response.json();
+    if (!response.ok) { alert(data.error ?? "Assistant request failed"); return; }
+    seedData = { ...seedData, draft: data };
+    render();
+  });
+  $("intent-import-btn")?.addEventListener("click", async () => {
+    let proposal;
+    try { proposal = JSON.parse($("intent-proposal").value); }
+    catch { alert("Proposal is not valid JSON"); return; }
+    const response = await fetch("/api/seed/draft", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proposal }),
+    });
+    const data = await response.json();
+    if (!response.ok) { alert(data.error ?? "Proposal rejected"); return; }
+    seedData = { ...seedData, draft: data };
+    render();
+  });
+  $("intent-reject")?.addEventListener("click", async () => {
+    await fetch("/api/seed/draft/reject", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    refreshSeed();
+  });
+  $("intent-ratify")?.addEventListener("click", async () => {
+    const response = await fetch("/api/seed/ratify", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ draft: draft.draft }),
+    });
+    const data = await response.json();
+    if (!response.ok) { alert(data.error ?? "Ratification failed"); return; }
+    refreshSeed();
+  });
+}
+
+function renderReview() {
+  showSearch("Domain review — commitments, evidence, reading order...");
+  el.searchCount.textContent = "";
+  const review = reconciliationData?.review ?? null;
+
+  if (!reconciliationData?.seed) {
+    renderPanes(
+      `<h2 class="group-heading">Domain review</h2><p class="empty-copy">No seed found. Author and ratify one in the Intent view first.</p>`,
+      emptyDetailPlaceholder("Nothing to review", "Reconciliation needs a ratified seed."),
+    );
+    return;
+  }
+  if (!review) {
+    renderPanes(
+      `<h2 class="group-heading">Domain review</h2><p class="empty-copy">Waiting for the scan to finish…</p>`,
+      emptyDetailPlaceholder("Scanning", "The review appears once the System Model is ready."),
+    );
+    return;
+  }
+
+  const witnessWarnings = (reconciliationData.realizationProblems ?? [])
+    .map((problem) => `<p class="witness-warning">witness: ${esc(problem.message)}</p>`).join("");
+
+  let masterHtml = renderReviewOverview(review) + witnessWarnings;
+  const selectedCard = review.groups.flatMap((group) => group.cards).find((card) => card.id === expandedId) ?? null;
+  for (const group of review.groups) {
+    masterHtml += renderGroupHeading(group);
+    masterHtml += group.cards.map((card) => renderCompactCard(card, card.id === expandedId)).join("");
+  }
+  masterHtml += renderCoverageLimitations(review);
+
+  const detailHtml = selectedCard
+    ? renderCardDetail(selectedCard)
+    : emptyDetailPlaceholder("Select a commitment", "Pick a commitment to see its bindings, observed evidence, and suggested reading order.");
+  renderPanes(masterHtml, detailHtml);
 }
 
 function renderSubjects() {

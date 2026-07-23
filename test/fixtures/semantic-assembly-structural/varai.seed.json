@@ -1,0 +1,77 @@
+{
+  "commitments": [
+    {
+      "id": "commitment.apply-change-invokes-put",
+      "relation": "invokes",
+      "source": "behavior.apply-change",
+      "target": {
+        "concept": "behavior.put-structural-type"
+      }
+    },
+    {
+      "id": "commitment.apply-change-requires-acknowledgement",
+      "relation": "requires",
+      "source": "behavior.apply-change",
+      "target": {
+        "literal": "integrity changes acknowledged"
+      }
+    },
+    {
+      "id": "commitment.put-changes-document",
+      "relation": "changes",
+      "source": "behavior.put-structural-type",
+      "target": {
+        "concept": "resource.building-model-document"
+      }
+    },
+    {
+      "id": "commitment.put-fails-with-409",
+      "relation": "fails_with",
+      "source": "behavior.put-structural-type",
+      "target": {
+        "literal": "409"
+      }
+    },
+    {
+      "id": "commitment.put-produces-mutation-response",
+      "relation": "produces",
+      "source": "behavior.put-structural-type",
+      "target": {
+        "concept": "resource.structural-type-mutation-response"
+      }
+    }
+  ],
+  "concepts": [
+    {
+      "id": "behavior.apply-change",
+      "name": "Apply change",
+      "role": "behavior"
+    },
+    {
+      "id": "behavior.put-structural-type",
+      "name": "PUT structural type operation",
+      "role": "behavior"
+    },
+    {
+      "id": "resource.building-model-document",
+      "name": "BuildingModelDocument",
+      "role": "resource"
+    },
+    {
+      "id": "resource.structural-type-mutation-response",
+      "name": "StructuralTypeMutationResponse",
+      "role": "resource"
+    }
+  ],
+  "context": [],
+  "formatVersion": 1,
+  "ratification": {
+    "contentHash": "sha256:0a2566ba143ed4232458f0588a68572cc042f667a88c5aa7cf56b94f21a9ce68",
+    "ratifiedAt": "2026-07-23T00:00:00Z",
+    "status": "ratified"
+  },
+  "system": {
+    "id": "semantic-assembly-structural",
+    "name": "Semantic Assembly Structural Fixture"
+  }
+}

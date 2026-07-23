@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { runMap } from "../src/map.js";
+import { runCheck } from "../src/reconciliation/commands.js";
+import { runHandoff, runSeedRatify, runSeedValidate } from "../src/seed/commands.js";
 import { startServer } from "../src/server/index.js";
 import { runDiff, runLog, runSnapshot } from "../src/semantic-commands.js";
 
@@ -16,6 +18,10 @@ Usage:
   varai snapshot [<repo-path>] [scan options]
   varai log [<repo-path>]
   varai diff [<repo-path>] [--from <selector>] [--to <selector|current>] [--json] [--show-evidence-moves]
+  varai seed validate [<repo-path>]
+  varai seed ratify [<repo-path>]
+  varai handoff [<repo-path>] [--json] [--brief <file>]
+  varai check [<repo-path>] [--json] [scan options]
 
 Options (map):
   --include <prefix>   Scan only files under this path prefix (repeatable)
@@ -38,6 +44,8 @@ Examples:
   varai start ../kalakar --port 8080
   varai snapshot ../kalakar
   varai diff ../kalakar
+  varai seed validate ../varai-slotkeeper-pilot
+  varai check ../varai-slotkeeper-pilot
 `;
 }
 
@@ -98,7 +106,7 @@ function parseStartOptions(argv) {
   return opts;
 }
 
-function parseSemanticOptions(argv, allowDiff = false) {
+function parseSemanticOptions(argv, { diff = false, json = false } = {}) {
   const opts = { include: [], exclude: [] };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -107,10 +115,10 @@ function parseSemanticOptions(argv, allowDiff = false) {
     else if (arg === "--jobs" && argv[i + 1]) opts.jobs = parseInt(argv[++i], 10);
     else if (arg === "--no-cache") opts.cache = false;
     else if (arg === "--parser" && argv[i + 1]) opts.parser = argv[++i];
-    else if (allowDiff && arg === "--from" && argv[i + 1]) opts.from = argv[++i];
-    else if (allowDiff && arg === "--to" && argv[i + 1]) opts.to = argv[++i];
-    else if (allowDiff && arg === "--json") opts.json = true;
-    else if (allowDiff && arg === "--show-evidence-moves") opts.showEvidenceMoves = true;
+    else if (diff && arg === "--from" && argv[i + 1]) opts.from = argv[++i];
+    else if (diff && arg === "--to" && argv[i + 1]) opts.to = argv[++i];
+    else if (json && arg === "--json") opts.json = true;
+    else if (diff && arg === "--show-evidence-moves") opts.showEvidenceMoves = true;
     else if (!arg.startsWith("-")) opts.repo = arg;
     else throw new Error(`Unknown option: ${arg}`);
   }
@@ -170,7 +178,42 @@ async function main() {
   }
 
   if (command === "diff") {
-    await runDiff(parseSemanticOptions(args.slice(1), true));
+    await runDiff(parseSemanticOptions(args.slice(1), { diff: true, json: true }));
+    return;
+  }
+
+  if (command === "seed") {
+    const subcommand = args[1];
+    if (subcommand === "validate" || subcommand === "ratify") {
+      const positional = args.slice(2).filter((arg) => !arg.startsWith("-"));
+      const run = subcommand === "validate" ? runSeedValidate : runSeedRatify;
+      await run({ repo: positional[0] });
+      return;
+    }
+    process.stderr.write(`Unknown seed subcommand: ${subcommand ?? "(none)"}\n\n${usage()}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (command === "handoff") {
+    const opts = {};
+    const rest = args.slice(1);
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === "--json") opts.json = true;
+      else if (rest[i] === "--brief" && rest[i + 1]) opts.brief = rest[++i];
+      else if (!rest[i].startsWith("-")) opts.repo = rest[i];
+      else {
+        process.stderr.write(`Unknown option: ${rest[i]}\n\n${usage()}`);
+        process.exitCode = 1;
+        return;
+      }
+    }
+    await runHandoff(opts);
+    return;
+  }
+
+  if (command === "check") {
+    await runCheck(parseSemanticOptions(args.slice(1), { json: true }));
     return;
   }
 

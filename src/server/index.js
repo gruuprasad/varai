@@ -11,6 +11,9 @@ import { diffSystemModels } from "../system-model/diff.js";
 import { readGitState } from "../snapshots/git-state.js";
 import { SYSTEM_MODEL_SCHEMA_VERSION } from "../system-model/version.js";
 import { readSourceSnippet } from "./source.js";
+import { createReconciliationHandler } from "./reconciliation.js";
+import { createSeedHandlers } from "./seed.js";
+import { assistantFromEnvironment } from "../seed/assistants/openai-compatible.js";
 import { displayLanguage } from "../reporters/display-language.js";
 import { serializeProjections } from "./projections.js";
 
@@ -62,7 +65,7 @@ function openBrowser(url) {
   });
 }
 
-export async function startServer({ repoPath, port = 3847, open = true, scanOptions: cliScanOptions = {} }) {
+export async function startServer({ repoPath, port = 3847, open = true, scanOptions: cliScanOptions = {}, seedAssistant, seedModel } = {}) {
   const absRepo = path.resolve(repoPath);
   const config = await loadRepoConfig(absRepo);
   const scanOptions = {
@@ -127,8 +130,31 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
     runScan();
   });
 
+  const seedGetModel = seedModel ?? (async () => latestScan?.model ?? (await analyzeCurrent(absRepo, scanOptions)).scan.model);
+  const seedHandlers = createSeedHandlers({
+    repoPath: absRepo,
+    port,
+    assistant: seedAssistant === undefined ? assistantFromEnvironment() : seedAssistant,
+    broadcast,
+  });
+  const reconciliationHandler = createReconciliationHandler({ repoPath: absRepo, getModel: seedGetModel });
+
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
+
+    if (url.pathname.startsWith("/api/seed") || url.pathname === "/api/reconciliation") {
+      const handler = url.pathname === "/api/reconciliation" ? reconciliationHandler : seedHandlers;
+      handler.handle(req, res, url).then((handled) => {
+        if (!handled) {
+          res.writeHead(404);
+          res.end("Not Found");
+        }
+      }).catch((err) => {
+        res.writeHead(err.statusCode ?? 500, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ error: err.message, problems: err.problems }));
+      });
+      return;
+    }
 
     if (url.pathname === "/api/model") {
       serveJSON(res, latestScan || { summary: null, model: null });
@@ -197,7 +223,8 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
 
   return new Promise((resolve, reject) => {
     server.listen(port, "127.0.0.1", () => {
-      const url = `http://localhost:${port}`;
+      const boundPort = server.address().port;
+      const url = `http://localhost:${boundPort}`;
       console.error(`[server] listening on ${url}`);
       console.error(`[server] scanning ${absRepo}...`);
 
@@ -207,7 +234,7 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
 
       resolve({
         url,
-        port,
+        port: boundPort,
         close() {
           watcher.close();
           server.close();
