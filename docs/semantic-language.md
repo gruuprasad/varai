@@ -539,6 +539,28 @@ The interpreter:
 
 Removing the interpreter must change readability only, never model contents or findings.
 
+## Authored intent and reconciliation
+
+A seed is authored intent: a human-ratified, source-level statement of what a system is supposed to
+do. Seed commitments are not Claims. Claims are observed from repository evidence; commitments are
+declared by a person. The two vocabularies meet only in reconciliation, a deterministic projection
+that checks each commitment against canonical Claims and reports `holds`, `violated`,
+`cannot_verify`, or `not_checkable` with the binding state, evidence, and coverage behind each
+verdict.
+
+Reconciliation changes nothing about the Claim model: a seed can never raise the confidence of a
+Claim, a builder witness can never substitute for evidence, and a commitment without analyzable
+Claim semantics remains human context rather than becoming a silent absence claim. The System
+Model stays the only persisted analyzer model; seeds, witnesses, and reconciliation results are
+separate artifacts with separate authority.
+
+Some authored relations have no checker semantics yet (currently `performs`, which attaches an
+actor to a behavior). These are recorded as intent and reconcile to `not_checkable` — never to a
+silent absence — so the seed can express who does what without implying coverage Varai does not
+have. Reconciliation also refuses to trust a builder witness that maps two distinct concepts onto
+the same observed element: such a binding is `ambiguous` (reason `concept-collision`), because a
+mislabeled element could otherwise borrow another concept's Claim and produce a false `holds`.
+
 ## Explicit non-claims
 
 Without additional evidence, Varai does not claim:
@@ -552,7 +574,7 @@ Without additional evidence, Varai does not claim:
 - whether generated code reflects the user's prompt.
 - whether a function is pure or leaves its input unchanged without complete effect coverage or authoritative evidence.
 
-These may later come from runtime evidence, checks, tests, or intent reconciliation, each as a separate claim source.
+These may later come from runtime evidence, checks, tests, or intent reconciliation, each as a separate claim source. Intent reconciliation states whether authored commitments hold against observed Claims; it does not make Varai the author of the intent.
 
 ## Language-change rule
 
