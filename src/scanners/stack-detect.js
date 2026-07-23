@@ -6,15 +6,16 @@ export async function detectStacks(repoPath, files = []) {
   // Always-on stack for extractors that aren't tied to a language/framework
   // (e.g. runnable artifacts: scripts, Dockerfiles, compose services).
   stacks.add("base");
-  const [packageJson, frontendPackageJson, pyprojectToml, requirementsTxt] =
+  const [packageJson, frontendPackageJson, servicesFrontendPackageJson, pyprojectToml, requirementsTxt] =
     await Promise.all([
       tryRead(join(repoPath, "package.json")),
+      tryRead(join(repoPath, "frontend/package.json")),
       tryRead(join(repoPath, "services/frontend/package.json")),
       tryRead(join(repoPath, "pyproject.toml")),
       tryRead(join(repoPath, "requirements.txt"))
     ]);
 
-  for (const pkg of [packageJson, frontendPackageJson]) {
+  for (const pkg of [packageJson, frontendPackageJson, servicesFrontendPackageJson]) {
     if (pkg === null) continue;
     try {
       const parsed = JSON.parse(pkg);

@@ -9,6 +9,16 @@ export function classifyAttributeEffect({ method, receiver, call, firstArgIdent,
     const arg = firstArgIdent(call);
     return { access: "read", target: arg && modelNames.has(arg) ? arg : receiverText, kind: "db_model", medium: "db", via: `${receiverText}.query`, observationMethod: "semantic" };
   }
+  if (method === "get") {
+    // A Session.get(Model, pk) is a primary-key load: an entity read whose
+    // return value types the bound variable. Other .get() shapes (dicts,
+    // requests) name no model and stay unclassified.
+    const arg = firstArgIdent(call);
+    if (arg && modelNames.has(arg)) {
+      return { access: "read", target: arg, kind: "db_model", medium: "db", via: `${receiverText}.get`, observationMethod: "semantic" };
+    }
+    return null;
+  }
   if (method === "delete") {
     const target = receiver.type === "identifier" ? (firstArgIdent(call) || null) : chainedTarget(receiver, modelNames);
     return { access: "write", relation: "removes", target, kind: "db_model", medium: "db", via: `${receiverText}.delete`, observationMethod: "semantic" };
