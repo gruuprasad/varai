@@ -135,17 +135,23 @@ function rootChanged(root, changed) {
     root.surfaceIds.some((id) => changed.has(id));
 }
 
-function renderPanes(masterHtml, detailHtml) {
+// Views that expand a row in place (Report) pass inlineExpand so selecting an
+// item does not swap the whole stack over to the empty focus layer.
+let lastExpandedId = null;
+function renderPanes(masterHtml, detailHtml, { inlineExpand = false } = {}) {
   if (el.bentoGrid) el.bentoGrid.innerHTML = masterHtml;
   if (el.focusContent) el.focusContent.innerHTML = detailHtml || emptyDetailPlaceholder();
-  
-  if (expandedId) {
+
+  if (expandedId && !inlineExpand) {
     el.gridLayer?.classList.remove("active");
     el.focusLayer?.classList.add("active");
+    // Land at the top of a newly opened item instead of inheriting the last scroll.
+    if (expandedId !== lastExpandedId && el.focusContent) el.focusContent.scrollTop = 0;
   } else {
     el.focusLayer?.classList.remove("active");
     el.gridLayer?.classList.add("active");
   }
+  lastExpandedId = expandedId;
 
   bindExpanders();
   bindSnippets();
@@ -188,9 +194,9 @@ function renderTopbar() {
   const operations = areas.reduce((sum, area) => sum + area.operationCount, 0);
   const primaryOperations = areas.reduce((sum, area) => sum + (area.primaryOperationCount ?? area.operationCount), 0);
   el.topbarStats.innerHTML =
-    `<span class="stat-pill"><strong>${areas.length}</strong> observed areas</span>` +
-    `<span class="stat-pill"><strong>${primaryOperations}</strong> primary · ${operations} operations</span>` +
-    `<span class="stat-pill"><strong>${cores.length}</strong> shared parts</span>`;
+    `<span class="stat-pill"><strong>${areas.length}</strong> ${areas.length === 1 ? "observed area" : "observed areas"}</span>` +
+    `<span class="stat-pill"><strong>${primaryOperations}</strong> primary · ${operations} ${operations === 1 ? "operation" : "operations"}</span>` +
+    `<span class="stat-pill"><strong>${cores.length}</strong> ${cores.length === 1 ? "shared part" : "shared parts"}</span>`;
 }
 
 const NAV_ICONS = {
@@ -524,7 +530,7 @@ function screenDetail(root, byId, claimsBySource, changed) {
     `</div>`;
 }
 
-function behaviorList(behaviorIds, interfaceIds, byId, claimsBySource, changed) {
+function behaviorList(behaviorIds, interfaceIds, byId, claimsBySource, changed, { showHeading = true } = {}) {
   if (!behaviorIds.length) return `<p class="empty-copy">No connected behavior recovered within current coverage.</p>`;
   const { frameByBehavior, pathsByBehavior } = projectionIndexes();
   const claimsById = new Map(scanData.model.claims.map((item) => [item.id, item]));
@@ -540,7 +546,7 @@ function behaviorList(behaviorIds, interfaceIds, byId, claimsBySource, changed) 
       .map((path) => path.name);
     const reach = [...new Set([...entries, ...interfaces.map((item) => item.name)])];
     return `<section class="behavior${changed.has(behaviorId) ? " behavior-changed" : ""}">` +
-      `<h3>${esc(frame?.name ?? behavior.name)}${changed.has(behaviorId) ? changeBadge() : ""}</h3>` +
+      (showHeading ? `<h3>${esc(frame?.name ?? behavior.name)}${changed.has(behaviorId) ? changeBadge() : ""}</h3>` : "") +
       (reach.length ? `<p class="reach">reached through ${reach.map((item) => esc(item)).join(" · ")}</p>` : "") +
       claims.map((claim) => claimRow(claim, byId)).join("") +
       `</section>`;
@@ -671,7 +677,7 @@ function renderCapabilities() {
       `<span class="detail-role">Behavior · ${esc(behavior?.kind ?? "action")}</span>` +
       `</div>` +
       `</header>` +
-      behaviorList([selectedCap.item.behaviorId], selectedCap.item.interfaceIds, byId, claimsBySource, changed) +
+      behaviorList([selectedCap.item.behaviorId], selectedCap.item.interfaceIds, byId, claimsBySource, changed, { showHeading: false }) +
       `</div>`;
   } else {
     detailHtml = emptyDetailPlaceholder("Select a Capability", "Select a static envelope or behavior to inspect claims and effects.");
