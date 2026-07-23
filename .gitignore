@@ -1,4 +1,5 @@
-node_modules/
+# no trailing slash: worktrees symlink node_modules, and a symlink is not a dir
+node_modules
 .varai/
 .DS_Store
 dist/
