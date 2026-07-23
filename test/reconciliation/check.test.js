@@ -242,3 +242,25 @@ test("a mislabeled target binding cannot fake a holds", () => {
   assert.equal(outbox.bindingState, "ambiguous");
   assert.deepEqual(outbox.reasons, ["ambiguous-target"]);
 });
+
+test("a performs commitment is recorded as not_checkable, never a silent absence", () => {
+  const { model } = collisionScenario();
+  const seed = {
+    formatVersion: 1,
+    system: { id: "demo", name: "Demo" },
+    concepts: [
+      { id: "actor.member", role: "actor", name: "Member" },
+      { id: "behavior.book", role: "behavior", name: "Book" },
+    ],
+    commitments: [
+      { id: "commitment.member-performs-book", source: "actor.member", relation: "performs", target: { concept: "behavior.book" } },
+    ],
+    context: [],
+  };
+  const realization = { formatVersion: 1, seedHash: seedContentHash(seed), bindings: [], witnesses: [] };
+  const report = reconcile({ model, seed, realization });
+  const item = report.commitments.find((c) => c.id === "commitment.member-performs-book");
+  assert.equal(item.verdict, "not_checkable");
+  assert.deepEqual(item.reasons, ["no-checker-semantics"]);
+  assert.equal(report.summary.notCheckable, 1);
+});

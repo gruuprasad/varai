@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkRealization } from "../../src/reconciliation/schema.js";
+import { checkRealization, RELATION_CAPABILITIES } from "../../src/reconciliation/schema.js";
+import { SEED_RELATIONS, RECORDED_ONLY_RELATIONS } from "../../src/seed/schema.js";
 
 const seed = {
   formatVersion: 1,
@@ -41,4 +42,13 @@ test("a witness whose source binding matches the commitment source is accepted",
   const result = checkRealization(realizationWith("binding.book"), { seed });
   assert.ok(!result.problems.some((p) => p.code === "witness-source-mismatch"),
     "the correct-source witness raises no source mismatch");
+});
+
+test("every seed relation is either checkable or explicitly recorded-only", () => {
+  for (const relation of SEED_RELATIONS) {
+    const checkable = relation in RELATION_CAPABILITIES;
+    const recorded = RECORDED_ONLY_RELATIONS.includes(relation);
+    assert.ok(checkable !== recorded,
+      `${relation} must be either checkable (has capabilities) xor recorded-only, not both/neither`);
+  }
 });
