@@ -12,7 +12,7 @@ import {
   renderUnsupported,
 } from "./intent-view.js";
 import { renderReport } from "./report-view.js";
-import { renderSpecDoc, renderSpecNotes } from "./spec-view.js";
+import { countSpecMatches, renderSpecDoc, renderSpecHeader, renderSpecNotes } from "./spec-view.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -324,15 +324,18 @@ function renderObservedAreas() {
 }
 
 function renderIntent() {
-  showSearch("Your spec — write down what the system must do, then approve it...");
-  el.searchCount.textContent = "";
+  showSearch("Search your spec…");
   const draft = seedData?.draft ?? null;
   const assistant = seedData?.assistant ?? null;
-
   const seed = seedData?.seed ?? null;
+  const query = el.search.value;
+  el.searchCount.textContent = seed && query.trim() ? `${countSpecMatches(seed, query)} matching` : "";
+
   let masterHtml = `<div class="spec-doc">`;
-  masterHtml += renderSeedStatus(seedData);
-  if (seed) masterHtml += renderSpecDoc(seed, reconciliationData?.review, { query: el.search.value });
+  // renderSeedStatus is kept only for the states it alone can describe: no seed
+  // file, or a seed that failed validation and has problems to list.
+  masterHtml += seed ? renderSpecHeader(seedData, reconciliationData?.report?.summary) : renderSeedStatus(seedData);
+  if (seed) masterHtml += renderSpecDoc(seed, reconciliationData?.review, { query });
   masterHtml += `<section class="intent-conversation"><h3>Describe the system</h3>` +
     `<textarea id="intent-message" rows="4" placeholder="Describe what the system must do, in your own words..."></textarea>` +
     `<div class="intent-actions">` +
@@ -360,6 +363,7 @@ function renderIntent() {
   }
   masterHtml += `</div>`;
   renderPanes(masterHtml, "", { inlineExpand: true });
+  bindSpecLinks();
 
   $("intent-ask")?.addEventListener("click", async () => {
     const message = $("intent-message").value.trim();
@@ -785,6 +789,22 @@ function renderEverything() {
 
   renderPanes(masterHtml, detailHtml);
   bindMapModes();
+}
+
+// Spec hands off to Report rather than duplicating its evidence UI. data-goto is
+// deliberately not data-expand: bindExpanders() binds that one globally.
+function bindSpecLinks() {
+  const openReport = (id) => {
+    activeView = "review";
+    expandedId = id ?? null;
+    el.search.value = "";
+    if (el.searchClear) el.searchClear.hidden = true;
+    render();
+    document.querySelector(".req-row.open")?.scrollIntoView({ block: "center" });
+  };
+  document.querySelectorAll("[data-goto]").forEach((button) =>
+    button.addEventListener("click", () => openReport(button.dataset.goto)));
+  document.querySelector("[data-goto-report]")?.addEventListener("click", () => openReport(null));
 }
 
 function bindExpanders() {

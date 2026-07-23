@@ -3,6 +3,7 @@
 // ask for"; Report answers "is it true". Rows link across, never duplicate.
 
 import { seedRelationText, verdictLabel } from "../reporters/display-language.js";
+import { shortHash } from "./intent-view.js";
 
 const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
@@ -91,6 +92,48 @@ export function renderSpecDoc(seed, review, { query = "" } = {}) {
 
   if (!visible.length) return `<p class="empty-copy">Nothing in your spec matches this search.</p>`;
   return visible.map(renderSection).join("");
+}
+
+// Replaces the three-card row: identity, approval state, and one honest tally
+// that hands off to Report rather than re-answering it.
+export function renderSpecHeader(seedData, summary) {
+  const seed = seedData?.seed;
+  if (!seed) return "";
+  const approved = seedData.ratified;
+  const when = seed.ratification?.ratifiedAt
+    ? new Date(seed.ratification.ratifiedAt).toLocaleString()
+    : null;
+  const meta = [
+    `<span class="seed-hash" title="${esc(seedData.contentHash ?? "")}">${esc(shortHash(seedData.contentHash))}</span>`,
+    when ? `<span>${approved ? "approved" : "drafted"} ${esc(when)}</span>` : null,
+    seedData.gitDirty ? `<span class="seed-badge git-dirty">uncommitted changes</span>` : null,
+  ].filter(Boolean).join(`<span class="dot">·</span>`);
+
+  const counts = `${seed.commitments.length} ${seed.commitments.length === 1 ? "requirement" : "requirements"} ` +
+    `about ${seed.concepts.length} ${seed.concepts.length === 1 ? "thing" : "things"}.`;
+  const tally = summary
+    ? `<p class="spec-tally">${counts} ` +
+      `<span class="verdict-holds">${summary.holds} confirmed</span> · ` +
+      `<span class="verdict-violated">${summary.violated} missing</span> · ` +
+      `<span class="verdict-cannot_verify">${summary.cannotVerify} couldn't tell</span> · ` +
+      `<span class="verdict-not_checkable">${summary.notCheckable} noted</span>` +
+      `<button class="spec-goto-report" data-goto-report type="button">See the report →</button></p>`
+    : `<p class="spec-tally">${counts}</p>`;
+
+  return `<header class="spec-head">` +
+    `<h2>${esc(seed.system?.name ?? "Untitled system")}` +
+    `<span class="seed-badge ${approved ? "ratified" : "draft"}">${approved ? "approved" : "draft"}</span></h2>` +
+    `<p class="spec-meta">${meta}</p>${tally}</header>`;
+}
+
+// How many requirements a search matches, for the count beside the search box.
+export function countSpecMatches(seed, query) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return 0;
+  const nameOf = (id) => seed.concepts.find((concept) => concept.id === id)?.name ?? id;
+  return seed.commitments.filter((commitment) =>
+    `${nameOf(commitment.source)} ${seedRelationText(commitment.relation)} ${targetName(commitment.target, nameOf)}`
+      .toLowerCase().includes(needle)).length;
 }
 
 export function renderSpecNotes(context) {

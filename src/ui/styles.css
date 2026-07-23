@@ -1560,6 +1560,21 @@ body {
 
 /* ---- Spec document ---- */
 .spec-doc { max-width: 78ch; padding-top: 4px; }
+.spec-head { max-width: 72ch; margin: 0 0 26px; }
+.spec-head h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; }
+.spec-meta {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 0 0 10px; color: var(--text-mid); font-size: 12.5px;
+}
+.spec-meta .dot { color: var(--text-dim); }
+/* Inline flow, not flex: the tally is a sentence with chips in it, and flex
+   would turn every separator between spans into its own gapped item. */
+.spec-tally { margin: 0; font-size: 13.5px; color: var(--text-mid); line-height: 1.7; }
+.spec-goto-report {
+  border: 0; background: none; padding: 0; margin-left: 10px; cursor: pointer;
+  color: var(--accent); font: inherit; font-size: 13px;
+}
+.spec-goto-report:hover { text-decoration: underline; }
 .spec-section { margin: 0 0 22px; }
 .spec-subject { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; font-size: 15px; }
 /* Chrome, not meaning: a role is a category, not a verdict, so it carries no hue. */

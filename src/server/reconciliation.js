@@ -125,7 +125,10 @@ export function buildReviewProjection({ report, model, seed }) {
     });
 
   return {
-    system: report.system,
+    // The review is about the spec, so it carries the spec's name for the
+    // system. report.system is the scanned repo's name, which is often the
+    // directory — showing it here disagrees with the Spec page one click away.
+    system: seed?.system ?? report.system,
     seedHash: report.seedHash,
     ratified: report.ratified,
     realization: report.realization,

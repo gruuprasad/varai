@@ -4,6 +4,7 @@ import { buildReviewProjection } from "../../src/server/reconciliation.js";
 import { SYSTEM_MODEL_SCHEMA_VERSION } from "../../src/system-model/version.js";
 
 const seed = {
+  system: { id: "slotkeeper", name: "Slotkeeper" },
   concepts: [
     { id: "actor.administrator", name: "Administrator" },
     { id: "behavior.cancel-booking", name: "Cancel booking" },
@@ -15,7 +16,7 @@ const model = {
   subsystems: [], elements: [], claims: [], coverage: [], diagnostics: [],
 };
 const report = {
-  system: { name: "Slotkeeper" },
+  system: { name: "slotkeeper-repo" },   // the scanned repo, not what was approved
   summary: { holds: 0, violated: 0, cannotVerify: 0, notCheckable: 1 },
   commitments: [{
     id: "commitment.admin-performs-cancel",
@@ -42,4 +43,7 @@ test("not_checkable commitments leave the confirmed denominator and concepts get
 
   assert.equal(group.cards[0].sourceName, "Administrator");
   assert.equal(group.cards[0].targetName, "Cancel booking");
+
+  // Report and Spec are one click apart; they must not name the system differently.
+  assert.equal(review.system.name, "Slotkeeper");
 });
