@@ -349,14 +349,18 @@ function renderIntent() {
       `<p>${summary.holds} confirmed · ${summary.violated} missing · ${summary.cannotVerify} couldn't tell · ${summary.notCheckable} noted</p></section>`;
   }
 
-  const detailHtml = draft?.draft
-    ? `<h3 class="group-heading">Draft under review (${esc(draft.source)})</h3>` +
+  // The Spec page never uses the focus layer — nothing here sets expandedId, so
+  // anything rendered into detailHtml is invisible. Draft review goes inline.
+  if (draft?.draft) {
+    masterHtml += `<section class="spec-review">` +
+      `<h3 class="group-heading">Draft under review (${esc(draft.source)})</h3>` +
       renderProblems(draft.problems) +
       renderSeedDiff(draft.diff) +
       renderDraftStructure(draft.draft) +
-      renderReviewActions(draft)
-    : emptyDetailPlaceholder("No draft under review", "Ask the assistant or paste a spec; review the changes here before approving.");
-  renderPanes(masterHtml, detailHtml);
+      renderReviewActions(draft) +
+      `</section>`;
+  }
+  renderPanes(masterHtml, "", { inlineExpand: true });
 
   $("intent-ask")?.addEventListener("click", async () => {
     const message = $("intent-message").value.trim();
