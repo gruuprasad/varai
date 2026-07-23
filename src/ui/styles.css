@@ -1509,6 +1509,16 @@ body {
   .status-dot, .empty-spinner { animation: none; }
 }
 
+/* Code map — one graph, four slices */
+.map-modes { display: flex; gap: 4px; margin: 0 0 14px; flex-wrap: wrap; }
+.map-mode {
+  padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-mid); font: inherit; font-size: 12.5px;
+}
+.map-mode:hover { border-color: var(--border-bright); color: var(--text-bright); }
+.map-mode.active { background: var(--bg-active); border-color: var(--accent-border); color: var(--text-bright); }
+
 /* Seed Studio (Intent view) */
 .seed-status { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin: 12px 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 .seed-status.seed-empty, .seed-status.seed-invalid { display: block; }

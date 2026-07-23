@@ -184,7 +184,6 @@ function render() {
   else if (activeView === "capabilities") renderCapabilities();
   else if (activeView === "changes") renderChanges();
   else if (activeView === "everything") renderEverything();
-  else if (activeView === "unknowns") renderUnknowns();
   else renderObservedAreas();
 }
 
@@ -205,22 +204,25 @@ const NAV_ICONS = {
   capabilities: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
   changes: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>`,
   everything: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
-  unknowns: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  review: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
+  intent: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>`,
 };
+
+// The four map slices are one graph seen four ways; they share a destination.
+const MAP_MODES = [
+  ["system", "Areas"],
+  ["subjects", "Subjects"],
+  ["capabilities", "Capabilities"],
+  ["everything", "Everything"],
+];
 
 function renderNav() {
   const changes = diffData?.diff?.summary?.semanticChanges ?? 0;
   el.sidebarNav.innerHTML =
-    navItem("intent", "✦", "Intent", null) +
-    navItem("review", "✓", "Review", null) +
-    navItem("system", "◎", "Observed areas", null) +
-    navItem("subjects", "◈", "Subjects", null) +
-    navItem("capabilities", "↳", "Capabilities", null) +
-    navItem("changes", "∆", "Changes", changes || null) +
-    `<div class="nav-group"><span class="nav-group-label">Advanced</span>` +
-    navItem("everything", "≡", "Everything", scanData?.model?.elements?.length ?? 0) +
-    navItem("unknowns", "◌", "Couldn't determine", scanData?.model?.coverage?.length ?? 0) +
-    `</div>`;
+    navItem("review", "✓", "Report", null) +
+    navItem("intent", "✦", "Spec", null) +
+    navItem("system", "◎", "Code map", null) +
+    navItem("changes", "∆", "Changes", changes || null);
   el.sidebarNav.querySelectorAll("[data-view]").forEach((item) => item.addEventListener("click", () => {
     activeView = item.dataset.view;
     expandedId = null;
@@ -233,9 +235,25 @@ function renderNav() {
 
 function navItem(view, fallbackIcon, name, count) {
   const iconSvg = NAV_ICONS[view] || esc(fallbackIcon);
-  return `<button class="nav-item${activeView === view ? " active" : ""}" data-view="${view}">` +
+  const active = activeView === view ||
+    (view === "system" && MAP_MODES.some(([mode]) => mode === activeView));
+  return `<button class="nav-item${active ? " active" : ""}" data-view="${view}">` +
     `<span class="nav-icon">${iconSvg}</span><span class="nav-name">${esc(name)}</span>` +
     `${count == null ? "" : `<span class="nav-count">${count}</span>`}</button>`;
+}
+
+function renderMapModes() {
+  return `<div class="map-modes">` + MAP_MODES.map(([mode, label]) =>
+    `<button class="map-mode${activeView === mode ? " active" : ""}" data-mode="${mode}">${esc(label)}</button>`
+  ).join("") + `</div>`;
+}
+
+function bindMapModes() {
+  document.querySelectorAll("[data-mode]").forEach((button) => button.addEventListener("click", () => {
+    activeView = button.dataset.mode;
+    expandedId = null;
+    render();
+  }));
 }
 
 function showSearch(placeholder) {
@@ -305,7 +323,8 @@ function renderObservedAreas() {
 
   el.searchCount.textContent = query ? `${rendered.matchCount} matches` : "";
 
-  renderPanes(strip + (rendered.masterHtml || rendered.html), rendered.detailHtml);
+  renderPanes(renderMapModes() + strip + (rendered.masterHtml || rendered.html), rendered.detailHtml);
+  bindMapModes();
   $("change-strip")?.addEventListener("click", () => { changesOnly = !changesOnly; render(); });
 }
 
@@ -442,7 +461,7 @@ function renderSubjects() {
       `<span>${changesOnly ? "show everything" : "show only changes"}</span></button>`
     : diffData?.error ? `<p class="baseline-note">${esc(diffData.error)}</p>` : "";
 
-  let masterHtml = strip + `<h2 class="group-heading">Subjects</h2>`;
+  let masterHtml = renderMapModes() + strip + `<h2 class="group-heading">Subjects</h2>`;
   masterHtml += subjects.length
     ? subjects.map((root) => subjectMasterCard(root, byId, changed)).join("")
     : `<p class="empty-copy">No system subjects recovered.</p>`;
@@ -467,6 +486,7 @@ function renderSubjects() {
   }
 
   renderPanes(masterHtml, detailHtml);
+  bindMapModes();
   $("change-strip")?.addEventListener("click", () => { changesOnly = !changesOnly; render(); });
 }
 
@@ -629,7 +649,7 @@ function renderCapabilities() {
 
   el.searchCount.textContent = query ? `${envelopes.length + items.length} matches` : "";
 
-  let masterHtml = `<h2 class="group-heading">Static behavior envelopes</h2>`;
+  let masterHtml = renderMapModes() + `<h2 class="group-heading">Static behavior envelopes</h2>`;
   masterHtml += envelopes.length ? envelopes.map((item) => {
     const selected = expandedId === item.id;
     const steps = item.behaviorIds.map((id) =>
@@ -684,6 +704,7 @@ function renderCapabilities() {
   }
 
   renderPanes(masterHtml, detailHtml);
+  bindMapModes();
 }
 
 function envelopeDetail(envelope, byId) {
@@ -741,9 +762,14 @@ function renderEverything() {
     item.evidence.some((entry) => entry.file.toLowerCase().includes(query)));
   showSearch(`Search all ${scanData.model.elements.length} elements and source paths...`);
   el.searchCount.textContent = query ? `${elements.length} matches` : "";
-  if (!elements.length) return renderEmpty("Nothing matches this search");
+  if (!elements.length) {
+    // Keep the mode switcher reachable — an empty search must not trap the view.
+    renderPanes(renderMapModes() + emptyMarkup("Nothing matches this search"), emptyDetailPlaceholder());
+    bindMapModes();
+    return;
+  }
 
-  let masterHtml = elements.slice(0, 200).map((item) => {
+  let masterHtml = renderMapModes() + elements.slice(0, 200).map((item) => {
     const selected = expandedId === item.id;
     return `<article class="card${selected ? " selected open" : ""}">` +
       `<button class="card-head" data-expand="${esc(item.id)}">` +
@@ -764,23 +790,7 @@ function renderEverything() {
   }
 
   renderPanes(masterHtml, detailHtml);
-}
-
-function renderUnknowns() {
-  el.search.closest(".search-wrap").hidden = true;
-  let masterHtml = `<h2 class="group-heading">What varai couldn't determine</h2>` +
-    (scanData.model.coverage.length ? scanData.model.coverage.map((item) =>
-      `<article class="card"><div class="card-head static">` +
-      `<span class="card-title"><strong>${esc(item.capability)}</strong><small>${esc(item.state)}</small></span></div>` +
-      `${item.details.length ? `<div class="card-detail open-static"><p>${esc(item.details.join("; "))}</p></div>` : ""}</article>`).join("")
-      : emptyMarkup("Nothing was declared out of reach"));
-
-  const detailHtml = `<div class="detail-content">` +
-    `<header class="detail-header"><div class="detail-title-wrap"><h1 class="detail-title">Coverage & Unknowns</h1><span class="detail-role">Declared analyzer boundaries</span></div></header>` +
-    `<p class="reach">Varai reports explicit boundaries where repository information could not be conclusively extracted.</p>` +
-    `</div>`;
-
-  renderPanes(masterHtml, detailHtml);
+  bindMapModes();
 }
 
 function bindExpanders() {
