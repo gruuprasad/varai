@@ -1503,19 +1503,6 @@ body {
   .focus-content { padding: 16px 16px 40px; }
   .area-op-preview { grid-template-columns: 1fr; }
   .op-effect { text-align: left; }
-  .spec-split { flex-direction: column; }
-  .spec-split > .spec-doc {
-    border-right: 0;
-    padding-right: 0;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 16px;
-  }
-  .spec-evidence {
-    max-width: none;
-    padding: 16px 0 28px;
-    position: static;
-    max-height: none;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1671,6 +1658,21 @@ body {
 .spec-req.selected:hover {
   border-color: var(--accent-border);
   background: var(--bg-active);
+}
+@media (max-width: 860px) {
+  .spec-split { flex-direction: column; }
+  .spec-split > .spec-doc {
+    border-right: 0;
+    padding-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 16px;
+  }
+  .spec-evidence {
+    max-width: none;
+    padding: 16px 0 28px;
+    position: static;
+    max-height: none;
+  }
 }
 .spec-req-text { flex: 1; min-width: 0; }
 .spec-req-note { display: block; color: var(--text-dim); font-size: 12.5px; margin-top: 2px; }
