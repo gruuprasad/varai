@@ -19,6 +19,10 @@ import { serializeProjections } from "./projections.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.resolve(__dirname, "..", "ui");
+// UI modules import shared glossary/labels from ../reporters, so the browser
+// requests /reporters/<file>.js. Serve those from the reporters dir; without
+// this the module graph 404s and app.js never runs (UI stuck on "Scanning").
+const REPORTERS_DIR = path.resolve(__dirname, "..", "reporters");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -209,6 +213,8 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
     let filePath;
     if (url.pathname === "/" || url.pathname === "/index.html") {
       filePath = path.join(UI_DIR, "index.html");
+    } else if (url.pathname.startsWith("/reporters/") && !url.pathname.includes("..")) {
+      filePath = path.join(REPORTERS_DIR, path.basename(url.pathname));
     } else if (url.pathname.startsWith("/") && !url.pathname.includes("..")) {
       const safeName = path.basename(url.pathname);
       filePath = path.join(UI_DIR, safeName);
