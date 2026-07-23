@@ -11,13 +11,7 @@ import {
   renderProblems,
   renderUnsupported,
 } from "./intent-view.js";
-import {
-  renderCardDetail,
-  renderCompactCard,
-  renderCoverageLimitations,
-  renderGroupHeading,
-  renderReviewOverview,
-} from "./review-view.js";
+import { renderReport } from "./report-view.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -45,7 +39,7 @@ if (el.backBtn) {
   });
 }
 
-let activeView = "system";
+let activeView = "review";
 let expandedId = null;
 let changesOnly = false;
 let scanData = null;
@@ -402,40 +396,37 @@ function renderIntent() {
 }
 
 function renderReview() {
-  showSearch("Domain review — commitments, evidence, reading order...");
+  showSearch("Search your requirements...");
   el.searchCount.textContent = "";
   const review = reconciliationData?.review ?? null;
 
   if (!reconciliationData?.seed) {
     renderPanes(
-      `<h2 class="group-heading">Domain review</h2><p class="empty-copy">No seed found. Author and ratify one in the Intent view first.</p>`,
-      emptyDetailPlaceholder("Nothing to review", "Reconciliation needs a ratified seed."),
+      `<div class="report"><p class="empty-copy">No spec found. Write one in Spec first.</p></div>`,
+      emptyDetailPlaceholder("Nothing to report", "varai needs an approved spec to check against."),
+      { inlineExpand: true },
     );
     return;
   }
-  if (!review) {
-    renderPanes(
-      `<h2 class="group-heading">Domain review</h2><p class="empty-copy">Waiting for the scan to finish…</p>`,
-      emptyDetailPlaceholder("Scanning", "The review appears once the System Model is ready."),
-    );
-    return;
-  }
+  const query = el.search.value.toLowerCase().trim();
+  const filtered = query && review
+    ? { ...review, groups: review.groups.map((group) => ({
+        ...group,
+        cards: group.cards.filter((card) =>
+          `${card.sourceName ?? ""} ${card.targetName ?? ""} ${card.id}`.toLowerCase().includes(query)),
+      })) }
+    : review;
 
   const witnessWarnings = (reconciliationData.realizationProblems ?? [])
-    .map((problem) => `<p class="witness-warning">witness: ${esc(problem.message)}</p>`).join("");
+    .map((problem) => `<p class="witness-warning">builder's map: ${esc(problem.message)}</p>`).join("");
 
-  let masterHtml = renderReviewOverview(review) + witnessWarnings;
-  const selectedCard = review.groups.flatMap((group) => group.cards).find((card) => card.id === expandedId) ?? null;
-  for (const group of review.groups) {
-    masterHtml += renderGroupHeading(group);
-    masterHtml += group.cards.map((card) => renderCompactCard(card, card.id === expandedId)).join("");
-  }
-  masterHtml += renderCoverageLimitations(review);
-
-  const detailHtml = selectedCard
-    ? renderCardDetail(selectedCard)
-    : emptyDetailPlaceholder("Select a commitment", "Pick a commitment to see its bindings, observed evidence, and suggested reading order.");
-  renderPanes(masterHtml, detailHtml);
+  // renderPanes already calls bindExpanders() and bindSnippets(); binding again
+  // here would attach a second listener per chip and cancel every toggle out.
+  renderPanes(
+    `<div class="report">${witnessWarnings}${renderReport(filtered, { expandedId })}</div>`,
+    "",
+    { inlineExpand: true },
+  );
 }
 
 function renderSubjects() {
@@ -796,7 +787,9 @@ function renderEverything() {
 function bindExpanders() {
   document.querySelectorAll("[data-expand]").forEach((button) => button.addEventListener("click", (e) => {
     e.stopPropagation();
-    expandedId = button.dataset.expand;
+    // Re-clicking the open item closes it — the only way to collapse an
+    // inline-expanded Report row (master/detail views use the back button).
+    expandedId = expandedId === button.dataset.expand ? null : button.dataset.expand;
     render();
   }));
 }
