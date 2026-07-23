@@ -30,7 +30,7 @@ function draftState() {
 test("the review view renders the proposal diff and an explicit ratify action", () => {
   const state = draftState();
   const diffHtml = renderSeedDiff(state.diff);
-  assert.ok(diffHtml.includes("Draft vs ratified seed"));
+  assert.ok(diffHtml.includes("Draft vs approved spec"));
   assert.ok(diffHtml.includes("resource.waitlist"));
   assert.ok(diffHtml.includes("diff-added"));
 
