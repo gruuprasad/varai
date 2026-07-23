@@ -25,6 +25,17 @@
   --accent-bg:      rgba(5, 150, 105, 0.08);
   --accent-border:  rgba(5, 150, 105, 0.28);
 
+  /* Verdict semantics. These are the only saturated colors in the product —
+     the accent above is chrome and must never stand for "confirmed". */
+  --verdict-confirmed: #059669;
+  --verdict-missing:   #dc2626;
+  --verdict-unknown:   #b45309;
+  --verdict-noted:     #6b7c72;
+
+  /* Aliases for rules written against the older token names. */
+  --muted:          #6b7c72;
+  --surface:        #ffffff;
+
   --cyan:           #0e7490;
   --cyan-bg:        rgba(14, 116, 144, 0.08);
 
@@ -61,14 +72,22 @@
 
   --text-bright:    #f1f5f9;
   --text:           #d7e2ee;
-  --text-mid:       #8aa0b8;
-  --text-dim:       #64748b;
+  --text-mid:       #9db0c6;   /* #8aa0b8 was thin on #0c1118 for body-weight text */
+  --text-dim:       #7c8da0;
 
   --accent:         #10b981;
   --accent-rgb:     16, 185, 129;
   --accent-bright:  #2dd4bf;
   --accent-bg:      rgba(16, 185, 129, 0.1);
   --accent-border:  rgba(16, 185, 129, 0.28);
+
+  --verdict-confirmed: #10b981;
+  --verdict-missing:   #f87171;
+  --verdict-unknown:   #fbbf24;
+  --verdict-noted:     #9db0c6;
+
+  --muted:          #9db0c6;
+  --surface:        #152032;
 
   --cyan:           #22d3ee;
   --cyan-bg:        rgba(34, 211, 238, 0.1);
@@ -1049,33 +1068,10 @@ body {
   font-family: var(--font-mono);
   font-size: 11.5px;
   font-weight: 600;
-  background: var(--accent-bg);
-  color: var(--accent);
-  border: 1px solid var(--accent-border);
-}
-
-.relation-chip.rel-changes, .relation-chip.rel-mutates {
-  background: var(--number-bg);
-  color: var(--number);
-  border-color: rgba(251, 191, 36, 0.3);
-}
-
-.relation-chip.rel-produces, .relation-chip.rel-returns {
-  background: var(--cyan-bg);
-  color: var(--cyan);
-  border-color: rgba(6, 182, 212, 0.3);
-}
-
-.relation-chip.rel-invokes, .relation-chip.rel-offers, .relation-chip.rel-calls {
-  background: var(--indigo-bg);
-  color: var(--indigo);
-  border-color: rgba(15, 118, 110, 0.3);
-}
-
-.relation-chip.rel-fails_with, .relation-chip.rel-requires {
-  background: var(--red-bg);
-  color: var(--red);
-  border-color: rgba(248, 113, 113, 0.3);
+  /* Chrome, not meaning: relations carry no verdict, so they carry no hue. */
+  background: transparent;
+  color: var(--text-mid);
+  border: 1px solid var(--border);
 }
 
 .envelope-section {
@@ -1565,9 +1561,9 @@ body {
 .seed-status { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin: 12px 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 .seed-status.seed-empty, .seed-status.seed-invalid { display: block; }
 .seed-badge { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
-.seed-badge.ratified { background: #dcfce7; color: #166534; }
-.seed-badge.draft { background: #fef9c3; color: #854d0e; }
-.seed-badge.git-dirty { background: #fee2e2; color: #991b1b; }
+.seed-badge.ratified { border: 1px solid var(--verdict-confirmed); color: var(--verdict-confirmed); }
+.seed-badge.draft { border: 1px solid var(--verdict-unknown); color: var(--verdict-unknown); }
+.seed-badge.git-dirty { border: 1px solid var(--verdict-missing); color: var(--verdict-missing); }
 .seed-hash { font-family: var(--mono, monospace); font-size: 12px; }
 .seed-counts { color: var(--muted); font-size: 12px; }
 .intent-conversation, .intent-questions, .intent-unsupported, .intent-problems, .intent-diff, .intent-structure, .intent-recon { margin: 12px 0; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
@@ -1585,7 +1581,7 @@ body {
 .diff-added { color: #166534; }
 .diff-removed { color: #991b1b; }
 .diff-changed { color: #854d0e; }
-.verdict-chip { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 1px 6px; border-radius: 999px; background: #e0e7ff; color: #3730a3; }
+.verdict-chip { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-mid); }
 .intent-unsupported li, .intent-questions li, .intent-problems li { margin: 4px 0; }
 
 /* Domain review */
@@ -1595,16 +1591,23 @@ body {
 .review-counts { display: flex; gap: 14px; flex-wrap: wrap; }
 .review-count { white-space: nowrap; }
 .review-count strong { font-size: 18px; }
-.review-count.holds strong { color: #166534; }
-.review-count.violated strong { color: #991b1b; }
-.review-count.cannot strong { color: #854d0e; }
-.review-count.context strong { color: var(--muted); }
+.review-count.holds strong { color: var(--verdict-confirmed); }
+.review-count.violated strong { color: var(--verdict-missing); }
+.review-count.cannot strong { color: var(--verdict-unknown); }
+.review-count.context strong { color: var(--verdict-noted); }
 .review-context { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
-.seed-badge.missing { background: #fee2e2; color: #991b1b; }
-.verdict-chip.verdict-holds { background: #dcfce7; color: #166534; }
-.verdict-chip.verdict-violated { background: #fee2e2; color: #991b1b; }
-.verdict-chip.verdict-cannot_verify { background: #fef9c3; color: #854d0e; }
-.verdict-chip.verdict-not_checkable { background: #e5e7eb; color: #374151; }
+.seed-badge.missing { border: 1px solid var(--verdict-missing); color: var(--verdict-missing); }
+/* Verdicts are the one place saturation is allowed to speak. */
+.verdict-holds, .verdict-chip.verdict-holds { color: var(--verdict-confirmed); }
+.verdict-violated, .verdict-chip.verdict-violated { color: var(--verdict-missing); }
+.verdict-cannot_verify, .verdict-chip.verdict-cannot_verify { color: var(--verdict-unknown); }
+.verdict-not_checkable, .verdict-chip.verdict-not_checkable { color: var(--verdict-noted); }
+.verdict-chip.verdict-holds { border-color: var(--verdict-confirmed); }
+.verdict-chip.verdict-violated { border-color: var(--verdict-missing); }
+.verdict-chip.verdict-cannot_verify { border-color: var(--verdict-unknown); }
+
+.bucket-violated h3 { color: var(--verdict-missing); }
+.bucket-cannot_verify h3 { color: var(--verdict-unknown); }
 .group-score { color: var(--muted); font-size: 12px; font-weight: 500; }
 .review-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
 .review-col { padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
@@ -1612,8 +1615,8 @@ body {
 .review-col.observed { background: var(--surface); }
 .binding-list { list-style: none; padding: 0; font-size: 13px; }
 .binding-list li { margin: 6px 0; }
-.binding-resolved { color: #166534; }
-.binding-stale, .binding-ambiguous { color: #991b1b; }
+.binding-resolved { color: var(--verdict-confirmed); }
+.binding-stale, .binding-ambiguous, .binding-unbound { color: var(--verdict-missing); }
 .coverage-chip { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 1px 6px; border-radius: 999px; }
 .coverage-chip.cov-analyzed { background: #dcfce7; color: #166534; }
 .coverage-chip.cov-partial { background: #fef9c3; color: #854d0e; }
@@ -1623,6 +1626,6 @@ body {
 .step-why { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--muted); min-width: 64px; }
 .coverage-limitations { margin: 12px 0; padding: 14px; border: 1px solid var(--border); border-radius: 10px; }
 .coverage-limitations li { margin: 6px 0; font-size: 13px; }
-.witness-warning { padding: 8px 12px; border-left: 3px solid #b45309; background: #fef9c3; font-size: 13px; }
+.witness-warning { padding: 8px 12px; border-left: 3px solid var(--verdict-unknown); background: var(--bg-subtle); font-size: 13px; margin: 0 0 14px; max-width: 72ch; }
 .reason-line, .coverage-line, .envelope-line { font-size: 13px; color: var(--muted); margin: 4px 0; }
 .commitment-sentence { font-size: 14px; margin: 8px 0; }
