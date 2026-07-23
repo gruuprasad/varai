@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { specSections, verdictById, ROLE_ORDER } from "../../src/ui/spec-view.js";
+import { countSpecMatches, renderSpecDoc, requirementVisible, ROLE_ORDER, specSections, verdictById } from "../../src/ui/spec-view.js";
 import { CONCEPT_ROLES } from "../../src/seed/schema.js";
 
 const seed = {
@@ -61,4 +61,21 @@ test("verdicts join by commitment id; unchecked requirements stay null", () => {
 
   const noReview = specSections(seed, null);
   assert.equal(noReview[0].requirements[0].verdict, null);
+});
+
+test("requirement rows open evidence via data-expand, not data-goto", () => {
+  const html = renderSpecDoc(seed, review);
+  assert.match(html, /data-expand="commitment\.book-slot-creates-booking"/);
+  assert.doesNotMatch(html, /data-goto=/);
+});
+
+test("the open requirement is marked selected", () => {
+  const html = renderSpecDoc(seed, review, { expandedId: "commitment.book-slot-creates-booking" });
+  assert.match(html, /spec-req selected[^>]*data-expand="commitment\.book-slot-creates-booking"/);
+});
+
+test("requirementVisible is false when search hides the open row", () => {
+  assert.equal(requirementVisible(seed, review, "", "commitment.book-slot-creates-booking"), true);
+  assert.equal(requirementVisible(seed, review, "Member", "commitment.book-slot-creates-booking"), false);
+  assert.equal(requirementVisible(seed, review, "creates", "commitment.book-slot-creates-booking"), true);
 });

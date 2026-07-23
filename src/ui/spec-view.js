@@ -1,6 +1,7 @@
 // The approved spec, presented as a document. Verdicts are joined onto seed
-// commitments by id — this module never decides one. Spec answers "what did I
-// ask for"; Report answers "is it true". Rows link across, never duplicate.
+// commitments by id — this module never decides one. Spec shows the document;
+// the evidence pane (wired in `app.js`) reuses Report's card — rows select via
+// `data-expand`, and only "See the report →" leaves Spec.
 
 import { seedRelationText, verdictLabel } from "../reporters/display-language.js";
 import { shortHash } from "./intent-view.js";
@@ -54,20 +55,22 @@ export function specSections(seed, review) {
     }));
 }
 
-function renderRequirement(requirement) {
+function renderRequirement(requirement, expandedId) {
   const verdict = requirement.verdict
     ? `<span class="spec-verdict verdict-${esc(requirement.verdict)}">${esc(verdictLabel(requirement.verdict))}</span>`
     : `<span class="spec-verdict spec-unchecked">not checked yet</span>`;
-  return `<button class="spec-req" data-goto="${esc(requirement.id)}" title="Open this in the report">` +
+  const selected = requirement.id === expandedId;
+  return `<button class="spec-req${selected ? " selected" : ""}" data-expand="${esc(requirement.id)}" ` +
+    `aria-expanded="${selected}" title="Show why varai scored this">` +
     `<span class="spec-req-text">${esc(requirement.text)}` +
     (requirement.note ? `<span class="spec-req-note">${esc(requirement.note)}</span>` : "") +
     `</span>${verdict}</button>`;
 }
 
-function renderSection(section) {
+function renderSection(section, expandedId) {
   const { concept, requirements, referencedBy } = section;
   const body = requirements.length
-    ? requirements.map(renderRequirement).join("")
+    ? requirements.map((requirement) => renderRequirement(requirement, expandedId)).join("")
     : `<p class="spec-refs">${referencedBy
         ? `Referenced by ${referencedBy} ${referencedBy === 1 ? "requirement" : "requirements"}.`
         : "Nothing in the spec says anything about this yet."}</p>`;
@@ -77,7 +80,7 @@ function renderSection(section) {
     body + `</section>`;
 }
 
-export function renderSpecDoc(seed, review, { query = "" } = {}) {
+export function renderSpecDoc(seed, review, { query = "", expandedId = null } = {}) {
   const sections = specSections(seed, review);
   const needle = query.trim().toLowerCase();
   const visible = needle
@@ -91,7 +94,22 @@ export function renderSpecDoc(seed, review, { query = "" } = {}) {
     : sections;
 
   if (!visible.length) return `<p class="empty-copy">Nothing in your spec matches this search.</p>`;
-  return visible.map(renderSection).join("");
+  return visible.map((section) => renderSection(section, expandedId)).join("");
+}
+
+// Used by app.js to drop the evidence pane when search filters out the open row.
+export function requirementVisible(seed, review, query, id) {
+  if (!id) return false;
+  const sections = specSections(seed, review);
+  const needle = query.trim().toLowerCase();
+  for (const section of sections) {
+    for (const req of section.requirements) {
+      if (req.id !== id) continue;
+      if (!needle) return true;
+      return `${section.concept.name} ${req.text}`.toLowerCase().includes(needle);
+    }
+  }
+  return false;
 }
 
 // Replaces the three-card row: identity, approval state, and one honest tally
