@@ -1599,6 +1599,19 @@ body {
   letter-spacing: 0.06em; white-space: nowrap;
 }
 .spec-unchecked { color: var(--text-dim); }
+.spec-compose { max-width: 72ch; margin: 26px 0 0; }
+.spec-compose > summary { cursor: pointer; font-weight: 600; padding: 8px 0; color: var(--text-mid); }
+.spec-compose > summary:hover { color: var(--text-bright); }
+.spec-compose[open] > summary { color: var(--text-bright); margin-bottom: 6px; }
+.spec-onboard { max-width: 56ch; margin: 8vh auto 0; }
+.spec-onboard h2 { margin: 0 0 8px; }
+.spec-review { max-width: 78ch; }
+/* The decision stays reachable however long the diff runs. */
+.spec-review .intent-actions {
+  position: sticky; bottom: 0; z-index: 1;
+  margin: 0; padding: 14px 0;
+  background: var(--bg); border-top: 1px solid var(--border);
+}
 .spec-notes { max-width: 72ch; margin-top: 22px; color: var(--text-mid); font-size: 13px; }
 .spec-notes h3 { font-size: 13px; margin: 0 0 6px; }
 .spec-notes li { margin: 6px 0; }
@@ -1616,7 +1629,7 @@ body {
 .intent-conversation textarea, .intent-import textarea { width: 100%; box-sizing: border-box; margin: 8px 0; font-family: inherit; border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: var(--bg); color: inherit; }
 .intent-actions { display: flex; gap: 10px; align-items: center; margin: 10px 0; }
 .intent-actions button, .intent-import button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; font-weight: 600; }
-.intent-ratify { background: #166534; color: #fff; border-color: #166534; }
+.intent-ratify { background: var(--verdict-confirmed); color: #fff; border-color: var(--verdict-confirmed); }
 .intent-ratify:disabled { opacity: 0.5; cursor: not-allowed; }
 .intent-reject { background: transparent; color: inherit; }
 .intent-note { color: var(--muted); font-size: 12px; margin: 4px 0; }
@@ -1624,9 +1637,11 @@ body {
 .intent-table th, .intent-table td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); }
 .intent-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 .diff-group ul { list-style: none; padding-left: 8px; font-family: var(--mono, monospace); font-size: 12px; }
-.diff-added { color: #166534; }
-.diff-removed { color: #991b1b; }
-.diff-changed { color: #854d0e; }
+/* Hardcoded hex here was near-invisible on the dark ground; these are the same
+   verdict tokens the rest of the product uses. */
+.diff-added { color: var(--verdict-confirmed); }
+.diff-removed { color: var(--verdict-missing); }
+.diff-changed { color: var(--verdict-unknown); }
 .verdict-chip { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-mid); }
 .intent-unsupported li, .intent-questions li, .intent-problems li { margin: 4px 0; }
 

@@ -256,6 +256,11 @@ function showSearch(placeholder) {
   el.search.placeholder = placeholder;
 }
 
+function hideSearch() {
+  el.search.closest(".search-wrap").hidden = true;
+  el.searchCount.textContent = "";
+}
+
 function stateMark(state) {
   const label = stateLabel(state);
   return label ? `<span class="state-mark">${esc(label)}</span>` : "";
@@ -323,48 +328,82 @@ function renderObservedAreas() {
   $("change-strip")?.addEventListener("click", () => { changesOnly = !changesOnly; render(); });
 }
 
+// Importing is the path that always works; the assistant is optional. When none
+// is configured, don't spend the primary slot announcing its absence.
+function importMarkup() {
+  return `<textarea id="intent-proposal" rows="8" placeholder='{"draft": {…}, "questions": [], "unsupported": []}'></textarea>` +
+    `<button id="intent-import-btn" type="button">Import proposal</button>`;
+}
+
+function composerMarkup(assistant, { open = false } = {}) {
+  const body = assistant
+    ? `<textarea id="intent-message" rows="4" placeholder="Describe what the system must do, in your own words…"></textarea>` +
+      `<div class="intent-actions">` +
+      `<button id="intent-ask" class="intent-ask" type="button">Ask ${esc(assistant.provider)} · ${esc(assistant.model)}</button>` +
+      `</div>` +
+      `<details class="intent-import"><summary>Import a proposal JSON</summary>${importMarkup()}</details>`
+    : importMarkup() +
+      `<p class="intent-note">No AI drafting assistant is configured, so proposals are imported by hand.</p>`;
+  return `<details class="spec-compose"${open ? " open" : ""}>` +
+    `<summary>Propose a change</summary>${body}</details>`;
+}
+
 function renderIntent() {
-  showSearch("Search your spec…");
   const draft = seedData?.draft ?? null;
   const assistant = seedData?.assistant ?? null;
   const seed = seedData?.seed ?? null;
-  const query = el.search.value;
-  el.searchCount.textContent = seed && query.trim() ? `${countSpecMatches(seed, query)} matching` : "";
 
-  let masterHtml = `<div class="spec-doc">`;
-  // renderSeedStatus is kept only for the states it alone can describe: no seed
-  // file, or a seed that failed validation and has problems to list.
-  masterHtml += seed ? renderSpecHeader(seedData, reconciliationData?.report?.summary) : renderSeedStatus(seedData);
-  if (seed) masterHtml += renderSpecDoc(seed, reconciliationData?.review, { query });
-  masterHtml += `<section class="intent-conversation"><h3>Describe the system</h3>` +
-    `<textarea id="intent-message" rows="4" placeholder="Describe what the system must do, in your own words..."></textarea>` +
-    `<div class="intent-actions">` +
-    (assistant
-      ? `<button id="intent-ask" class="intent-ask" type="button">Ask assistant (${esc(assistant.provider)} · ${esc(assistant.model)})</button>`
-      : `<p class="intent-note">No AI drafting assistant is set up — paste a structured spec below, or fill it in by hand.</p>`) +
-    `</div>` +
-    `<details class="intent-import"><summary>Import a proposal JSON</summary>` +
-    `<textarea id="intent-proposal" rows="8" placeholder='{"draft": {...}, "questions": [], "unsupported": []}'></textarea>` +
-    `<button id="intent-import-btn" type="button">Import proposal</button></details></section>`;
-  masterHtml += renderQuestions(draft?.questions);
-  masterHtml += renderUnsupported(draft?.unsupported);
-  masterHtml += renderSpecNotes(seed?.context);
+  // State 1: no spec at all — one call to action, not a grid of empty cards.
+  if (!seed && !draft?.draft) {
+    hideSearch();
+    const broken = seedData?.invalid;
+    renderPanes(`<div class="spec-doc"><section class="spec-onboard">` +
+      (broken
+        ? `<h2>Your spec can't be read</h2>` +
+          `<p class="empty-copy">varai checks nothing until these are fixed.</p>`
+        : `<h2>varai has nothing to check against yet</h2>` +
+          `<p class="empty-copy">A spec is the list of things this system must do, in your words. ` +
+          `varai checks the code against it, and never edits either one.</p>`) +
+      // renderSeedStatus is worth showing only when it has problems to list;
+      // its "no seed file yet" line just repeats the heading above.
+      (broken ? renderSeedStatus(seedData) : "") + composerMarkup(assistant, { open: !broken }) +
+      `</section></div>`, "", { inlineExpand: true });
+    bindComposer(draft);
+    return;
+  }
 
-  // The Spec page never uses the focus layer — nothing here sets expandedId, so
-  // anything rendered into detailHtml is invisible. Draft review goes inline.
+  // State 2: a draft is under review — the whole page becomes that decision.
   if (draft?.draft) {
-    masterHtml += `<section class="spec-review">` +
+    hideSearch();
+    renderPanes(`<div class="spec-doc"><section class="spec-review">` +
       `<h3 class="group-heading">Draft under review (${esc(draft.source)})</h3>` +
+      renderQuestions(draft.questions) +
+      renderUnsupported(draft.unsupported) +
       renderProblems(draft.problems) +
       renderSeedDiff(draft.diff) +
       renderDraftStructure(draft.draft) +
       renderReviewActions(draft) +
-      `</section>`;
+      `</section></div>`, "", { inlineExpand: true });
+    bindComposer(draft);
+    return;
   }
-  masterHtml += `</div>`;
-  renderPanes(masterHtml, "", { inlineExpand: true });
-  bindSpecLinks();
 
+  // State 3: the approved document, with the change flow collapsed beneath it.
+  showSearch("Search your spec…");
+  const query = el.search.value;
+  el.searchCount.textContent = query.trim() ? `${countSpecMatches(seed, query)} matching` : "";
+
+  renderPanes(`<div class="spec-doc">` +
+    renderSpecHeader(seedData, reconciliationData?.report?.summary) +
+    renderSpecDoc(seed, reconciliationData?.review, { query }) +
+    renderSpecNotes(seed.context) +
+    composerMarkup(assistant) +
+    `</div>`, "", { inlineExpand: true });
+  bindSpecLinks();
+  bindComposer(draft);
+}
+
+function bindComposer(draft) {
   $("intent-ask")?.addEventListener("click", async () => {
     const message = $("intent-message").value.trim();
     if (!message) return;
