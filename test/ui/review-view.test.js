@@ -43,16 +43,17 @@ const review = {
 test("the overview renders counts and witness state", () => {
   const html = renderReviewOverview(review);
   assert.ok(html.includes("Slotkeeper"));
-  assert.ok(html.includes("2</strong> realized"));
+  assert.ok(html.includes("2</strong> confirmed"));
   assert.ok(html.includes("0</strong> missing"));
-  assert.ok(html.includes("1</strong> unverified"));
-  assert.ok(html.includes("witness current"));
+  assert.ok(html.includes("1</strong> couldn't tell"));
+  assert.ok(html.includes("builder's map current"));
   assert.ok(html.includes("Booking must be atomic"));
 });
 
 test("commitment cards render with explicit verdict chips", () => {
   const card = review.groups[0].cards[0];
   assert.ok(verdictChip("holds").includes("verdict-holds"));
+  assert.ok(verdictChip("holds").includes("confirmed"), "chip shows the plain word");
   const html = renderCompactCard(card, false);
   assert.ok(html.includes("book-slot-creates-booking"));
   assert.ok(html.includes("behavior.book-slot"));
@@ -60,8 +61,8 @@ test("commitment cards render with explicit verdict chips", () => {
 
 test("builder testimony is visually separate from independently observed evidence", () => {
   const html = renderCardDetail(review.groups[0].cards[0]);
-  assert.ok(html.includes("Builder testimony"));
-  assert.ok(html.includes("Independently observed"));
+  assert.ok(html.includes("The builder's notes"));
+  assert.ok(html.includes("What varai found in the code"));
   assert.ok(html.includes("testimony"));
   assert.ok(html.includes("binding.book-slot-operation"));
   assert.ok(html.includes("POST /api/bookings"));
@@ -79,6 +80,6 @@ test("coverage limitations are listed with reasons and states", () => {
   const html = renderCoverageLimitations(review);
   assert.ok(html.includes("What Varai could not determine"));
   assert.ok(html.includes("book-slot-requires-availability"));
-  assert.ok(html.includes("insufficient-coverage"));
+  assert.ok(html.includes("couldn't analyze this fully"));
   assert.ok(html.includes("api.condition"));
 });

@@ -2,21 +2,16 @@
 // always visually separate from independently observed evidence (claims).
 // Reading order is a deterministic suggestion, never an LLM narration.
 
+import { verdictLabel, bindingStateLabel, reasonLabel } from "../reporters/display-language.js";
+
 const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
 export function shortHash(hash) {
   return hash ? String(hash).replace(/^sha256:/, "").slice(0, 12) : "—";
 }
 
-const VERDICT_LABELS = {
-  holds: "holds",
-  violated: "violated",
-  cannot_verify: "cannot verify",
-  not_checkable: "not checkable",
-};
-
 export function verdictChip(verdict) {
-  return `<span class="verdict-chip verdict-${esc(verdict)}">${esc(VERDICT_LABELS[verdict] ?? verdict)}</span>`;
+  return `<span class="verdict-chip verdict-${esc(verdict)}">${esc(verdictLabel(verdict))}</span>`;
 }
 
 function formatTarget(target) {
@@ -28,22 +23,22 @@ export function renderReviewOverview(review) {
   if (!review) return "";
   const { summary, realization } = review;
   const realizationBadge = !realization?.present
-    ? `<span class="seed-badge missing">witness missing</span>`
+    ? `<span class="seed-badge missing">builder's map missing</span>`
     : realization.stale
-      ? `<span class="seed-badge git-dirty">witness stale</span>`
-      : `<span class="seed-badge ratified">witness current</span>`;
+      ? `<span class="seed-badge git-dirty">builder's map out of date</span>`
+      : `<span class="seed-badge ratified">builder's map current</span>`;
   return `<section class="review-overview">` +
     `<h2>${esc(review.system?.name ?? "System")}</h2>` +
     `<div class="review-overview-row">` +
-    `<span class="seed-badge ${review.ratified ? "ratified" : "draft"}">${review.ratified ? "ratified" : "draft"}</span>` +
+    `<span class="seed-badge ${review.ratified ? "ratified" : "draft"}">${review.ratified ? "approved" : "draft"}</span>` +
     `<span class="seed-hash" title="${esc(review.seedHash ?? "")}">${esc(shortHash(review.seedHash))}</span>` +
     realizationBadge +
     `</div>` +
     `<div class="review-counts">` +
-    `<span class="review-count holds"><strong>${summary.holds}</strong> realized</span>` +
+    `<span class="review-count holds"><strong>${summary.holds}</strong> confirmed</span>` +
     `<span class="review-count violated"><strong>${summary.violated}</strong> missing</span>` +
-    `<span class="review-count cannot"><strong>${summary.cannotVerify}</strong> unverified</span>` +
-    `<span class="review-count context"><strong>${summary.notCheckable}</strong> human context</span>` +
+    `<span class="review-count cannot"><strong>${summary.cannotVerify}</strong> couldn't tell</span>` +
+    `<span class="review-count context"><strong>${summary.notCheckable}</strong> noted</span>` +
     `</div>` +
     (review.context?.length
       ? `<ul class="review-context">${review.context.map((entry) => `<li>${esc(entry.text)}</li>`).join("")}</ul>`
@@ -53,7 +48,7 @@ export function renderReviewOverview(review) {
 
 export function renderGroupHeading(group) {
   return `<h3 class="group-heading"><code>${esc(group.concept)}</code> ` +
-    `<span class="group-score">${group.holds}/${group.total} realized</span></h3>`;
+    `<span class="group-score">${group.holds}/${group.total} confirmed</span></h3>`;
 }
 
 export function renderCompactCard(card, expanded) {
@@ -68,8 +63,8 @@ export function renderCompactCard(card, expanded) {
 
 function renderBinding(binding) {
   const names = binding.elements.map((element) => element.name).join(", ");
-  const state = binding.reason ? `${binding.state} (${binding.reason})` : binding.state;
-  return `<li><code>${esc(binding.id)}</code> <span class="binding-state binding-${esc(binding.state)}">${esc(state)}</span>` +
+  const state = binding.reason ? `${bindingStateLabel(binding.state)} (${reasonLabel(binding.reason)})` : bindingStateLabel(binding.state);
+  return `<li><code>${esc(binding.id)}</code> <span class="binding-state binding-${esc(binding.state)}">${state}</span>` +
     (names ? ` <span class="binding-target">→ ${esc(names)}</span>` : "") + `</li>`;
 }
 
@@ -99,7 +94,7 @@ export function renderCardDetail(card) {
     ? `<p class="coverage-line">coverage: ${card.coverage.map((record) => `<span class="coverage-chip cov-${esc(record.state)}">${esc(record.capability)} ${esc(record.state)}</span>`).join(" ")}</p>`
     : "";
   const reasons = card.reasons?.length
-    ? `<p class="reason-line">reasons: <code>${card.reasons.map(esc).join(", ")}</code></p>`
+    ? `<p class="reason-line">why: ${card.reasons.map((code) => reasonLabel(code)).join("; ")}</p>`
     : "";
   const envelope = card.envelope
     ? `<p class="envelope-line">behavioral envelope: <strong>${esc(card.envelope.name)}</strong> (${esc(card.envelope.completeness ?? "")})</p>`
@@ -109,11 +104,11 @@ export function renderCardDetail(card) {
     `<p class="commitment-sentence"><code>${esc(card.source)}</code> <strong>${esc(card.relation)}</strong> <code>${esc(formatTarget(card.target))}</code></p>` +
     reasons + coverage + envelope +
     `<section class="review-columns">` +
-    `<div class="review-col testimony"><h4>Builder testimony</h4>` +
-    (card.bindings.length ? `<ul class="binding-list">${card.bindings.map(renderBinding).join("")}</ul>` : `<p class="empty-copy">No bindings — unbound.</p>`) +
+    `<div class="review-col testimony"><h4>The builder's notes</h4>` +
+    (card.bindings.length ? `<ul class="binding-list">${card.bindings.map(renderBinding).join("")}</ul>` : `<p class="empty-copy">No location given.</p>`) +
     `</div>` +
-    `<div class="review-col observed"><h4>Independently observed</h4>` +
-    (card.claims.length ? card.claims.map(renderClaimEvidence).join("") : `<p class="empty-copy">No matching canonical claims.</p>`) +
+    `<div class="review-col observed"><h4>What varai found in the code</h4>` +
+    (card.claims.length ? card.claims.map(renderClaimEvidence).join("") : `<p class="empty-copy">Nothing matching found in the code.</p>`) +
     `</div>` +
     `</section>` +
     renderReadingOrder(card) +
@@ -123,7 +118,7 @@ export function renderCardDetail(card) {
 export function renderCoverageLimitations(review) {
   if (!review?.coverageLimitations?.length) return "";
   const items = review.coverageLimitations.map((item) =>
-    `<li><code>${esc(item.id)}</code> — <code>${item.reasons.map(esc).join(", ")}</code>` +
+    `<li><code>${esc(item.id)}</code> — ${item.reasons.map((code) => reasonLabel(code)).join("; ")}` +
     (item.coverage?.length
       ? ` <span class="coverage-chip cov-${esc(item.coverage[0].state)}">${esc(item.coverage[0].capability)} ${esc(item.coverage[0].state)}</span>`
       : "") +
