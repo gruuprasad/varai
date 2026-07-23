@@ -9,3 +9,4 @@ coverage/
 
 # Local experiments, eval clones, and one-off scripts
 .scratch/
+.superpowers/
