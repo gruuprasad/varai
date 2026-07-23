@@ -328,24 +328,34 @@ function renderObservedAreas() {
   $("change-strip")?.addEventListener("click", () => { changesOnly = !changesOnly; render(); });
 }
 
-// Importing is the path that always works; the assistant is optional. When none
-// is configured, don't spend the primary slot announcing its absence.
-function importMarkup() {
-  return `<textarea id="intent-proposal" rows="8" placeholder='{"draft": {…}, "questions": [], "unsupported": []}'></textarea>` +
-    `<button id="intent-import-btn" type="button">Import proposal</button>`;
+// Importing is the path that always works; the assistant is optional. Both paths
+// live in .compose-panel — the styling used to come from .intent-conversation /
+// .intent-import, so anything outside those wrappers rendered as a raw browser
+// textarea.
+function importMarkup(primary, hint) {
+  return `<p class="compose-hint">${hint}</p>` +
+    `<textarea id="intent-proposal" class="compose-json" rows="8" spellcheck="false" ` +
+    `placeholder='{"draft": {"system": {…}, "concepts": […], "commitments": […]}}'></textarea>` +
+    `<div class="compose-actions">` +
+    `<button id="intent-import-btn" class="${primary ? "btn-primary" : "btn-quiet"}" type="button">Import proposal</button>` +
+    `</div>`;
 }
 
 function composerMarkup(assistant, { open = false } = {}) {
   const body = assistant
-    ? `<textarea id="intent-message" rows="4" placeholder="Describe what the system must do, in your own words…"></textarea>` +
-      `<div class="intent-actions">` +
-      `<button id="intent-ask" class="intent-ask" type="button">Ask ${esc(assistant.provider)} · ${esc(assistant.model)}</button>` +
+    ? `<label class="compose-label" for="intent-message">Describe the change in your own words</label>` +
+      `<textarea id="intent-message" rows="4" placeholder="Members should be able to reschedule a booking…"></textarea>` +
+      `<div class="compose-actions">` +
+      `<button id="intent-ask" class="btn-primary" type="button">Ask ${esc(assistant.provider)} · ${esc(assistant.model)}</button>` +
+      `<span class="compose-note">Drafts are never saved until you approve them.</span>` +
       `</div>` +
-      `<details class="intent-import"><summary>Import a proposal JSON</summary>${importMarkup()}</details>`
-    : importMarkup() +
-      `<p class="intent-note">No AI drafting assistant is configured, so proposals are imported by hand.</p>`;
+      `<details class="compose-advanced"><summary>Paste a proposal JSON instead</summary>` +
+      importMarkup(false, "The same JSON shape the assistant returns.") + `</details>`
+    : importMarkup(true,
+        "No drafting assistant is configured, so changes are proposed by hand: paste the JSON " +
+        "an assistant would produce. varai shows you the diff before anything is approved.");
   return `<details class="spec-compose"${open ? " open" : ""}>` +
-    `<summary>Propose a change</summary>${body}</details>`;
+    `<summary>Propose a change</summary><div class="compose-panel">${body}</div></details>`;
 }
 
 function renderIntent() {
