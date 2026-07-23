@@ -12,7 +12,9 @@ import {
   renderUnsupported,
 } from "./intent-view.js";
 import { renderReport } from "./report-view.js";
-import { countSpecMatches, renderSpecDoc, renderSpecHeader, renderSpecNotes } from "./spec-view.js";
+import {
+  countSpecMatches, renderSpecDoc, renderSpecEvidence, renderSpecHeader, renderSpecNotes, requirementVisible,
+} from "./spec-view.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -398,17 +400,31 @@ function renderIntent() {
     return;
   }
 
-  // State 3: the approved document, with the change flow collapsed beneath it.
+  // State 3: the approved document + evidence pane. Stays on Spec; Report is
+  // only reached via "See the report →".
   showSearch("Search your spec…");
   const query = el.search.value;
   el.searchCount.textContent = query.trim() ? `${countSpecMatches(seed, query)} matching` : "";
 
-  renderPanes(`<div class="spec-doc">` +
+  const review = reconciliationData?.review ?? null;
+  if (expandedId && !requirementVisible(seed, review, query, expandedId)) {
+    expandedId = null;
+  }
+
+  const documentHtml =
     renderSpecHeader(seedData, reconciliationData?.report?.summary) +
-    renderSpecDoc(seed, reconciliationData?.review, { query }) +
+    renderSpecDoc(seed, review, { query, expandedId }) +
     renderSpecNotes(seed.context) +
-    composerMarkup(assistant) +
-    `</div>`, "", { inlineExpand: true });
+    composerMarkup(assistant);
+
+  renderPanes(
+    `<div class="spec-split">` +
+      `<div class="spec-doc">${documentHtml}</div>` +
+      renderSpecEvidence(review, expandedId) +
+    `</div>`,
+    "",
+    { inlineExpand: true },
+  );
   bindSpecLinks();
   bindComposer(draft);
 }
@@ -840,20 +856,21 @@ function renderEverything() {
   bindMapModes();
 }
 
-// Spec hands off to Report rather than duplicating its evidence UI. data-goto is
-// deliberately not data-expand: bindExpanders() binds that one globally.
+// Only the explicit Report link leaves Spec. Requirement rows use data-expand
+// (bindExpanders) so evidence opens in the Spec pane.
 function bindSpecLinks() {
-  const openReport = (id) => {
+  document.querySelector("[data-goto-report]")?.addEventListener("click", () => {
     activeView = "review";
-    expandedId = id ?? null;
+    // Keep expandedId so Report lands on the same card when one was open.
     el.search.value = "";
     if (el.searchClear) el.searchClear.hidden = true;
     render();
     document.querySelector(".req-row.open")?.scrollIntoView({ block: "center" });
-  };
-  document.querySelectorAll("[data-goto]").forEach((button) =>
-    button.addEventListener("click", () => openReport(button.dataset.goto)));
-  document.querySelector("[data-goto-report]")?.addEventListener("click", () => openReport(null));
+  });
+  document.querySelector("[data-collapse-evidence]")?.addEventListener("click", () => {
+    expandedId = null;
+    render();
+  });
 }
 
 function bindExpanders() {
