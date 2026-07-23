@@ -1625,7 +1625,7 @@ body {
 .seed-badge.git-dirty { border: 1px solid var(--verdict-missing); color: var(--verdict-missing); }
 .seed-hash { font-family: var(--mono, monospace); font-size: 12px; }
 .seed-counts { color: var(--muted); font-size: 12px; }
-.intent-conversation, .intent-questions, .intent-unsupported, .intent-problems, .intent-diff, .intent-structure, .intent-recon { margin: 12px 0; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.intent-conversation, .intent-questions, .intent-unsupported, .intent-problems, .intent-diff, .intent-structure { margin: 12px 0; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 .intent-conversation textarea, .intent-import textarea { width: 100%; box-sizing: border-box; margin: 8px 0; font-family: inherit; border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: var(--bg); color: inherit; }
 .intent-actions { display: flex; gap: 10px; align-items: center; margin: 10px 0; }
 .intent-actions button, .intent-import button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; font-weight: 600; }
