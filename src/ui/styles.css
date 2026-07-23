@@ -529,8 +529,12 @@ body {
 .bento-grid > .empty-copy,
 .bento-grid > .empty-state,
 .bento-grid > .map-modes,
-.bento-grid > .spec-doc,
+.bento-grid > .spec-split,
 .bento-grid > .report {
+  grid-column: 1 / -1;
+}
+
+.bento-grid > .spec-doc {
   grid-column: 1 / -1;
 }
 
@@ -1499,6 +1503,19 @@ body {
   .focus-content { padding: 16px 16px 40px; }
   .area-op-preview { grid-template-columns: 1fr; }
   .op-effect { text-align: left; }
+  .spec-split { flex-direction: column; }
+  .spec-split > .spec-doc {
+    border-right: 0;
+    padding-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 16px;
+  }
+  .spec-evidence {
+    max-width: none;
+    padding: 16px 0 28px;
+    position: static;
+    max-height: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1560,6 +1577,68 @@ body {
 
 /* ---- Spec document ---- */
 .spec-doc { max-width: 78ch; padding-top: 4px; }
+.spec-split {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: 0;
+  width: 100%;
+}
+.spec-split > .spec-doc {
+  flex: 1 1 52%;
+  min-width: 0;
+  max-width: none;
+  padding-right: 20px;
+  border-right: 1px solid var(--border);
+}
+.spec-evidence {
+  flex: 1 1 48%;
+  min-width: 0;
+  max-width: 56ch;
+  padding: 4px 4px 32px 20px;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+.spec-evidence-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.spec-evidence-label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.spec-evidence-close {
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  padding: 4px 6px;
+}
+.spec-evidence-close:hover { color: var(--text-bright); }
+.spec-evidence-title {
+  margin: 0 0 12px;
+}
+.spec-evidence-title p {
+  margin: 6px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-bright);
+}
+/* Inside the pane, Report's row chrome is redundant — drop the top border. */
+.spec-evidence .req-detail { border-top: 0; margin-top: 0; }
+.spec-req.selected {
+  border-color: var(--accent-border);
+  background: var(--bg-active);
+}
 .spec-head { max-width: 72ch; margin: 0 0 26px; }
 .spec-head h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; }
 .spec-meta {
