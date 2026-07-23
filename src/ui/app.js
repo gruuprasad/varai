@@ -12,6 +12,7 @@ import {
   renderUnsupported,
 } from "./intent-view.js";
 import { renderReport } from "./report-view.js";
+import { renderSpecDoc, renderSpecNotes } from "./spec-view.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -328,8 +329,10 @@ function renderIntent() {
   const draft = seedData?.draft ?? null;
   const assistant = seedData?.assistant ?? null;
 
-  let masterHtml = `<h2 class="group-heading">Your spec</h2>`;
+  const seed = seedData?.seed ?? null;
+  let masterHtml = `<div class="spec-doc">`;
   masterHtml += renderSeedStatus(seedData);
+  if (seed) masterHtml += renderSpecDoc(seed, reconciliationData?.review, { query: el.search.value });
   masterHtml += `<section class="intent-conversation"><h3>Describe the system</h3>` +
     `<textarea id="intent-message" rows="4" placeholder="Describe what the system must do, in your own words..."></textarea>` +
     `<div class="intent-actions">` +
@@ -342,12 +345,7 @@ function renderIntent() {
     `<button id="intent-import-btn" type="button">Import proposal</button></details></section>`;
   masterHtml += renderQuestions(draft?.questions);
   masterHtml += renderUnsupported(draft?.unsupported);
-
-  const summary = reconciliationData?.report?.summary;
-  if (summary) {
-    masterHtml += `<section class="intent-recon"><h3>Latest check</h3>` +
-      `<p>${summary.holds} confirmed · ${summary.violated} missing · ${summary.cannotVerify} couldn't tell · ${summary.notCheckable} noted</p></section>`;
-  }
+  masterHtml += renderSpecNotes(seed?.context);
 
   // The Spec page never uses the focus layer — nothing here sets expandedId, so
   // anything rendered into detailHtml is invisible. Draft review goes inline.
@@ -360,6 +358,7 @@ function renderIntent() {
       renderReviewActions(draft) +
       `</section>`;
   }
+  masterHtml += `</div>`;
   renderPanes(masterHtml, "", { inlineExpand: true });
 
   $("intent-ask")?.addEventListener("click", async () => {

@@ -529,6 +529,7 @@ body {
 .bento-grid > .empty-copy,
 .bento-grid > .empty-state,
 .bento-grid > .map-modes,
+.bento-grid > .spec-doc,
 .bento-grid > .report {
   grid-column: 1 / -1;
 }
@@ -1556,6 +1557,36 @@ body {
 }
 .map-mode:hover { border-color: var(--border-bright); color: var(--text-bright); }
 .map-mode.active { background: var(--bg-active); border-color: var(--accent-border); color: var(--text-bright); }
+
+/* ---- Spec document ---- */
+.spec-doc { max-width: 78ch; padding-top: 4px; }
+.spec-section { margin: 0 0 22px; }
+.spec-subject { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; font-size: 15px; }
+/* Chrome, not meaning: a role is a category, not a verdict, so it carries no hue. */
+.role-chip {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--text-mid);
+}
+.spec-summary { margin: 0 0 8px; color: var(--text-mid); font-size: 13px; }
+.spec-refs { margin: 0 0 8px; color: var(--text-dim); font-size: 13px; }
+.spec-req {
+  display: flex; align-items: baseline; gap: 12px; width: 100%; text-align: left;
+  padding: 8px 12px; margin-bottom: 4px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-card); color: inherit; font: inherit;
+}
+.spec-req:hover { border-color: var(--border-bright); }
+.spec-req-text { flex: 1; min-width: 0; }
+.spec-req-note { display: block; color: var(--text-dim); font-size: 12.5px; margin-top: 2px; }
+.spec-verdict {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; white-space: nowrap;
+}
+.spec-unchecked { color: var(--text-dim); }
+.spec-notes { max-width: 72ch; margin-top: 22px; color: var(--text-mid); font-size: 13px; }
+.spec-notes h3 { font-size: 13px; margin: 0 0 6px; }
+.spec-notes li { margin: 6px 0; }
 
 /* Seed Studio (Intent view) */
 .seed-status { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin: 12px 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
