@@ -32,3 +32,56 @@ export function claimStateLabel(state) {
 export function displayLanguage() {
   return { relations: RELATION_LABELS, kinds: KIND_LABELS, claimStates: CLAIM_STATE_LABELS };
 }
+
+// Human wording for the reconciliation + seed vocabulary. The engine keeps its
+// precise enums (holds/violated/…, resolved/stale/…, ratification.status); this
+// is the only place a person's words live. Redline these strings to taste.
+export const VERDICT_LABELS = Object.freeze({
+  holds: "confirmed",
+  violated: "missing",
+  cannot_verify: "couldn't tell",
+  not_checkable: "noted",
+});
+
+export const BINDING_STATE_LABELS = Object.freeze({
+  resolved: "found in the code",
+  ambiguous: "matched several places",
+  stale: "out of date",
+  unbound: "no location given",
+});
+
+export const REASON_LABELS = Object.freeze({
+  "insufficient-coverage": "couldn't analyze this fully",
+  "claim-absent-under-analyzed-coverage": "expected in the code but not found",
+  "claim-not-confirmed": "found something, but couldn't confirm it",
+  "unbound-source": "no location was given for it",
+  "unbound-target": "no location was given for what it points at",
+  "stale-source": "the builder's map is out of date",
+  "stale-target": "the builder's map is out of date",
+  "ambiguous-source": "it matched more than one place",
+  "ambiguous-target": "what it points at matched more than one place",
+  "no-checker-semantics": "varai can't check this kind of rule yet",
+  "concept-collision": "two requirements point at the same code",
+  "artifact-not-found": "the code it named isn't there",
+  "seed-hash-mismatch": "the builder's map was made for an older spec",
+});
+
+// Nouns for the approval/spec vocabulary, used in prose surfaces.
+export const SEED_VOCAB = Object.freeze({
+  approved: "approved",        // internal: ratified
+  draft: "draft",
+  spec: "spec",                // internal: seed
+  requirement: "requirement",  // internal: commitment
+  builderMap: "builder's map", // internal: realization witness
+  check: "check",              // internal: reconciliation
+});
+
+export function verdictLabel(verdict) {
+  return VERDICT_LABELS[verdict] ?? verdict;
+}
+export function bindingStateLabel(state) {
+  return BINDING_STATE_LABELS[state] ?? state;
+}
+export function reasonLabel(code) {
+  return REASON_LABELS[code] ?? code;
+}

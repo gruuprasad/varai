@@ -1,12 +1,8 @@
-// Deterministic text rendering of a reconciliation report for the CLI.
-// Verdict words come straight from the report; no LLM manufactures prose.
+// Deterministic text rendering of a check report for the CLI. Verdict words
+// come straight from the report and route through the plain-English glossary;
+// no LLM manufactures prose.
 
-const VERDICT_LABELS = {
-  holds: "holds",
-  violated: "VIOLATED",
-  cannot_verify: "cannot verify",
-  not_checkable: "not checkable",
-};
+import { verdictLabel, bindingStateLabel, reasonLabel } from "../reporters/display-language.js";
 
 function formatTarget(target) {
   if (target?.concept !== undefined) return target.concept;
@@ -22,52 +18,52 @@ export function renderCheckText(report, { model } = {}) {
   const lines = [];
   const elementNames = new Map((model?.elements ?? []).map((element) => [element.id, element.name]));
   const systemName = report.system?.name ?? "system";
-  lines.push(`Reconciliation — ${systemName}`);
-  lines.push(`Seed ${report.seedHash} (${report.ratified ? "ratified" : "draft"})`);
+  lines.push(`Check — ${systemName}`);
+  lines.push(`Spec ${report.seedHash} (${report.ratified ? "approved" : "draft"})`);
   if (report.realization.present) {
-    const state = report.realization.stale ? "stale — built against a different seed" : "current";
-    lines.push(`Realization ${report.realization.seedHash} (${state})`);
+    const state = report.realization.stale ? "out of date — made for a different spec" : "current";
+    lines.push(`Builder's map ${report.realization.seedHash} (${state})`);
   } else {
-    lines.push("Realization none — builder witness is missing; every commitment is unbound");
+    lines.push("Builder's map — none supplied; nothing can be located in the code");
   }
   lines.push("");
 
   for (const item of report.commitments) {
-    const label = VERDICT_LABELS[item.verdict] ?? item.verdict;
-    lines.push(`${label}  ${item.id}`);
+    lines.push(`${verdictLabel(item.verdict)}  ${item.id}`);
     lines.push(`    ${item.source} ${item.relation} ${formatTarget(item.target)}`);
-    lines.push(`    binding: ${item.bindingState}`);
+    lines.push(`    where it lives: ${bindingStateLabel(item.bindingState)}`);
     for (const binding of item.bindings ?? []) {
       const names = (binding.elementIds ?? []).map((id) => elementNames.get(id) ?? id).join(", ");
-      const suffix = binding.state === "resolved" ? ` -> ${names}` : binding.reason ? ` (${binding.reason})` : "";
-      lines.push(`      ${binding.id} [${binding.concept}] ${binding.state}${suffix}`);
+      const suffix = binding.state === "resolved" ? ` -> ${names}`
+        : binding.reason ? ` (${reasonLabel(binding.reason)})` : "";
+      lines.push(`      ${binding.id} [${binding.concept}] ${bindingStateLabel(binding.state)}${suffix}`);
     }
-    if (item.reasons.length) lines.push(`    reasons: ${item.reasons.join(", ")}`);
-    if (item.claimIds.length) lines.push(`    claims: ${item.claimIds.join(", ")}`);
+    if (item.reasons.length) lines.push(`    why: ${item.reasons.map(reasonLabel).join("; ")}`);
+    if (item.claimIds.length) lines.push(`    evidence ids: ${item.claimIds.join(", ")}`);
     if (item.evidence.length) lines.push(`    evidence: ${item.evidence.map(formatEvidence).join("; ")}`);
     if (item.implementationPath.length) {
-      lines.push(`    implementation path: ${item.implementationPath.map(formatEvidence).join("; ")}`);
+      lines.push(`    path through the code: ${item.implementationPath.map(formatEvidence).join("; ")}`);
     }
     if (item.coverage.length) {
-      lines.push(`    coverage: ${item.coverage.map((record) => `${record.capability} ${record.state}`).join("; ")}`);
+      lines.push(`    how much I could analyze: ${item.coverage.map((record) => `${record.capability} ${record.state}`).join("; ")}`);
     }
     lines.push("");
   }
 
   for (const entry of report.context ?? []) {
-    lines.push(`human context  ${entry.id}: ${entry.text}`);
+    lines.push(`note (not checked)  ${entry.id}: ${entry.text}`);
   }
   if (report.context?.length) lines.push("");
 
   const { summary } = report;
   lines.push([
-    `${summary.total} commitments:`,
-    `${summary.holds} holds,`,
-    `${summary.violated} violated,`,
-    `${summary.cannotVerify} cannot verify,`,
-    `${summary.notCheckable} not checkable`,
-    `(bindings: ${summary.binding.resolved} resolved, ${summary.binding.unbound} unbound,`,
-    `${summary.binding.ambiguous} ambiguous, ${summary.binding.stale} stale)`,
+    `${summary.total} requirements:`,
+    `${summary.holds} confirmed,`,
+    `${summary.violated} missing,`,
+    `${summary.cannotVerify} couldn't tell,`,
+    `${summary.notCheckable} noted`,
+    `(located: ${summary.binding.resolved} found, ${summary.binding.unbound} no location,`,
+    `${summary.binding.ambiguous} matched several, ${summary.binding.stale} out of date)`,
   ].join(" "));
   return `${lines.join("\n")}\n`;
 }

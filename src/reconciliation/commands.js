@@ -19,7 +19,7 @@ export async function runCheck(options = {}) {
     return null;
   }
   if (!seedInput.ratified) {
-    process.stderr.write("Warning: the seed is not ratified; results describe unratified draft content.\n");
+    process.stderr.write("Note: this spec is still a draft; results describe an unapproved draft.\n");
   }
   const realizationInput = readRealization(repoPath, { seed: seedInput.seed });
   const { model } = await scanRepo(repoPath, options);

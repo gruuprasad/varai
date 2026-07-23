@@ -15,7 +15,7 @@ export async function runSeedValidate(options = {}) {
     result = readSeed(repoPath);
   } catch (err) {
     if (err instanceof SeedValidationError) {
-      process.stderr.write(`Invalid ${SEED_FILE}:\n`);
+      process.stderr.write(`This spec (${SEED_FILE}) has problems:\n`);
       for (const problem of err.problems) {
         process.stderr.write(`  [${problem.code}] ${problem.message}\n`);
       }
@@ -31,12 +31,12 @@ export async function runSeedValidate(options = {}) {
     return null;
   }
   const { seed } = result;
-  const status = result.ratified ? "ratified" : "draft";
-  process.stdout.write(`Valid ${SEED_FILE} (${status})\n`);
-  process.stdout.write(`  content hash ${result.contentHash}\n`);
-  process.stdout.write(`  ${seed.concepts.length} concepts, ${seed.commitments.length} commitments, ${(seed.context ?? []).length} context entries\n`);
+  const status = result.ratified ? "approved" : "draft";
+  process.stdout.write(`Spec ${SEED_FILE} is valid (${status})\n`);
+  process.stdout.write(`  fingerprint ${result.contentHash}\n`);
+  process.stdout.write(`  ${seed.concepts.length} things, ${seed.commitments.length} requirements, ${(seed.context ?? []).length} notes\n`);
   if (!result.ratified) {
-    process.stderr.write("Note: the seed is a draft; reconciliation treats only ratified content as human-ratified intent.\n");
+    process.stderr.write("Note: this spec is still a draft; the check only trusts an approved spec.\n");
   }
   return result;
 }
@@ -51,7 +51,7 @@ export async function runSeedRatify(options = {}) {
     result = readSeed(repoPath);
   } catch (err) {
     if (err instanceof SeedValidationError) {
-      process.stderr.write(`Invalid ${SEED_FILE}; fix before ratifying:\n`);
+      process.stderr.write(`This spec (${SEED_FILE}) has problems; fix them before approving:\n`);
       for (const problem of err.problems) {
         process.stderr.write(`  [${problem.code}] ${problem.message}\n`);
       }
@@ -67,11 +67,11 @@ export async function runSeedRatify(options = {}) {
     return null;
   }
   if (result.ratified && result.seed.ratification.contentHash === result.contentHash) {
-    process.stdout.write(`Already ratified at ${result.contentHash}\n`);
+    process.stdout.write(`Already approved at ${result.contentHash}\n`);
     return result;
   }
   const ratified = ratifySeed(repoPath, result.seed, { ratifiedAt: new Date().toISOString() });
-  process.stdout.write(`Ratified ${SEED_FILE}\n  content hash ${ratified.contentHash}\n`);
+  process.stdout.write(`Approved ${SEED_FILE}\n  fingerprint ${ratified.contentHash}\n`);
   return ratified;
 }
 

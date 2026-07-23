@@ -16,9 +16,9 @@ test("handoff is deterministic for the same ratified seed", () => {
 });
 
 test("handoff never includes unratified draft content", () => {
-  assert.throws(() => renderBuildPacket({ seed: slotkeeperDraft() }), /unratified/);
+  assert.throws(() => renderBuildPacket({ seed: slotkeeperDraft() }), /not approved/);
   const tampered = { ...ratifiedSeed(), ratification: { status: "ratified", contentHash: "sha256:0".repeat(1).padEnd(71, "0") } };
-  assert.throws(() => renderBuildPacket({ seed: tampered }), /re-ratify/);
+  assert.throws(() => renderBuildPacket({ seed: tampered }), /approve it again/);
 });
 
 test("handoff carries the seed hash, commitments, and witness schema", () => {

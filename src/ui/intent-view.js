@@ -22,14 +22,14 @@ export function renderSeedStatus(seedData) {
       `<ul>${(seedData.problems ?? []).map((problem) => `<li>[${esc(problem.code)}] ${esc(problem.message)}</li>`).join("")}</ul></div>`;
   }
   if (!seedData.seed) {
-    return `<div class="seed-status seed-empty">No <strong>${esc(seedData.file ?? "varai.seed.json")}</strong> yet — draft one below and ratify it.</div>`;
+    return `<div class="seed-status seed-empty">No <strong>${esc(seedData.file ?? "varai.seed.json")}</strong> yet — draft one below and approve it.</div>`;
   }
   const badges = [];
   badges.push(seedData.ratified
-    ? `<span class="seed-badge ratified">ratified</span>`
+    ? `<span class="seed-badge ratified">approved</span>`
     : `<span class="seed-badge draft">draft</span>`);
   if (seedData.gitDirty) badges.push(`<span class="seed-badge git-dirty">git dirty</span>`);
-  const counts = `${seedData.seed.concepts.length} concepts · ${seedData.seed.commitments.length} commitments`;
+  const counts = `${seedData.seed.concepts.length} things · ${seedData.seed.commitments.length} requirements`;
   return `<div class="seed-status">${badges.join("")}` +
     `<span class="seed-hash" title="${esc(seedData.contentHash ?? "")}">${esc(shortHash(seedData.contentHash))}</span>` +
     `<span class="seed-counts">${esc(counts)}</span></div>`;
@@ -43,8 +43,8 @@ export function renderQuestions(questions) {
 
 export function renderUnsupported(unsupported) {
   if (!unsupported?.length) return "";
-  return `<section class="intent-unsupported"><h4>Not checkable — kept visible</h4><ul>` +
-    unsupported.map((item) => `<li><span class="verdict-chip not-checkable">human context</span> ${esc(item)}</li>`).join("") +
+  return `<section class="intent-unsupported"><h4>Noted — can't check these yet</h4><ul>` +
+    unsupported.map((item) => `<li><span class="verdict-chip not-checkable">noted</span> ${esc(item)}</li>`).join("") +
     `</ul></section>`;
 }
 
@@ -81,8 +81,8 @@ export function renderSeedDiff(diff) {
   }
   if (diff.systemChanged) groups.unshift(`<section class="diff-group"><h4>system</h4><ul><li class="diff-changed">~ system identity changed</li></ul></section>`);
   return groups.length
-    ? `<section class="intent-diff"><h3>Draft vs ratified seed</h3>${groups.join("")}</section>`
-    : `<section class="intent-diff"><h3>Draft vs ratified seed</h3><p class="empty-copy">No semantic differences.</p></section>`;
+    ? `<section class="intent-diff"><h3>Draft vs approved spec</h3>${groups.join("")}</section>`
+    : `<section class="intent-diff"><h3>Draft vs approved spec</h3><p class="empty-copy">No semantic differences.</p></section>`;
 }
 
 export function renderReviewActions(draftState) {
@@ -90,8 +90,8 @@ export function renderReviewActions(draftState) {
   const blocked = draftState.problems?.length > 0;
   return `<div class="intent-actions">` +
     `<button class="intent-ratify" id="intent-ratify" type="button"${blocked ? " disabled" : ""}>` +
-    `Ratify this draft${draftState.contentHash ? ` (${esc(shortHash(draftState.contentHash))})` : ""}</button>` +
-    `<button class="intent-reject" id="intent-reject" type="button">Reject draft</button>` +
-    (blocked ? `<p class="intent-note">Fix the validation problems before ratifying.</p>` : "") +
+    `Approve this draft${draftState.contentHash ? ` (${esc(shortHash(draftState.contentHash))})` : ""}</button>` +
+    `<button class="intent-reject" id="intent-reject" type="button">Discard draft</button>` +
+    (blocked ? `<p class="intent-note">Fix the problems before approving.</p>` : "") +
     `</div>`;
 }

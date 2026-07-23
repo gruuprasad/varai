@@ -304,19 +304,19 @@ function renderObservedAreas() {
 }
 
 function renderIntent() {
-  showSearch("Seed Studio — author and ratify intent...");
+  showSearch("Your spec — write down what the system must do, then approve it...");
   el.searchCount.textContent = "";
   const draft = seedData?.draft ?? null;
   const assistant = seedData?.assistant ?? null;
 
-  let masterHtml = `<h2 class="group-heading">Seed Studio</h2>`;
+  let masterHtml = `<h2 class="group-heading">Your spec</h2>`;
   masterHtml += renderSeedStatus(seedData);
   masterHtml += `<section class="intent-conversation"><h3>Describe the system</h3>` +
     `<textarea id="intent-message" rows="4" placeholder="Describe what the system must do, in your own words..."></textarea>` +
     `<div class="intent-actions">` +
     (assistant
       ? `<button id="intent-ask" class="intent-ask" type="button">Ask assistant (${esc(assistant.provider)} · ${esc(assistant.model)})</button>`
-      : `<p class="intent-note">No assistant provider configured — paste a proposal JSON below.</p>`) +
+      : `<p class="intent-note">No AI drafting assistant is set up — paste a structured spec below, or fill it in by hand.</p>`) +
     `</div>` +
     `<details class="intent-import"><summary>Import a proposal JSON</summary>` +
     `<textarea id="intent-proposal" rows="8" placeholder='{"draft": {...}, "questions": [], "unsupported": []}'></textarea>` +
@@ -327,7 +327,7 @@ function renderIntent() {
   const summary = reconciliationData?.report?.summary;
   if (summary) {
     masterHtml += `<section class="intent-recon"><h3>Latest check</h3>` +
-      `<p>${summary.holds} holds · ${summary.violated} violated · ${summary.cannotVerify} cannot verify · ${summary.notCheckable} not checkable</p></section>`;
+      `<p>${summary.holds} confirmed · ${summary.violated} missing · ${summary.cannotVerify} couldn't tell · ${summary.notCheckable} noted</p></section>`;
   }
 
   const detailHtml = draft?.draft
@@ -336,7 +336,7 @@ function renderIntent() {
       renderSeedDiff(draft.diff) +
       renderDraftStructure(draft.draft) +
       renderReviewActions(draft)
-    : emptyDetailPlaceholder("No draft under review", "Ask the assistant or import a proposal; review the diff here before ratifying.");
+    : emptyDetailPlaceholder("No draft under review", "Ask the assistant or paste a spec; review the changes here before approving.");
   renderPanes(masterHtml, detailHtml);
 
   $("intent-ask")?.addEventListener("click", async () => {
