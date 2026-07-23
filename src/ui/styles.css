@@ -530,6 +530,7 @@ body {
 .bento-grid > .empty-state,
 .bento-grid > .map-modes,
 .bento-grid > .spec-split,
+.bento-grid > .view-split,
 .bento-grid > .report {
   grid-column: 1 / -1;
 }
@@ -1561,6 +1562,58 @@ body {
 }
 .map-mode:hover { border-color: var(--border-bright); color: var(--text-bright); }
 .map-mode.active { background: var(--bg-active); border-color: var(--accent-border); color: var(--text-bright); }
+
+/* ---- Grid-layer list + detail (Code map, Changes) ---- */
+.view-split {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: 0;
+  width: 100%;
+}
+.view-split-master {
+  flex: 1 1 52%;
+  min-width: 0;
+  padding-right: 20px;
+  border-right: 1px solid var(--border);
+  /* Cards used to be direct .bento-grid children; recreate that grid here. */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+.view-split-master > .group-heading,
+.view-split-master > .subgroup-heading,
+.view-split-master > .empty-copy,
+.view-split-master > .empty-state {
+  grid-column: 1 / -1;
+}
+.view-split-detail {
+  flex: 1 1 48%;
+  min-width: 0;
+  max-width: 56ch;
+  padding: 4px 4px 32px 20px;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+@media (max-width: 860px) {
+  .view-split { flex-direction: column; }
+  .view-split-master {
+    border-right: 0;
+    padding-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 16px;
+  }
+  .view-split-detail {
+    max-width: none;
+    padding: 16px 0 28px;
+    position: static;
+    max-height: none;
+  }
+}
 
 /* ---- Spec document ---- */
 .spec-doc { max-width: 78ch; padding-top: 4px; }

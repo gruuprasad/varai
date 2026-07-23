@@ -15,6 +15,7 @@ import { renderReport } from "./report-view.js";
 import {
   countSpecMatches, renderSpecDoc, renderSpecEvidence, renderSpecHeader, renderSpecNotes, requirementVisible,
 } from "./spec-view.js";
+import { renderViewSplit } from "./view-split.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -325,7 +326,11 @@ function renderObservedAreas() {
 
   el.searchCount.textContent = query ? `${rendered.matchCount} matches` : "";
 
-  renderPanes(renderMapModes() + strip + (rendered.masterHtml || rendered.html), rendered.detailHtml);
+  renderPanes(
+    renderMapModes() + strip + renderViewSplit(rendered.masterHtml || rendered.html, rendered.detailHtml),
+    "",
+    { inlineExpand: true },
+  );
   bindMapModes();
   $("change-strip")?.addEventListener("click", () => { changesOnly = !changesOnly; render(); });
 }
@@ -524,16 +529,16 @@ function renderSubjects() {
       `<span>${changesOnly ? "show everything" : "show only changes"}</span></button>`
     : diffData?.error ? `<p class="baseline-note">${esc(diffData.error)}</p>` : "";
 
-  let masterHtml = renderMapModes() + strip + `<h2 class="group-heading">Subjects</h2>`;
-  masterHtml += subjects.length
+  let listHtml = `<h2 class="group-heading">Subjects</h2>`;
+  listHtml += subjects.length
     ? subjects.map((root) => subjectMasterCard(root, byId, changed)).join("")
     : `<p class="empty-copy">No system subjects recovered.</p>`;
-  masterHtml += `<h2 class="group-heading">Screens</h2>`;
-  masterHtml += screens.length
+  listHtml += `<h2 class="group-heading">Screens</h2>`;
+  listHtml += screens.length
     ? screens.map((root) => screenMasterCard(root, byId, changed)).join("")
     : `<p class="empty-copy">No screens recovered.</p>`;
   if (unplaced.length) {
-    masterHtml += `<h3 class="subgroup-heading">Not placed on a screen</h3>` +
+    listHtml += `<h3 class="subgroup-heading">Not placed on a screen</h3>` +
       unplaced.map((root) => subjectMasterCard(root, byId, changed)).join("");
   }
 
@@ -548,7 +553,11 @@ function renderSubjects() {
     detailHtml = emptyDetailPlaceholder("Select a Subject or Screen", "Select a subject or screen from the list to view detailed behaviors.");
   }
 
-  renderPanes(masterHtml, detailHtml);
+  renderPanes(
+    renderMapModes() + strip + renderViewSplit(listHtml, detailHtml),
+    "",
+    { inlineExpand: true },
+  );
   bindMapModes();
   $("change-strip")?.addEventListener("click", () => { changesOnly = !changesOnly; render(); });
 }
@@ -712,8 +721,8 @@ function renderCapabilities() {
 
   el.searchCount.textContent = query ? `${envelopes.length + items.length} matches` : "";
 
-  let masterHtml = renderMapModes() + `<h2 class="group-heading">Static behavior envelopes</h2>`;
-  masterHtml += envelopes.length ? envelopes.map((item) => {
+  let listHtml = `<h2 class="group-heading">Static behavior envelopes</h2>`;
+  listHtml += envelopes.length ? envelopes.map((item) => {
     const selected = expandedId === item.id;
     const steps = item.behaviorIds.map((id) =>
       projection.frames.find((frame) => frame.behaviorId === id)?.name ?? byId.get(id)?.name).filter(Boolean);
@@ -725,8 +734,8 @@ function renderCapabilities() {
       `</article>`;
   }).join("") : `<p class="empty-copy">No cross-interface behavior envelope was resolved.</p>`;
 
-  masterHtml += `<h2 class="group-heading">All behaviors</h2>`;
-  masterHtml += items.map((item) => {
+  listHtml += `<h2 class="group-heading">All behaviors</h2>`;
+  listHtml += items.map((item) => {
     const behavior = byId.get(item.behaviorId);
     const selected = expandedId === behavior?.id;
     const resources = item.subjectIds.map((id) => byId.get(id)?.name).filter(Boolean);
@@ -766,7 +775,11 @@ function renderCapabilities() {
     detailHtml = emptyDetailPlaceholder("Select a Capability", "Select a static envelope or behavior to inspect claims and effects.");
   }
 
-  renderPanes(masterHtml, detailHtml);
+  renderPanes(
+    renderMapModes() + renderViewSplit(listHtml, detailHtml),
+    "",
+    { inlineExpand: true },
+  );
   bindMapModes();
 }
 
@@ -797,19 +810,23 @@ function renderChanges() {
   const label = (id) => diff.labels[id] ?? id;
   const claimText = (item) =>
     `${relationLabel(item.relation)} ${item.target.kind === "reference" ? label(item.target.id) : item.target.value}`;
-  let masterHtml = `<h2 class="group-heading">${diff.summary.semanticChanges} semantic ${diff.summary.semanticChanges === 1 ? "change" : "changes"}</h2>`;
-  for (const item of diff.elements.added) masterHtml += changeCard("added", "+", item.name, kindLabel(item.kind));
-  for (const item of diff.elements.removed) masterHtml += changeCard("removed", "−", item.name, kindLabel(item.kind));
-  for (const item of diff.claims.added) masterHtml += changeCard("added", "+", label(item.sourceId), claimText(item));
-  for (const item of diff.claims.removed) masterHtml += changeCard("removed", "−", label(item.sourceId), claimText(item));
-  for (const item of diff.claims.changed) masterHtml += changeCard("changed", "~", label(item.after.sourceId), claimText(item.after));
-  
+  let listHtml = `<h2 class="group-heading">${diff.summary.semanticChanges} semantic ${diff.summary.semanticChanges === 1 ? "change" : "changes"}</h2>`;
+  for (const item of diff.elements.added) listHtml += changeCard("added", "+", item.name, kindLabel(item.kind));
+  for (const item of diff.elements.removed) listHtml += changeCard("removed", "−", item.name, kindLabel(item.kind));
+  for (const item of diff.claims.added) listHtml += changeCard("added", "+", label(item.sourceId), claimText(item));
+  for (const item of diff.claims.removed) listHtml += changeCard("removed", "−", label(item.sourceId), claimText(item));
+  for (const item of diff.claims.changed) listHtml += changeCard("changed", "~", label(item.after.sourceId), claimText(item.after));
+
   const detailHtml = `<div class="detail-content">` +
     `<header class="detail-header"><div class="detail-title-wrap"><h1 class="detail-title">Semantic Diff Summary</h1><span class="detail-role">Comparison against baseline checkpoint</span></div></header>` +
     `<p class="reach">Below are the semantic elements and claims modified since the last snapshot.</p>` +
     `</div>`;
 
-  renderPanes(masterHtml, detailHtml);
+  renderPanes(
+    renderViewSplit(listHtml, detailHtml),
+    "",
+    { inlineExpand: true },
+  );
 }
 
 function changeCard(kind, symbol, name, detail) {
@@ -827,12 +844,16 @@ function renderEverything() {
   el.searchCount.textContent = query ? `${elements.length} matches` : "";
   if (!elements.length) {
     // Keep the mode switcher reachable — an empty search must not trap the view.
-    renderPanes(renderMapModes() + emptyMarkup("Nothing matches this search"), emptyDetailPlaceholder());
+    renderPanes(
+      renderMapModes() + renderViewSplit(emptyMarkup("Nothing matches this search"), emptyDetailPlaceholder()),
+      "",
+      { inlineExpand: true },
+    );
     bindMapModes();
     return;
   }
 
-  let masterHtml = renderMapModes() + elements.slice(0, 200).map((item) => {
+  let listHtml = elements.slice(0, 200).map((item) => {
     const selected = expandedId === item.id;
     return `<article class="card${selected ? " selected open" : ""}">` +
       `<button class="card-head" data-expand="${esc(item.id)}">` +
@@ -852,7 +873,11 @@ function renderEverything() {
     detailHtml = emptyDetailPlaceholder("Select an Element", "Select an element to view its claims and source evidence.");
   }
 
-  renderPanes(masterHtml, detailHtml);
+  renderPanes(
+    renderMapModes() + renderViewSplit(listHtml, detailHtml),
+    "",
+    { inlineExpand: true },
+  );
   bindMapModes();
 }
 
