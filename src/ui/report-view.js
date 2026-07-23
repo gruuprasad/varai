@@ -80,7 +80,16 @@ function renderRow(card, expanded) {
     `</article>`;
 }
 
-function renderRowDetail(card) {
+export function findCard(review, id) {
+  if (!review || id == null) return null;
+  for (const group of review.groups ?? []) {
+    const card = group.cards.find((item) => item.id === id);
+    if (card) return card;
+  }
+  return null;
+}
+
+export function renderRowDetail(card) {
   const reasons = card.reasons?.length
     ? `<p class="reason-line">why: ${esc(card.reasons.map((code) => reasonLabel(code)).join("; "))}</p>`
     : "";
