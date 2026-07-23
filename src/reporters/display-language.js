@@ -76,6 +76,24 @@ export const SEED_VOCAB = Object.freeze({
   check: "check",              // internal: reconciliation
 });
 
+// Seed relations phrased as verbs, for composing requirement sentences.
+export const SEED_RELATION_TEXT = Object.freeze({
+  performs: "can",
+  creates: "creates",
+  changes: "changes",
+  removes: "removes",
+  reads: "reads",
+  accepts: "accepts",
+  produces: "returns",
+  invokes: "calls",
+  requires: "requires",
+  fails_with: "fails with",
+});
+
+export function seedRelationText(relation) {
+  return SEED_RELATION_TEXT[relation] ?? relation;
+}
+
 export function verdictLabel(verdict) {
   return VERDICT_LABELS[verdict] ?? verdict;
 }

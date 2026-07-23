@@ -48,11 +48,16 @@ function readingOrderFor(item, matchedClaims, elementById) {
   return steps;
 }
 
-export function buildReviewProjection({ report, model }) {
+export function buildReviewProjection({ report, model, seed }) {
   if (!report || !model) return null;
   const elementById = new Map((model.elements ?? []).map((element) => [element.id, element]));
   const claimById = new Map((model.claims ?? []).map((claim) => [claim.id, claim]));
   const envelopes = behavioralEnvelopes(model).envelopes ?? [];
+
+  // Plain names for concepts, so no surface has to render raw ids.
+  const conceptName = new Map((seed?.concepts ?? []).map((concept) => [concept.id, concept.name]));
+  const nameOf = (id) => conceptName.get(id) ?? id;
+  const targetLabel = (target) => target?.concept !== undefined ? nameOf(target.concept) : String(target?.literal);
 
   const cards = (report.commitments ?? []).map((item) => {
     const matchedClaims = (item.claimIds ?? []).map((id) => claimById.get(id)).filter(Boolean);
@@ -74,6 +79,8 @@ export function buildReviewProjection({ report, model }) {
       source: item.source,
       relation: item.relation,
       target: item.target,
+      sourceName: nameOf(item.source),
+      targetName: targetLabel(item.target),
       bindingState: item.bindingState,
       verdict: item.verdict,
       reasons: item.reasons,
@@ -100,14 +107,22 @@ export function buildReviewProjection({ report, model }) {
     list.push(card);
     groupsByConcept.set(card.source, list);
   }
+  // not_checkable commitments can never be confirmed, so counting them in the
+  // denominator reads as failure when nothing failed. They are reported apart.
   const groups = [...groupsByConcept.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([concept, items]) => ({
-      concept,
-      cards: items.sort((a, b) => a.id.localeCompare(b.id)),
-      holds: items.filter((card) => card.verdict === "holds").length,
-      total: items.length,
-    }));
+    .map(([concept, items]) => {
+      const checkableCards = items.filter((card) => card.verdict !== "not_checkable");
+      return {
+        concept,
+        conceptName: nameOf(concept),
+        cards: items.sort((a, b) => a.id.localeCompare(b.id)),
+        holds: items.filter((card) => card.verdict === "holds").length,
+        checkable: checkableCards.length,
+        notCheckable: items.length - checkableCards.length,
+        total: items.length,
+      };
+    });
 
   return {
     system: report.system,
@@ -146,7 +161,7 @@ export function createReconciliationHandler({ repoPath, getModel }) {
       }
       const model = await getModel();
       const report = model ? reconcile({ model, seed: input.seed, realization }) : null;
-      const review = report && model ? buildReviewProjection({ report, model }) : null;
+      const review = report && model ? buildReviewProjection({ report, model, seed: input.seed }) : null;
       send(res, 200, { seed: input.seed, report, review, realizationProblems });
       return true;
     },

@@ -47,8 +47,12 @@ export function renderReviewOverview(review) {
 }
 
 export function renderGroupHeading(group) {
-  return `<h3 class="group-heading"><code>${esc(group.concept)}</code> ` +
-    `<span class="group-score">${group.holds}/${group.total} confirmed</span></h3>`;
+  const score = group.checkable > 0
+    ? `${group.holds} of ${group.checkable} confirmed`
+    : "nothing to check";
+  const noted = group.notCheckable ? ` · ${group.notCheckable} noted` : "";
+  return `<h3 class="group-heading">${esc(group.conceptName ?? group.concept)} ` +
+    `<span class="group-score">${esc(score)}${esc(noted)}</span></h3>`;
 }
 
 export function renderCompactCard(card, expanded) {
