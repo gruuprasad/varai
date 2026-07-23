@@ -1635,10 +1635,6 @@ body {
 }
 /* Inside the pane, Report's row chrome is redundant — drop the top border. */
 .spec-evidence .req-detail { border-top: 0; margin-top: 0; }
-.spec-req.selected {
-  border-color: var(--accent-border);
-  background: var(--bg-active);
-}
 .spec-head { max-width: 72ch; margin: 0 0 26px; }
 .spec-head h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; }
 .spec-meta {
@@ -1671,6 +1667,11 @@ body {
   background: var(--bg-card); color: inherit; font: inherit;
 }
 .spec-req:hover { border-color: var(--border-bright); }
+.spec-req.selected,
+.spec-req.selected:hover {
+  border-color: var(--accent-border);
+  background: var(--bg-active);
+}
 .spec-req-text { flex: 1; min-width: 0; }
 .spec-req-note { display: block; color: var(--text-dim); font-size: 12.5px; margin-top: 2px; }
 .spec-verdict {
