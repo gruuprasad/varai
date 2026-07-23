@@ -19,7 +19,7 @@ Usage:
   varai log [<repo-path>]
   varai diff [<repo-path>] [--from <selector>] [--to <selector|current>] [--json] [--show-evidence-moves]
   varai seed validate [<repo-path>]
-  varai seed ratify [<repo-path>]
+  varai seed approve [<repo-path>]   (alias: ratify)
   varai handoff [<repo-path>] [--json] [--brief <file>]
   varai check [<repo-path>] [--json] [scan options]
 
@@ -184,7 +184,7 @@ async function main() {
 
   if (command === "seed") {
     const subcommand = args[1];
-    if (subcommand === "validate" || subcommand === "ratify") {
+    if (subcommand === "validate" || subcommand === "ratify" || subcommand === "approve") {
       const positional = args.slice(2).filter((arg) => !arg.startsWith("-"));
       const run = subcommand === "validate" ? runSeedValidate : runSeedRatify;
       await run({ repo: positional[0] });
