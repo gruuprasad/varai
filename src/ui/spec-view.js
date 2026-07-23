@@ -4,6 +4,7 @@
 // `data-expand`, and only "See the report →" leaves Spec.
 
 import { seedRelationText, verdictLabel } from "../reporters/display-language.js";
+import { findCard, renderRowDetail, requirementSentence } from "./report-view.js";
 import { shortHash } from "./intent-view.js";
 
 const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -158,4 +159,39 @@ export function renderSpecNotes(context) {
   if (!context?.length) return "";
   return `<section class="spec-notes"><h3>Notes — recorded, not checked</h3><ul>` +
     context.map((entry) => `<li>${esc(entry.text)}</li>`).join("") + `</ul></section>`;
+}
+
+export function renderSpecEvidence(review, expandedId) {
+  if (!expandedId) {
+    return `<aside class="spec-evidence">` +
+      `<p class="empty-copy">Pick a requirement to see why varai scored it.</p>` +
+      `</aside>`;
+  }
+  if (!review) {
+    return `<aside class="spec-evidence">` +
+      `<div class="spec-evidence-head"><span class="spec-evidence-label">Evidence</span></div>` +
+      `<p class="empty-copy">The check is not ready yet.</p>` +
+      `</aside>`;
+  }
+  const card = findCard(review, expandedId);
+  if (!card) {
+    return `<aside class="spec-evidence">` +
+      `<div class="spec-evidence-head">` +
+      `<span class="spec-evidence-label">Evidence</span>` +
+      `<button type="button" class="spec-evidence-close" data-collapse-evidence aria-label="Close">✕</button>` +
+      `</div>` +
+      `<p class="empty-copy">No check result for this requirement.</p>` +
+      `</aside>`;
+  }
+  return `<aside class="spec-evidence">` +
+    `<div class="spec-evidence-head">` +
+    `<span class="spec-evidence-label">Evidence</span>` +
+    `<button type="button" class="spec-evidence-close" data-collapse-evidence aria-label="Close">✕</button>` +
+    `</div>` +
+    `<div class="spec-evidence-title">` +
+    `<span class="spec-verdict verdict-${esc(card.verdict)}">${esc(verdictLabel(card.verdict))}</span>` +
+    `<p>${esc(requirementSentence(card))}</p>` +
+    `</div>` +
+    renderRowDetail(card) +
+    `</aside>`;
 }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { countSpecMatches, renderSpecDoc, requirementVisible, ROLE_ORDER, specSections, verdictById } from "../../src/ui/spec-view.js";
+import { countSpecMatches, renderSpecDoc, renderSpecEvidence, requirementVisible, ROLE_ORDER, specSections, verdictById } from "../../src/ui/spec-view.js";
 import { CONCEPT_ROLES } from "../../src/seed/schema.js";
 
 const seed = {
@@ -78,4 +78,35 @@ test("requirementVisible is false when search hides the open row", () => {
   assert.equal(requirementVisible(seed, review, "", "commitment.book-slot-creates-booking"), true);
   assert.equal(requirementVisible(seed, review, "Member", "commitment.book-slot-creates-booking"), false);
   assert.equal(requirementVisible(seed, review, "creates", "commitment.book-slot-creates-booking"), true);
+});
+
+test("renderSpecEvidence shows the shared card or an honest placeholder", () => {
+  const richReview = {
+    groups: [{
+      concept: "behavior.book-slot",
+      cards: [{
+        id: "commitment.book-slot-creates-booking",
+        verdict: "holds",
+        relation: "creates",
+        sourceName: "Book Slot",
+        targetName: "Booking",
+        reasons: [],
+        bindings: [{ concept: "behavior.book-slot", state: "resolved", elements: [{ name: "createBooking" }] }],
+        claims: [{ targetName: "Booking", claimState: "present", evidence: [], implementationPath: [] }],
+        readingOrder: [],
+      }],
+    }],
+  };
+  const open = renderSpecEvidence(richReview, "commitment.book-slot-creates-booking");
+  assert.match(open, /spec-evidence/);
+  assert.match(open, /data-collapse-evidence/);
+  assert.match(open, /You asked/);
+  assert.match(open, /Book Slot creates Booking/);
+
+  const empty = renderSpecEvidence(richReview, null);
+  assert.match(empty, /Pick a requirement/);
+  assert.doesNotMatch(empty, /You asked/);
+
+  const scanning = renderSpecEvidence(null, "commitment.book-slot-creates-booking");
+  assert.match(scanning, /not ready|Waiting|scan/i);
 });
