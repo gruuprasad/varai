@@ -61,3 +61,19 @@ A private, framework-shaped parser result used while building the System Model. 
 ## Semantic progression
 
 The structural difference between two System Models: Elements, Claims, qualifiers, evidence, confidence, coverage, and ambiguity changing across Git or explicit checkpoints.
+
+## Seed
+
+The human-ratified statement of source intent for a system (`varai.seed.json`): stable concepts and checkable commitments in the kernel relation vocabulary. A seed is a source program, not an analyzer model.
+
+## Commitment
+
+One atomic authored statement in a seed: a source concept, a kernel relation, and a concept or literal target. Commitments are declared by a person; Claims are observed from evidence. The two meet only in reconciliation.
+
+## Realization witness
+
+The builder's testimony (`varai.realization.json`) naming the seed hash it was built against and binding seed concepts to observed artifact boundaries. A witness is untrusted provenance, never a verdict.
+
+## Reconciliation
+
+The deterministic projection that checks ratified commitments against canonical Claims and coverage, reporting binding state (`unbound`, `resolved`, `ambiguous`, `stale`) separately from verdict (`holds`, `violated`, `cannot_verify`, `not_checkable`). Reconciliation mutates nothing and persists no combined graph.
