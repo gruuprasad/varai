@@ -27,39 +27,39 @@ function formatTarget(target) {
 
 export function renderBuildPacket({ seed, brief } = {}) {
   if (seed?.ratification?.status !== "ratified") {
-    throw new Error("Refusing to render a build packet from an unratified seed; ratify first.");
+    throw new Error("This spec is not approved yet; approve it before creating a build packet.");
   }
   const contentHash = seedContentHash(seed);
   if (seed.ratification.contentHash !== contentHash) {
-    throw new Error("Seed ratification hash does not match the semantic content; re-ratify before handoff.");
+    throw new Error("The spec changed since it was approved; approve it again before creating a build packet.");
   }
 
   const lines = [];
   lines.push(`# Build packet — ${seed.system.name}`);
   lines.push("");
-  lines.push("You are implementing a software system from a human-ratified seed.");
-  lines.push("The seed is the durable intent. Build the simplest complete application that");
-  lines.push("makes every commitment below true and verifiable from the code itself.");
+  lines.push("You are building a system from an approved spec.");
+  lines.push("The spec is the durable intent. Build the simplest complete application that");
+  lines.push("makes every requirement below true and verifiable from the code itself.");
   lines.push("");
-  lines.push("## Ratified seed hash");
+  lines.push("## Approved spec fingerprint");
   lines.push("");
   lines.push(`\`${contentHash}\``);
   lines.push("");
   if (seed.context?.length) {
-    lines.push("## Human context (not machine-checkable)");
+    lines.push("## Notes (not machine-checked)");
     lines.push("");
     for (const entry of [...seed.context].sort((a, b) => a.id.localeCompare(b.id))) {
       lines.push(`- ${entry.text}`);
     }
     lines.push("");
   }
-  lines.push("## Concepts");
+  lines.push("## Things");
   lines.push("");
   for (const concept of [...seed.concepts].sort((a, b) => a.id.localeCompare(b.id))) {
     lines.push(`- \`${concept.id}\` (${concept.role}): ${concept.name}${concept.summary ? ` — ${concept.summary}` : ""}`);
   }
   lines.push("");
-  lines.push("## Commitments");
+  lines.push("## Requirements");
   lines.push("");
   for (const commitment of [...seed.commitments].sort((a, b) => a.id.localeCompare(b.id))) {
     lines.push(`- \`${commitment.id}\`: \`${commitment.source}\` **${commitment.relation}** \`${formatTarget(commitment.target)}\`${commitment.note ? ` — ${commitment.note}` : ""}`);
@@ -77,14 +77,14 @@ export function renderBuildPacket({ seed, brief } = {}) {
   lines.push("");
   lines.push("## What you must deliver");
   lines.push("");
-  lines.push("1. A runnable application with tests covering the commitments, in ordinary Git history.");
-  lines.push("2. A `varai.realization.json` file at the repository root binding every seed concept");
-  lines.push("   to the artifact you created for it. Bind by stable public boundaries (route keys,");
+  lines.push("1. A runnable application with tests covering the requirements, in ordinary Git history.");
+  lines.push("2. A `varai.realization.json` file at the repository root linking every thing the spec");
+  lines.push("   names to the artifact you created for it. Link by stable public boundaries (route keys,");
   lines.push("   contract/model names); use source file + symbol only as a fallback. Source lines");
   lines.push("   alone are not accepted as identity.");
-  lines.push("3. Claim witnesses naming, per commitment, which binding realizes its source concept.");
+  lines.push("3. Per requirement, name which link realizes its source.");
   lines.push("");
-  lines.push("## Realization witness schema");
+  lines.push("## Builder's map (varai.realization.json)");
   lines.push("");
   lines.push("```json");
   lines.push(WITNESS_EXAMPLE);
@@ -92,8 +92,8 @@ export function renderBuildPacket({ seed, brief } = {}) {
   lines.push("");
   lines.push("## Verification warning");
   lines.push("");
-  lines.push("Varai independently scans the repository and checks every commitment against its own");
-  lines.push("observed model. The witness is testimony that guides where to look; it is never trusted");
-  lines.push("as a verdict. Commitments with wrong, missing, or stale bindings report as unverified.");
+  lines.push("Varai independently scans the repository and checks every requirement against what it");
+  lines.push("observes in the code. The builder's map guides where to look; it is never trusted as a");
+  lines.push("verdict. Requirements with wrong, missing, or out-of-date locations report as unverified.");
   return `${lines.join("\n")}\n`;
 }
