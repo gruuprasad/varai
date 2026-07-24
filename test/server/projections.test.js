@@ -55,14 +55,14 @@ function draft() {
   };
 }
 
-test("server projection payload includes experimental region and observed-area views", () => {
+test("server projection payload includes core mechanism-axis views without subject-axis defaults", () => {
   const model = buildSystemModel(draft(), { systemName: "server-projection-fixture" });
   const payload = serializeProjections(model);
   assert.equal(payload.things.kind, "browse-by-thing");
   assert.equal(payload.envelopes.kind, "behavioral-envelopes");
-  assert.equal(payload.regionCandidates.kind, "semantic-region-candidates");
-  assert.equal(payload.observedAreas.kind, "observed-areas");
-  assert.ok(payload.observedAreas.areas.length >= 2);
+  assert.equal(payload.archUnits.kind, "arch-units");
+  assert.equal("regionCandidates" in payload, false);
+  assert.equal("observedAreas" in payload, false);
   assert.deepEqual(serializeProjections(model), payload);
 });
 

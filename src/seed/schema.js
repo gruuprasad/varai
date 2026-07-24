@@ -10,6 +10,7 @@ export const SEED_RELATIONS = Object.freeze([
   "invokes", "accepts", "requires",
   "reads", "changes", "creates", "removes",
   "produces", "fails_with", "emits",
+  "depends_on",
   "performs",
 ]);
 

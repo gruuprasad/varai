@@ -169,7 +169,7 @@ export function normalizeTypeName(value) {
   return match?.[0] ?? null;
 }
 
-function buildModuleMap(fileSet) {
+export function buildModuleMap(fileSet) {
   const map = new Map();
   for (const file of fileSet) {
     const dir = path.dirname(file);
@@ -181,7 +181,7 @@ function buildModuleMap(fileSet) {
   return map;
 }
 
-function resolveModule(mod, fromFile, modToFile, fileSet) {
+export function resolveModule(mod, fromFile, modToFile, fileSet) {
   if (mod.startsWith(".")) {
     const depth = mod.match(/^\.+/)[0].length;
     let dir = path.dirname(fromFile);

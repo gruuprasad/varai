@@ -30,3 +30,13 @@ test("native and WASM parsers produce the same canonical System Model", { timeou
   const wasm = await scanRepo(fixture, { cache: false, parser: "wasm", jobs: 1 });
   assert.deepEqual(wasm.model, native.model);
 });
+
+test("depends_on edges are parser- and pool-invariant", { timeout: 30_000 }, async () => {
+  const fixture = path.resolve("test/fixtures/arch-units/dependency-added");
+  const serial = await scanRepo(fixture, { cache: false, parser: "native", jobs: 1 });
+  const worker = await scanRepo(fixture, { cache: false, parser: "native", jobs: 4 });
+  const wasm = await scanRepo(fixture, { cache: false, parser: "wasm", jobs: 1 });
+  assert.deepEqual(worker.model, serial.model);
+  assert.deepEqual(wasm.model, serial.model);
+  assert.ok(serial.model.claims.some((claim) => claim.relation === "depends_on"));
+});

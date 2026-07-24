@@ -7,7 +7,7 @@ export const RELATION_LABELS = Object.freeze({
   available_when: "is available when", reads: "reads", changes: "changes", creates: "creates",
   removes: "removes", succeeds_with: "succeeds with", fails_with: "fails with",
   navigates_to: "navigates to", emits: "emits", has_field: "has field",
-  relates_to: "relates to", stored_in: "is stored in",
+  relates_to: "relates to", stored_in: "is stored in", depends_on: "depends on",
 });
 
 export const KIND_LABELS = Object.freeze({
@@ -88,6 +88,7 @@ export const SEED_RELATION_TEXT = Object.freeze({
   invokes: "calls",
   requires: "requires",
   fails_with: "fails with",
+  depends_on: "depends on",
 });
 
 export function seedRelationText(relation) {

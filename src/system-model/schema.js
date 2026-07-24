@@ -6,6 +6,7 @@ export const RELATIONSHIPS = Object.freeze([
   "reads", "changes", "creates", "removes",
   "succeeds_with", "fails_with", "navigates_to", "emits",
   "has_field", "relates_to", "stored_in",
+  "depends_on",
 ]);
 
 export const ELEMENT_ROLES = Object.freeze(["interface", "behavior", "resource"]);

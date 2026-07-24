@@ -5,3 +5,4 @@ export { systemPaths } from "./system-paths.js";
 export { behavioralEnvelopes } from "./behavioral-envelopes.js";
 export { semanticRegionCandidates } from "./semantic-region-candidates.js";
 export { observedAreas } from "./observed-areas.js";
+export { archUnits } from "./arch-units.js";

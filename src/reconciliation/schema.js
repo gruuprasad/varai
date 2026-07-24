@@ -35,6 +35,7 @@ export const RELATION_CAPABILITIES = Object.freeze({
   produces: Object.freeze(["api.output"]),
   fails_with: Object.freeze(["api.failure"]),
   emits: Object.freeze([]),
+  depends_on: Object.freeze(["arch.dependency"]),
 });
 
 export class RealizationValidationError extends Error {

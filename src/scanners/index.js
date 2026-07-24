@@ -17,6 +17,7 @@ import { createImplementationGraph } from "./lift/implementation-graph.js";
 import { createDeclarationRegistry } from "./lift/declarations.js";
 import { bindBehaviorReferents } from "./lift/bindings.js";
 import { liftSystemModel } from "./lift/index.js";
+import { collectPythonImports } from "./imports/python-imports.js";
 
 // ROOT_MARKERS are always included in the file list even when an --include
 // filter is active — they describe the whole project, not one service subdir.
@@ -197,6 +198,7 @@ export async function scanRepo(repoPath, options = {}) {
   const displayStacks = [...stacks].filter((s) => s !== "base");
 
   const behaviors = [...apiBehaviors, ...frontendBehaviors];
+  const importEdges = await collectPythonImports(files, ctx);
   const registry = await createDeclarationRegistry({ observations, symbolIndex: resolver });
   const bindings = bindBehaviorReferents(behaviors, registry);
   diagnostics.push(...bindings.diagnostics, ...graph.diagnostics());
@@ -245,6 +247,7 @@ export async function scanRepo(repoPath, options = {}) {
     convergence: bindings.convergence,
     containment: screenContainment,
     diagnostics,
+    importEdges,
     scanContext,
   }, { repoPath, systemName: options.systemName });
   const summary = {

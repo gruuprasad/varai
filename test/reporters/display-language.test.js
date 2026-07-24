@@ -4,6 +4,7 @@ import {
   RELATION_LABELS, KIND_LABELS, CLAIM_STATE_LABELS,
   kindLabel, claimStateLabel, displayLanguage,
   verdictLabel, bindingStateLabel, reasonLabel, SEED_VOCAB,
+  SEED_RELATION_TEXT, seedRelationText,
 } from "../../src/reporters/display-language.js";
 import { RELATIONSHIPS } from "../../src/system-model/schema.js";
 import { VERDICTS, BINDING_STATES } from "../../src/reconciliation/schema.js";
@@ -58,4 +59,9 @@ test("reason codes translate, and unknown codes fall back to the code", () => {
 test("approval vocabulary avoids the word ratified", () => {
   assert.equal(SEED_VOCAB.approved, "approved");
   assert.ok(!Object.values(SEED_VOCAB).some((w) => /ratif/i.test(w)));
+});
+
+test("depends_on seed relation text is a plain verb phrase", () => {
+  assert.equal(SEED_RELATION_TEXT.depends_on, "depends on");
+  assert.equal(seedRelationText("depends_on"), "depends on");
 });

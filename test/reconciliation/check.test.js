@@ -264,3 +264,91 @@ test("a performs commitment is recorded as not_checkable, never a silent absence
   assert.deepEqual(item.reasons, ["no-checker-semantics"]);
   assert.equal(report.summary.notCheckable, 1);
 });
+
+// Positive depends_on commitments only: present → holds; absent + analyzed → violated;
+// absent without matching analyzed coverage → cannot_verify. No forbidden-edge semantics.
+function dependsOnScenario({ claim = true, analyzed = true } = {}) {
+  const seed = {
+    formatVersion: 1,
+    system: { id: "demo", name: "Demo" },
+    concepts: [
+      { id: "behavior.ui", role: "behavior", name: "UI" },
+      { id: "behavior.api", role: "behavior", name: "API" },
+    ],
+    commitments: [
+      {
+        id: "commitment.ui-depends-on-api",
+        source: "behavior.ui",
+        relation: "depends_on",
+        target: { concept: "behavior.api" },
+      },
+    ],
+    context: [],
+  };
+  const model = {
+    system: { id: "demo", key: "demo", name: "Demo" },
+    subsystems: [{ id: "sub.ui", lens: "ui" }, { id: "sub.api", lens: "api" }],
+    elements: [
+      { id: "el.ui", name: "Screen", kind: "screen", key: "screen", subsystemId: "sub.ui", evidence: [] },
+      { id: "el.api", name: "GET /items", kind: "operation", key: "GET /items", subsystemId: "sub.api", evidence: [] },
+    ],
+    claims: claim
+      ? [{
+        id: "claim.ui-depends-api",
+        sourceId: "el.ui",
+        relation: "depends_on",
+        target: { kind: "reference", id: "el.api" },
+        claimState: "observed",
+        evidence: [{ file: "ui.tsx", line: 4, symbol: "fetch" }],
+        implementationPath: [],
+      }]
+      : [],
+    coverage: analyzed
+      ? [{ capability: "arch.dependency", scopeId: "sub.ui", state: "analyzed" }]
+      : [],
+  };
+  const seedHash = seedContentHash(seed);
+  const realization = {
+    formatVersion: 1,
+    seedHash,
+    bindings: [
+      { id: "binding.ui", concept: "behavior.ui", artifact: { lens: "ui", kind: "screen", key: "screen" } },
+      { id: "binding.api", concept: "behavior.api", artifact: { lens: "api", kind: "operation", key: "GET /items" } },
+    ],
+    witnesses: [
+      {
+        commitment: "commitment.ui-depends-on-api",
+        sourceBinding: "binding.ui",
+        target: { concept: "behavior.api" },
+      },
+    ],
+  };
+  return { seed, model, realization };
+}
+
+test("a present depends_on commitment holds", () => {
+  const { seed, model, realization } = dependsOnScenario({ claim: true });
+  const report = reconcile({ model, seed, realization });
+  const item = byCommitment(report, "commitment.ui-depends-on-api");
+  assert.equal(item.bindingState, "resolved");
+  assert.equal(item.verdict, "holds");
+  assert.ok(item.claimIds.includes("claim.ui-depends-api"));
+});
+
+test("an absent depends_on under analyzed arch.dependency coverage is violated", () => {
+  const { seed, model, realization } = dependsOnScenario({ claim: false, analyzed: true });
+  const report = reconcile({ model, seed, realization });
+  const item = byCommitment(report, "commitment.ui-depends-on-api");
+  assert.equal(item.bindingState, "resolved");
+  assert.equal(item.verdict, "violated");
+  assert.deepEqual(item.reasons, ["claim-absent-under-analyzed-coverage"]);
+  assert.ok(item.coverage.some((record) => record.capability === "arch.dependency" && record.state === "analyzed"));
+});
+
+test("an absent depends_on without analyzed coverage cannot_verify", () => {
+  const { seed, model, realization } = dependsOnScenario({ claim: false, analyzed: false });
+  const report = reconcile({ model, seed, realization });
+  const item = byCommitment(report, "commitment.ui-depends-on-api");
+  assert.equal(item.verdict, "cannot_verify");
+  assert.deepEqual(item.reasons, ["insufficient-coverage"]);
+});

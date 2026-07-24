@@ -1,5 +1,8 @@
 import { buildSystemModel } from "../../system-model/build.js";
 import { buildCoverage, MODEL_BUILDER_ID } from "../../system-model/coverage.js";
+import { SYSTEM_MODEL_ANALYZER_VERSION } from "../../system-model/version.js";
+import { elementId, subsystemId, systemId } from "../../system-model/identity.js";
+import { resolveDependencyEdges, pythonScopedSubsystemKeys } from "./dependency-edges.js";
 import { boundaryContractNames } from "./contracts.js";
 
 const CONVERGENCE_MIN_BEHAVIORS = 2;
@@ -137,7 +140,7 @@ function outcomeValue(clause) {
   return String(clause.status ?? clause.reason ?? "unknown failure");
 }
 
-export function liftSystemModel({ observations, behaviors, registry, convergence, containment = [], diagnostics = [], scanContext }, options = {}) {
+export function liftSystemModel({ observations, behaviors, registry, convergence, containment = [], diagnostics = [], importEdges = [], scanContext }, options = {}) {
   const subsystems = new Map();
   const elements = [];
   const claims = [];
@@ -337,9 +340,11 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
 
     const key = normalizeHttpKey(door.method, door.path);
     const behaviorSource = source("api", "operation", key);
+    const doorEvidence = [door.evidence].flat().map((entry) =>
+      behavior.handler?.symbol ? { ...entry, symbol: behavior.handler.symbol } : entry);
     addElement({
       subsystemKey: "api", subsystemName: "API", key, kind: "operation", roles: ["interface", "behavior"], name: key,
-      evidence: [door.evidence].flat(), implementationPath: [door.evidence].flat(), observationMethod: "semantic", claimState: "observed", capability: "api.operation",
+      evidence: doorEvidence, implementationPath: doorEvidence, observationMethod: "semantic", claimState: "observed", capability: "api.operation",
     });
     expose("api", "operation", key, [door.evidence].flat(), "api.operation");
 
@@ -498,7 +503,23 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
     });
   }
 
-  const finalDiagnostics = dedupeDiagnostics(diagnostics.map((item) => ({
+  // Resolve raw import edges to Element→Element `depends_on` claims. Element ids
+  // are derived here exactly as canonicalize.js will, so the resolver can
+  // attribute edges by owning Element before the model is assembled.
+  const rootId = systemId(options.systemKey ?? "repository-root");
+  const subsystemIdByKey = new Map();
+  for (const key of subsystems.keys()) {
+    subsystemIdByKey.set(key, subsystemId(rootId, { lens: key, key }));
+  }
+  const identifiedElements = elements.map((element) => ({
+    ...element,
+    id: elementId({ subsystemId: subsystemIdByKey.get(element.subsystemKey), kind: element.kind, key: element.key }),
+  }));
+  const dependencyEdges = resolveDependencyEdges({ importEdges, elements: identifiedElements });
+  for (const claim of dependencyEdges.claims) addClaim(claim);
+  const dependencyDiagnostics = dependencyEdges.diagnostics;
+
+  const finalDiagnostics = dedupeDiagnostics([...diagnostics, ...dependencyDiagnostics].map((item) => ({
     analyzerId: item.analyzerId ?? MODEL_BUILDER_ID,
     capability: item.capability ?? "model.lift",
     scopeId: item.scopeId ?? null,
@@ -506,7 +527,20 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
     ...item,
   })));
   const populatedLenses = new Set(subsystems.keys());
-  const coverage = buildCoverage({ scanContext, behaviors, diagnostics: finalDiagnostics }, populatedLenses);
+  // Only subsystems with .py Element evidence were in scope for Python import analysis.
+  const archDependencyCoverage = [...pythonScopedSubsystemKeys(identifiedElements)].sort().map((lens) => ({
+    analyzerId: MODEL_BUILDER_ID,
+    analyzerVersion: SYSTEM_MODEL_ANALYZER_VERSION,
+    capability: "arch.dependency",
+    scope: { kind: "subsystem", key: lens },
+    state: "analyzed",
+    evidence: [],
+    details: ["Python static imports resolved to owning Elements"],
+  }));
+  const coverage = [
+    ...buildCoverage({ scanContext, behaviors, diagnostics: finalDiagnostics }, populatedLenses),
+    ...archDependencyCoverage,
+  ];
   return buildSystemModel({
     subsystems: [...subsystems.values()], elements, claims, coverage, diagnostics: finalDiagnostics,
   }, options);
