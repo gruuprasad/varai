@@ -5,7 +5,7 @@ import { exec } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { loadRepoConfig } from "../scanners/config.js";
 import { createWatcher } from "./watcher.js";
-import { analyzeCurrent, persistCurrentModel } from "../snapshots/snapshot.js";
+import { persistCurrentModel } from "../snapshots/snapshot.js";
 import { createSnapshotStore } from "../snapshots/store.js";
 import { diffSystemModels } from "../system-model/diff.js";
 import { readGitState } from "../snapshots/git-state.js";
@@ -16,6 +16,7 @@ import { createSeedHandlers } from "./seed.js";
 import { assistantFromEnvironment } from "../seed/assistants/openai-compatible.js";
 import { displayLanguage } from "../reporters/display-language.js";
 import { serializeProjections } from "./projections.js";
+import { analyzeCurrentInWorker, AnalyzeAbortedError } from "./analyze-in-worker.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.resolve(__dirname, "..", "ui");
@@ -69,7 +70,18 @@ function openBrowser(url) {
   });
 }
 
-export async function startServer({ repoPath, port = 3847, open = true, scanOptions: cliScanOptions = {}, seedAssistant, seedModel } = {}) {
+export async function startServer({
+  repoPath,
+  port = 3847,
+  open = true,
+  openBrowser: openBrowserFn = openBrowser,
+  scanOptions: cliScanOptions = {},
+  seedAssistant,
+  seedModel,
+  // Default: off the HTTP thread so large repos don't freeze the dashboard.
+  // Tests may inject a custom analyze(repoPath, scanOptions) => current.
+  analyze,
+} = {}) {
   const absRepo = path.resolve(repoPath);
   const config = await loadRepoConfig(absRepo);
   const scanOptions = {
@@ -83,12 +95,24 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
   let latestDiff = null;
   let scanning = false;
   let sseClients = new Set();
+  let activeAnalyzeWorker = null;
+
+  async function runAnalyze() {
+    if (analyze) return analyze(absRepo, scanOptions);
+    const job = analyzeCurrentInWorker(absRepo, scanOptions);
+    activeAnalyzeWorker = job.worker;
+    try {
+      return await job.promise;
+    } finally {
+      if (activeAnalyzeWorker === job.worker) activeAnalyzeWorker = null;
+    }
+  }
 
   async function runScan() {
     if (scanning) return;
     scanning = true;
     try {
-      const current = await analyzeCurrent(absRepo, scanOptions);
+      const current = await runAnalyze();
       latestScan = {
         ...current.scan,
         displayLanguage: displayLanguage(),
@@ -114,9 +138,12 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
         latestDiff = { error: "No clean semantic baseline exists for HEAD" };
       }
       broadcast({ type: "model", data: latestScan });
+      return true;
     } catch (err) {
+      if (err instanceof AnalyzeAbortedError) return false;
       console.error("[server] scan error:", err.message);
       broadcast({ type: "error", message: err.message });
+      return false;
     } finally {
       scanning = false;
     }
@@ -129,12 +156,9 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
     }
   }
 
-  const watcher = createWatcher(absRepo, () => {
-    console.error("[server] change detected, rescanning...");
-    runScan().then(() => console.error("[server] rescan complete"));
-  });
+  let watcher = { close() {} };
 
-  const seedGetModel = seedModel ?? (async () => latestScan?.model ?? (await analyzeCurrent(absRepo, scanOptions)).scan.model);
+  const seedGetModel = seedModel ?? (async () => latestScan?.model ?? (await runAnalyze()).scan.model);
   const seedHandlers = createSeedHandlers({
     repoPath: absRepo,
     port,
@@ -231,12 +255,25 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
     server.listen(port, "127.0.0.1", () => {
       const boundPort = server.address().port;
       const url = `http://localhost:${boundPort}`;
+      // Open as soon as HTTP is up. Waiting for the first scan (often minutes on
+      // mid-size repos) left users with no page — and the scan used to block the
+      // event loop, so even a manual visit hung until analyze finished.
       console.error(`[server] listening on ${url}`);
+      console.error(`[server] open ${url}  (Ctrl+C to stop)`);
+      if (open) openBrowserFn(url);
       console.error(`[server] scanning ${absRepo}...`);
 
-      runScan().then(() => {
-        console.error(`[server] ready — open ${url}  (Ctrl+C to stop)`);
-        if (open) openBrowser(url);
+      // Start the file watcher after announcing the URL so recursive fs.watch
+      // setup cannot delay the first browser paint.
+      watcher = createWatcher(absRepo, () => {
+        console.error("[server] change detected, rescanning...");
+        runScan().then((ok) => {
+          if (ok) console.error("[server] rescan complete");
+        });
+      }, { include: scanOptions.include });
+
+      runScan().then((ok) => {
+        if (ok) console.error(`[server] scan ready`);
       });
 
       resolve({
@@ -244,6 +281,10 @@ export async function startServer({ repoPath, port = 3847, open = true, scanOpti
         port: boundPort,
         close() {
           watcher.close();
+          if (activeAnalyzeWorker) {
+            try { void activeAnalyzeWorker.terminate(); } catch { /* */ }
+            activeAnalyzeWorker = null;
+          }
           server.close();
           for (const c of sseClients) {
             try { c.end(); } catch { /* */ }
