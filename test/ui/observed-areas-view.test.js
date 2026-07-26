@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { collectChangedClaimIds } from "../../src/ui/changes.js";
 import {
   areaIsChanged,
   areaMatchesQuery,
   areaPreviewClaims,
   areaRoleLine,
   areaSummarySentences,
-  collectChangedClaimIds,
   coreIsChanged,
   formatClaimSummary,
   operationIsChanged,

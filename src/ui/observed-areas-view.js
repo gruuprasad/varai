@@ -136,15 +136,6 @@ export function ungroupedMatchesQuery(item, envelopesById, query) {
   return name.toLowerCase().includes(query);
 }
 
-export function collectChangedClaimIds(diff) {
-  const ids = new Set();
-  if (!diff) return ids;
-  for (const item of diff.claims.added) ids.add(item.id);
-  for (const item of diff.claims.removed) ids.add(item.id);
-  for (const item of diff.claims.changed) ids.add(item.after.id);
-  return ids;
-}
-
 export function renderObservedAreasOutline({
   projection,
   byId,

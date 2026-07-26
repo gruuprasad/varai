@@ -1,7 +1,5 @@
-import {
-  collectChangedClaimIds,
-  renderObservedAreasOutline,
-} from "./observed-areas-view.js";
+import { collectChangedClaimIds } from "./changes.js";
+import { archUnitsNotice, renderArchUnitsOutline } from "./arch-units-view.js";
 import {
   renderQuestions,
   renderReviewActions,
@@ -182,18 +180,17 @@ function render() {
   else if (activeView === "capabilities") renderCapabilities();
   else if (activeView === "changes") renderChanges();
   else if (activeView === "everything") renderEverything();
-  else renderObservedAreas();
+  else renderArchUnits();
 }
 
 function renderTopbar() {
-  const areas = scanData?.projections?.observedAreas?.areas ?? [];
-  const cores = scanData?.projections?.observedAreas?.sharedCores ?? [];
-  const operations = areas.reduce((sum, area) => sum + area.operationCount, 0);
-  const primaryOperations = areas.reduce((sum, area) => sum + (area.primaryOperationCount ?? area.operationCount), 0);
+  const units = scanData?.projections?.archUnits?.units ?? [];
+  const edges = scanData?.projections?.archUnits?.edges ?? [];
+  const parts = units.reduce((sum, unit) => sum + unit.memberElementIds.length, 0);
   el.topbarStats.innerHTML =
-    `<span class="stat-pill"><strong>${areas.length}</strong> ${areas.length === 1 ? "observed area" : "observed areas"}</span>` +
-    `<span class="stat-pill"><strong>${primaryOperations}</strong> primary · ${operations} ${operations === 1 ? "operation" : "operations"}</span>` +
-    `<span class="stat-pill"><strong>${cores.length}</strong> ${cores.length === 1 ? "shared part" : "shared parts"}</span>`;
+    `<span class="stat-pill"><strong>${units.length}</strong> ${units.length === 1 ? "unit" : "units"}</span>` +
+    `<span class="stat-pill"><strong>${parts}</strong> ${parts === 1 ? "part" : "parts"}</span>` +
+    `<span class="stat-pill"><strong>${edges.length}</strong> ${edges.length === 1 ? "dependency" : "dependencies"}</span>`;
 }
 
 const NAV_ICONS = {
@@ -208,7 +205,7 @@ const NAV_ICONS = {
 
 // The four map slices are one graph seen four ways; they share a destination.
 const MAP_MODES = [
-  ["system", "Areas"],
+  ["system", "Units"],
   ["subjects", "Subjects"],
   ["capabilities", "Capabilities"],
   ["everything", "Everything"],
@@ -286,53 +283,34 @@ function matchRoot(root, byId, query) {
   return names.some((name) => name?.toLowerCase().includes(query));
 }
 
-function renderObservedAreas() {
-  const projection = scanData.projections?.observedAreas;
-  if (!projection) return renderEmpty("This scan does not include observed areas yet");
+function renderArchUnits() {
+  const projection = scanData.projections?.archUnits;
+  if (!projection) return renderEmpty("This scan does not include architectural units yet");
   const { byId } = indexes();
-  const envelopesById = new Map((scanData.projections?.envelopes?.envelopes ?? []).map((item) => [item.id, item]));
-  const pathsById = new Map((scanData.projections?.paths?.paths ?? []).map((item) => [item.id, item]));
-  const claimsById = new Map(scanData.model.claims.map((item) => [item.id, item]));
-  const changedElements = changedIds();
-  const changedClaims = collectChangedClaimIds(diffData?.diff);
+  const subsystemsById = new Map((scanData.model.subsystems ?? []).map((item) => [item.id, item]));
   const query = el.search.value.toLowerCase().trim();
-  showSearch("Find an observed area, operation, or shared part...");
+  showSearch("Find a unit or one of its parts...");
 
-  const rendered = renderObservedAreasOutline({
+  const rendered = renderArchUnitsOutline({
     projection,
+    subsystemsById,
     byId,
-    envelopesById,
-    pathsById,
-    claimsById,
     query,
-    changesOnly,
-    changedElements,
-    changedClaims,
     expandedId,
-    relationLabel,
-    kindLabel,
-    stateMark,
-    changeBadge,
-    pathStatus,
-    claimRow,
-    esc,
+    changedElements: changedIds(),
   });
 
-  const strip = diffData?.diff?.summary?.hasChanges
-    ? `<button class="change-strip${changesOnly ? " active" : ""}" id="change-strip">` +
-      `<b>${rendered.changedAreaCount}</b> ${rendered.changedAreaCount === 1 ? "area" : "areas"} changed since the last snapshot` +
-      `<span>${changesOnly ? "show everything" : "show only changes"}</span></button>`
-    : diffData?.error ? `<p class="baseline-note">${esc(diffData.error)}</p>` : "";
+  const notice = archUnitsNotice(projection);
+  const noticeHtml = notice ? `<p class="baseline-note">${esc(notice)}</p>` : "";
 
   el.searchCount.textContent = query ? `${rendered.matchCount} matches` : "";
 
   renderPanes(
-    renderMapModes() + strip + renderViewSplit(rendered.masterHtml || rendered.html, rendered.detailHtml),
+    renderMapModes() + noticeHtml + renderViewSplit(rendered.masterHtml, rendered.detailHtml),
     "",
     { inlineExpand: true },
   );
   bindMapModes();
-  $("change-strip")?.addEventListener("click", () => { changesOnly = !changesOnly; render(); });
 }
 
 // Importing is the path that always works; the assistant is optional. Both paths
