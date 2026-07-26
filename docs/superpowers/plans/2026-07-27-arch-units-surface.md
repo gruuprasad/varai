@@ -1004,6 +1004,26 @@ The sole unit is `module:pyproject.toml`, whose one part is the `python:memsearc
 
 **Edge list vs file tree.** The Units view adds nothing over the file tree here — zero edges. The tree already shows `cli.py` importing from `config.py`, `core.py`, etc.; the dashboard cannot surface that until plain Python modules (or another grain) become Elements. The empty graph is honest coverage, not proof of isolation.
 
+### Task 6 — kalakar backend (`/home/gp/dreamLand/jodulabs/kalakar/services/backend`)
+
+A framework-heavy FastAPI app — the case where Units *should* light up with edges.
+
+| Metric | Value |
+|---|---|
+| Grain | `module` |
+| Units | **97** |
+| Parts | **622** |
+| `depends_on` claims | **0** |
+| Dependencies (edges) | **0** |
+
+Unit names are recognizable file paths (`module:routes/auth.py`, `module:routes/building_model/beams.py`, `module:models.py`) — useful as a browsing axis over observed Elements. The edge list is empty: the model has **zero** `depends_on` claims, so there is nothing for the projection to roll up. (kiro-gateway showed the same pattern at smaller scale: 8 units / 15 parts / 0 edges.)
+
+So even on a real FastAPI codebase, today's surface shows **structure without coupling**. The fixture `test/fixtures/arch-units/dependency-added` still produces 2 units / 1 edge — the mechanism works when claims exist. Attribution of imports onto Element→Element `depends_on` claims on production-shaped repos is the remaining gap; it is outside this plan's scope but is what would make the Units view more than a file-indexed part browser.
+
+**Unit names.** Recognizable as modules, not as seedable components. Lexicographic evidence-file keys remain arbitrary homes.
+
+**Edge list vs file tree.** With zero edges the view does not reveal coupling the tree already implies. Parts-per-unit is the useful signal today.
+
 ### Open question: is module grain canonical, or a stopgap?
 
-**Stopgap, not canonical.** Module grain is the right *serialization* choice today — it is the coarsest grouping at which observed import edges survive once Elements exist (Task 1 proved subsystem grain drops them). It is not yet a grain a human can seed a rule against: the unit key is the lexicographically smallest evidence file among an element's evidence, not a designated home or package name. Writing "orders depends on users" in a seed requires stable, intentional unit identity; `module:app/orders.py` is a deterministic accident, and on repos like memsearch there is often no module unit at all. Package/component grouping — something a human could name and reconcile — is still needed before `arch.dependency` seeds are writable by hand. Module grain remains useful for dashboard visualization on framework-heavy Python repos until that exists.
+**Stopgap, not canonical.** Module grain is the right *serialization* choice today — it is the coarsest grouping at which observed import edges survive once Elements and `depends_on` claims exist (Task 1 proved subsystem grain drops them). It is not yet a grain a human can seed a rule against: the unit key is the lexicographically smallest evidence file among an element's evidence, not a designated home or package name. Writing "orders depends on users" in a seed requires stable, intentional unit identity; `module:app/orders.py` is a deterministic accident. Package/component grouping — something a human could name and reconcile — is still needed before `arch.dependency` seeds are writable by hand. Separately, real repos currently emit units without edges until import→Element attribution lands; module grain remains the right carrier for that future graph.
