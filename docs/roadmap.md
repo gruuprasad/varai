@@ -14,6 +14,11 @@ product decisions are [ADR 0004](adr/0004-system-model-is-the-product.md) and
 - **Map, snapshot, diff, dashboard.** Current-system views, Git-bound
   checkpoints, semantic progression between two points, and a live local web UI
   — all projections over the one model.
+- **Arch units.** Element→Element `depends_on` claims, lifted from imports and
+  rolled up to module-grain units, are shown in the dashboard's Code map.
+  Dependency extraction currently reads Python imports only, so units appear
+  without edges in other languages — the surface says so rather than implying
+  an absence of dependencies.
 - **Seed → witness → reconciliation.** `varai seed validate` / `approve`,
   `varai handoff` (vendor-neutral build packet), and `varai check` are wired end
   to end: a human-ratified seed, an untrusted builder realization witness, and
@@ -31,6 +36,11 @@ product decisions are [ADR 0004](adr/0004-system-model-is-the-product.md) and
   rich enough to bind, loose enough for a human to speak — is not settled.
 - **Coverage and meaning drift.** Which absences can be reported, and which
   domain statements are checkable at all versus irreducibly human declarations.
+- **Arch-unit identity.** Module-grain unit keys are lexicographically smallest
+  evidence files — deterministic rollups, not designated homes. That is not yet
+  a name a human can seed an `arch.dependency` rule against. Package/component
+  grouping is still needed; separately, real framework-heavy Python repos today
+  often emit units with zero attributed `depends_on` claims.
 
 ## What's next
 
