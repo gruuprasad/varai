@@ -1,4 +1,3 @@
-import { collectChangedClaimIds } from "./changes.js";
 import { archUnitsNotice, renderArchUnitsOutline } from "./arch-units-view.js";
 import {
   renderQuestions,
