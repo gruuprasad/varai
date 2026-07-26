@@ -12,7 +12,7 @@ Parser observations and framework-specific traces are private analyzer details. 
 
 ## Project structure
 
-`bin/varai.js` owns CLI parsing. Scanning lives in `src/scanners/`; the framework-neutral kernel, identity, validation, coverage, and diff live in `src/system-model/`; snapshots live in `src/snapshots/`; renderers live in `src/reporters/`; the dashboard lives in `src/server/` and `src/ui/`. Product decisions are in `docs/adr/`; `docs/semantic-language.md` is normative.
+`bin/varai.js` owns CLI parsing. Scanning lives in `src/scanners/`; the framework-neutral kernel, identity, validation, coverage, and diff live in `src/system-model/`; snapshots live in `src/snapshots/`; renderers live in `src/reporters/`; the dashboard lives in `src/server/` and `src/ui/`. Human-ratified seeds live in `src/seed/` and deterministic reconciliation in `src/reconciliation/` (ADR 0005). Product decisions are in `docs/adr/`; `docs/semantic-language.md` is normative.
 
 ## Development
 

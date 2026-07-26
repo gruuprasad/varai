@@ -1,62 +1,53 @@
-# Varai Roadmap
+# Status & direction
 
-Direction: ADR 0004. Varai builds one local, evidence-backed System Model. Kalakar is the first serious acceptance project, never the source of core vocabulary.
+Varai is pre-release and published to invite opinions. This page is an honest
+account of what works, what doesn't yet, and where the effort goes next. The
+motivating idea is in [the-varai-idea.md](the-varai-idea.md); the accepted
+product decisions are [ADR 0004](adr/0004-system-model-is-the-product.md) and
+[ADR 0005](adr/0005-seed-realization-and-reconciliation.md).
 
-## 0. Product language — complete
+## What runs
 
-- Define Systems, Subsystems, Elements, Claims, evidence, claim state, and coverage.
-- Validate the vocabulary across API, UI, Worker, CLI, Data, Library, mobile, and AI-using systems.
-- Keep `docs/semantic-language.md` normative.
+- **System Model.** One local, deterministic, evidence-backed model of a
+  repository. Every Element and Claim points to source evidence and carries
+  explicit analyzer coverage. This is the product boundary.
+- **Map, snapshot, diff, dashboard.** Current-system views, Git-bound
+  checkpoints, semantic progression between two points, and a live local web UI
+  — all projections over the one model.
+- **Seed → witness → reconciliation.** `varai seed validate` / `approve`,
+  `varai handoff` (vendor-neutral build packet), and `varai check` are wired end
+  to end: a human-ratified seed, an untrusted builder realization witness, and
+  deterministic reconciliation that reports binding state and verdict separately.
 
-## 1. One-model foundation — complete
+## What is unproven
 
-- Make System Model v1 the only scanner output and snapshot payload.
-- Render `varai map` from the model.
-- Diff Elements, Claims, coverage, confidence, and evidence movement.
-- Invalidate pre-release Analysis IR snapshots instead of migrating them.
-- Remove intent matching, stock catalogs, fact-inventory reporters, framework-shaped diff, and dual-payload compatibility code.
+- **The binding mechanism.** The open question is whether a seed claim can be
+  bound to a computational artifact and checked *without laundering a
+  probabilistic guess into a deterministic verdict*. Reconciliation is
+  deterministic only when the binding is **declared** (in the witness), not
+  inferred. Whether declared bindings stay honest, cheap, and complete enough on
+  real projects is the load-bearing thing still being tested.
+- **Seed representation.** The minimum common structure a natural seed needs —
+  rich enough to bind, loose enough for a human to speak — is not settled.
+- **Coverage and meaning drift.** Which absences can be reported, and which
+  domain statements are checkable at all versus irreducibly human declarations.
 
-Exit: map, snapshot, diff, server, and dashboard all consume the same model.
+## What's next
 
-## 2. Anchor-based semantic lift — implemented (v1)
+- Harden reconciliation soundness against adversarial witnesses (lying, stale,
+  ambiguous, refactored bindings).
+- Grow analyzer coverage where it changes a real decision on a real repo, not to
+  chase framework breadth for its own sake.
+- Register analyzers behind a stable contract so new framework support never
+  touches the kernel, diff, persistence, or rendering.
 
-- Recover declaration-backed Resource subjects through persistence or resolved convergence.
-- Keep distinct Behaviors grouped around Resources and attach Interfaces as reach.
-- Preserve ordered implementation provenance while keeping the implementation graph private.
-- Derive browse-by-thing and browse-by-capability projections without adding an Anchor primitive.
+## Deliberately deferred
 
-## 3. Semantic analyzer contract — next
+- Hosted repository upload; LLM-first discovery; exhaustive framework coverage;
+  runtime guarantees without runtime evidence; generic architecture diagrams.
 
-- Replace scanner-level framework branches with registered analyzers.
-- Require every analyzer to emit Elements, Claims, capability coverage, and diagnostics.
-- Keep parser observations private to each analyzer.
-- Prove a second implementation of one lens without changing kernel, diff, persistence, or rendering.
+## Non-goals
 
-Exit: a conformance analyzer can be registered without editing downstream model consumers.
-
-## 4. Improve current-system usefulness
-
-- Add Element detail views organized around inputs, outputs, conditions, effects, outcomes, and relationships.
-- Make partial/unsupported/failed coverage prominent.
-- Improve stable application/workflow lifting where it changes a real Kalakar decision.
-
-## 5. Prove breadth deliberately
-
-Recommended order: CLI, Worker, Data relationships, a second API framework, then another UI implementation style. Every capability needs a generic fixture, analyzer conformance test, model assertion, semantic diff assertion, and real-project acceptance where useful.
-
-## 6. Checks and intent reconciliation
-
-- Derive falsifiable checks from the model with holds/violated/cannot-verify outcomes.
-- Bind durable repository intent as a separate overlay with bound/unbound/ambiguous states.
-
-## 7. Optional English interpreter
-
-After deterministic views are useful, allow an opt-in LLM to explain selected model claims. Every sentence must cite model IDs; removing the LLM changes readability only.
-
-## Deferred
-
-- hosted repository upload;
-- LLM-first discovery;
-- exhaustive framework coverage;
-- generic architecture diagrams;
-- runtime guarantees without runtime evidence.
+An optional LLM may later *explain* already-proven model claims, but it never
+discovers or authorizes a claim and is never required for deterministic output.
+No user-facing statement is ever an unattributed model opinion.
