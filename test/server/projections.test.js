@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildSystemModel } from "../../src/system-model/build.js";
 import { serializeProjections } from "../../src/server/projections.js";
+import { archUnits } from "../../src/system-model/projections/index.js";
 
 const evidence = (file = "system.js", line = 1) => [{ file, line }];
 const subsystem = (key, lens, name) => ({ key, lens, name, qualifiers: {}, evidence: [] });
@@ -74,4 +75,53 @@ test("server projection payload stays deterministic under collection reordering"
     claims: [...model.claims].reverse(),
   };
   assert.deepEqual(serializeProjections(reordered), serializeProjections(model));
+});
+
+// Grain choice is load-bearing, not cosmetic. `subsystem` groups by technology
+// lens (api / data / ui / …), so an import edge between two API operations is
+// intra-unit and gets dropped. `module` is the grain at which observed
+// dependency edges survive, so it is the grain the dashboard is served.
+function archDraft() {
+  return {
+    subsystems: [subsystem("api", "api", "API")],
+    elements: [
+      {
+        subsystemKey: "api", kind: "operation", key: "GET /orders", name: "GET /orders",
+        roles: ["interface", "behavior"], qualifiers: {}, evidence: evidence("app/orders.py", 3),
+        observationMethod: "ast", claimState: "observed", capability: "api.operation",
+      },
+      {
+        subsystemKey: "api", kind: "operation", key: "GET /users", name: "GET /users",
+        roles: ["interface", "behavior"], qualifiers: {}, evidence: evidence("app/users.py", 3),
+        observationMethod: "ast", claimState: "observed", capability: "api.operation",
+      },
+    ],
+    claims: [{
+      source: source("api", "operation", "GET /orders"),
+      relation: "depends_on",
+      target: reference("api", "operation", "GET /users"),
+      slot: "depends_on:GET /users",
+      qualifiers: {}, evidence: evidence("app/orders.py", 13), implementationPath: [],
+      observationMethod: "ast", claimState: "observed", capability: "arch.dependency",
+    }],
+  };
+}
+
+test("server serializes arch units at module grain", () => {
+  const model = buildSystemModel(archDraft(), { systemName: "arch-grain-fixture" });
+  const payload = serializeProjections(model);
+  assert.equal(payload.archUnits.grain, "module");
+});
+
+test("the serialized arch-unit grain preserves observed dependency edges", () => {
+  const model = buildSystemModel(archDraft(), { systemName: "arch-grain-fixture" });
+  const payload = serializeProjections(model);
+  assert.equal(payload.archUnits.edges.length, 1);
+  assert.deepEqual(
+    payload.archUnits.edges.map((edge) => `${edge.fromUnitId}->${edge.toUnitId}`),
+    ["module:app/orders.py->module:app/users.py"],
+  );
+  // The regression this guards: at subsystem grain both operations share the
+  // "api" lens, so this same edge collapses to nothing.
+  assert.equal(archUnits(model, { grain: "subsystem" }).edges.length, 0);
 });

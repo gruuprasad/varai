@@ -19,6 +19,13 @@ export function serializeProjections(model) {
     frames: behaviorFrames(model),
     paths: systemPaths(model),
     envelopes: behavioralEnvelopes(model),
-    archUnits: archUnits(model),
+    // Module grain, deliberately. `subsystem` groups by technology lens
+    // (api / data / ui / …), which is not an architectural axis: an import
+    // between two API operations is intra-unit there and gets dropped, so the
+    // graph is always empty. Module grain is the coarsest grouping at which
+    // observed dependency edges survive. The unit key is a deterministic
+    // rollup (lexicographically smallest evidence file), not a designated
+    // home — see arch-units.js.
+    archUnits: archUnits(model, { grain: "module" }),
   };
 }
