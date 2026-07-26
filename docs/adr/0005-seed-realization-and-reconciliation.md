@@ -6,8 +6,7 @@ Status: Accepted
 
 Varai's System Model observes what a repository contains. Builders supervising AI-written code
 also need to check what the system was *supposed* to do against what was actually built, without
-trusting the builder's own explanation. The seed → build → verify slice (see
-`docs/superpowers/plans/2026-07-23-seed-build-verify-vertical-slice.md`) introduces three artifacts
+trusting the builder's own explanation. The seed → build → verify slice introduces three artifacts
 with different authority:
 
 1. A **seed** — structured source intent, drafted with LLM assistance but ratified only by an
