@@ -51,3 +51,35 @@ This closes the key soundness proof: a real omitted implementation becomes
 The original availability requirement remains `cannot_verify` because its
 framework trace is partial. That is an analyzer-coverage opportunity, not a
 candidate for a sound absence verdict.
+
+## Recorded baseline (2026-07-28)
+
+Reproduce with:
+
+```bash
+node ./bin/varai.js check ../varai-slotkeeper-pilot --no-cache
+```
+
+| Result | Count |
+| --- | --- |
+| Requirements | 17 |
+| `holds` | 12 |
+| `cannot_verify` | 1 |
+| `not_checkable` | 4 |
+| `violated` | 0 |
+
+Bindings: 13 resolved, 4 unbound (the four `performs` requirements Varai has no
+checker semantics for), 0 ambiguous, 0 stale.
+
+The single `cannot_verify` is `commitment.book-slot-requires-availability` with
+`insufficient-coverage`.
+
+**Coverage baseline.** Slotkeeper's three real FastAPI operations
+(`GET /api/slots`, `POST /api/bookings`,
+`POST /api/bookings/{booking_id}/cancel`) carry **zero** `analyzed` coverage
+records. Every element-scoped `api.effect` and `api.failure` record for them is
+`partial` with the detail `unresolved function`, because framework mechanics in
+the handler signature and body are not yet distinguished from genuinely unknown
+calls. Absence therefore cannot be reported soundly on any of the three, and no
+`check` output includes a per-commitment coverage record. Closing that gap is
+the next analyzer front.

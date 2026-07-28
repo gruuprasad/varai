@@ -61,8 +61,11 @@ test("a related behavioral envelope is linked for presentation", async () => {
   assert.equal(card.envelope.completeness, "closed");
 });
 
-test("coverage limitations list exactly the cannot_verify commitments", async () => {
-  const { report, model } = await projectionPromise;
+// Removing an observed claim from an element whose effect coverage is analyzed
+// is a provable absence, not a coverage gap. The commitment must fail loudly
+// rather than settle into the calmer cannot_verify bucket.
+const degradedProjection = async () => {
+  const { model } = await projectionPromise;
   const degraded = structuredClone(model);
   const operation = degraded.elements.find((item) => item.name.startsWith("PUT /api/v1"));
   const aggregate = degraded.elements.find((item) => item.name === "BuildingModelDocument");
@@ -71,8 +74,26 @@ test("coverage limitations list exactly the cannot_verify commitments", async ()
   const { seed } = readSeed(fixture);
   const { realization } = readRealization(fixture, { seed });
   const degradedReport = reconcile({ model: degraded, seed, realization });
-  const review = buildReviewProjection({ report: degradedReport, model: degraded });
-  assert.deepEqual(review.coverageLimitations.map((item) => item.id), ["commitment.put-changes-document"]);
-  assert.deepEqual(review.coverageLimitations[0].reasons, ["insufficient-coverage"]);
-  assert.ok(review.coverageLimitations[0].coverage.length > 0);
+  return { review: buildReviewProjection({ report: degradedReport, model: degraded }) };
+};
+
+test("a claim absent under analyzed coverage is not reported as a coverage limitation", async () => {
+  const { review } = await degradedProjection();
+  assert.deepEqual(review.coverageLimitations, []);
+  assert.equal(review.summary.cannotVerify, 0);
+});
+
+test("the same commitment is violated in its review group with analyzed coverage evidence", async () => {
+  const { review } = await degradedProjection();
+  const card = cardById(review, "commitment.put-changes-document");
+  assert.equal(card.verdict, "violated");
+  assert.deepEqual(card.reasons, ["claim-absent-under-analyzed-coverage"]);
+  assert.ok(card.coverage.some((record) => record.capability === "api.effect" && record.state === "analyzed"),
+    "the verdict rests on element-scoped analyzed effect coverage");
+  assert.equal(review.summary.violated, 1);
+
+  const group = review.groups.find((item) => item.concept === "behavior.put-structural-type");
+  assert.ok(group.cards.some((item) => item.id === card.id), "the violated card stays in its source group");
+  assert.equal(group.total, 3);
+  assert.equal(group.holds, 2);
 });

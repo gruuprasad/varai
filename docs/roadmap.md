@@ -46,8 +46,10 @@ product decisions are [ADR 0004](adr/0004-system-model-is-the-product.md) and
 ## What's next
 
 - Improve FastAPI dependency tracing so more real operations reach exact
-  effect/failure coverage. The omission trial is now proven for a small route;
-  the existing availability route remains honestly `cannot_verify`. See
+  effect/failure coverage. The omission trial is now proven for a small route,
+  but on the Slotkeeper pilot all three real operations still record `partial`
+  effect/failure coverage — zero `analyzed` — so absence cannot be reported
+  there at all. The recorded baseline is in
   [product-loop-pilot.md](product-loop-pilot.md).
 - Run adversarial pilot trials for lying, stale, ambiguous, refactored, and
   expected-absent requirements; use the results to narrow the contract before
