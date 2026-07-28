@@ -1,10 +1,9 @@
 import { seedContentHash } from "./identity.js";
+import { validateScenarios } from "./scenarios.js";
 import {
   COMMITMENT_FIELDS, COMMITMENT_ID_PATTERN, CONCEPT_FIELDS, CONCEPT_ID_PATTERN, CONCEPT_ROLES,
   CONTEXT_FIELDS, CONTEXT_ID_PATTERN, RATIFICATION_FIELDS, RATIFICATION_STATES, ROOT_FIELDS,
-  COMMITMENT_EXPECTATIONS, SCENARIO_EXPECT_FIELDS, SCENARIO_FIELDS, SCENARIO_ID_PATTERN,
-  SCENARIO_PRINCIPAL_AS_PATTERN, SCENARIO_PRINCIPAL_FIELDS, SCENARIO_STEP_FIELDS,
-  SCENARIO_STEP_ID_PATTERN, SEED_RELATIONS, SURFACE_ACCESS, SURFACE_CHANNELS, SURFACE_FIELDS,
+  COMMITMENT_EXPECTATIONS, SEED_RELATIONS, SURFACE_ACCESS, SURFACE_CHANNELS, SURFACE_FIELDS,
   SURFACE_ID_PATTERN, SUPPORTED_SEED_FORMAT_VERSIONS, SYSTEM_FIELDS, SYSTEM_ID_PATTERN,
 } from "./schema.js";
 
@@ -64,105 +63,6 @@ function validateSurfaces(seed, conceptById, seenIds, problems) {
       problems.push({ code: "dangling-concept-reference", message: `Surface ${surface.id} behavior ${JSON.stringify(surface.behavior)} is not a declared concept` });
     } else if (conceptById.get(surface.behavior)?.role !== "behavior") {
       problems.push({ code: "invalid-surface-behavior", message: `Surface ${surface.id} behavior ${JSON.stringify(surface.behavior)} must reference a behavior concept` });
-    }
-  }
-}
-
-function validateScenarios(seed, conceptById, seenIds, problems) {
-  if (seed.formatVersion < 3) {
-    if (seed.scenarios !== undefined) {
-      problems.push({ code: "unsupported-field-for-format", message: "Seed scenarios require seed format version 3" });
-    }
-    return;
-  }
-  if (!Array.isArray(seed.scenarios)) {
-    problems.push({ code: "invalid-collection", message: "Seed scenarios must be an array" });
-    return;
-  }
-  for (const scenario of seed.scenarios) {
-    if (!isPlainObject(scenario)) {
-      problems.push({ code: "invalid-entry", message: "Scenario entries must be objects" });
-      continue;
-    }
-    unknownFields(scenario, SCENARIO_FIELDS, `Scenario ${scenario.id}`, problems);
-    if (typeof scenario.id !== "string" || !SCENARIO_ID_PATTERN.test(scenario.id)) {
-      problems.push({ code: "invalid-id-format", message: `Scenario id ${JSON.stringify(scenario.id)} must match ${SCENARIO_ID_PATTERN}` });
-    } else if (seenIds.has(scenario.id)) {
-      problems.push({ code: "duplicate-id", message: `Duplicate stable ID: ${scenario.id}` });
-    }
-    if (typeof scenario.id === "string") seenIds.add(scenario.id);
-    if (typeof scenario.name !== "string" || !scenario.name) {
-      problems.push({ code: "invalid-scenario", message: `Scenario ${scenario.id} requires a name` });
-    }
-
-    const principalAliases = new Set();
-    if (!Array.isArray(scenario.principals)) {
-      problems.push({ code: "invalid-collection", message: `Scenario ${scenario.id} principals must be an array` });
-    } else {
-      for (const principal of scenario.principals) {
-        if (!isPlainObject(principal)) {
-          problems.push({ code: "invalid-entry", message: `Scenario ${scenario.id} principals must be objects` });
-          continue;
-        }
-        unknownFields(principal, SCENARIO_PRINCIPAL_FIELDS, `Scenario ${scenario.id} principal`, problems);
-        if (typeof principal.as !== "string" || !SCENARIO_PRINCIPAL_AS_PATTERN.test(principal.as)) {
-          problems.push({ code: "invalid-scenario", message: `Scenario ${scenario.id} principal alias ${JSON.stringify(principal.as)} must be a lower-kebab slug` });
-        } else if (principalAliases.has(principal.as)) {
-          problems.push({ code: "duplicate-id", message: `Scenario ${scenario.id} has duplicate principal alias ${principal.as}` });
-        } else {
-          principalAliases.add(principal.as);
-        }
-        if (typeof principal.actor !== "string" || !conceptById.has(principal.actor)) {
-          problems.push({ code: "dangling-concept-reference", message: `Scenario ${scenario.id} principal actor ${JSON.stringify(principal.actor)} is not a declared concept` });
-        } else if (conceptById.get(principal.actor)?.role !== "actor") {
-          problems.push({ code: "invalid-scenario", message: `Scenario ${scenario.id} principal actor ${JSON.stringify(principal.actor)} must reference an actor concept` });
-        }
-      }
-    }
-
-    const stepIds = new Set();
-    if (!Array.isArray(scenario.steps)) {
-      problems.push({ code: "invalid-collection", message: `Scenario ${scenario.id} steps must be an array` });
-    } else {
-      for (const step of scenario.steps) {
-        if (!isPlainObject(step)) {
-          problems.push({ code: "invalid-entry", message: `Scenario ${scenario.id} steps must be objects` });
-          continue;
-        }
-        unknownFields(step, SCENARIO_STEP_FIELDS, `Scenario ${scenario.id} step ${step.id}`, problems);
-        if (typeof step.id !== "string" || !SCENARIO_STEP_ID_PATTERN.test(step.id)) {
-          problems.push({ code: "invalid-id-format", message: `Scenario ${scenario.id} step id ${JSON.stringify(step.id)} must be a lower-kebab slug` });
-        } else if (stepIds.has(step.id)) {
-          problems.push({ code: "duplicate-id", message: `Scenario ${scenario.id} has duplicate step id ${step.id}` });
-        } else {
-          stepIds.add(step.id);
-        }
-        if (typeof step.as !== "string" || !principalAliases.has(step.as)) {
-          problems.push({ code: "invalid-scenario", message: `Scenario ${scenario.id} step ${step.id} as ${JSON.stringify(step.as)} is not a declared principal` });
-        }
-        if (typeof step.invoke !== "string" || !conceptById.has(step.invoke)) {
-          problems.push({ code: "dangling-concept-reference", message: `Scenario ${scenario.id} step ${step.id} invoke ${JSON.stringify(step.invoke)} is not a declared concept` });
-        } else if (conceptById.get(step.invoke)?.role !== "behavior") {
-          problems.push({ code: "invalid-scenario", message: `Scenario ${scenario.id} step ${step.id} invoke must reference a behavior concept` });
-        }
-        if (step.input !== undefined && !isPlainObject(step.input) && !["string", "number", "boolean"].includes(typeof step.input)) {
-          problems.push({ code: "invalid-scenario", message: `Scenario ${scenario.id} step ${step.id} input must be a scalar or object` });
-        }
-        if (step.capture !== undefined && (typeof step.capture !== "string" || !step.capture)) {
-          problems.push({ code: "invalid-scenario", message: `Scenario ${scenario.id} step ${step.id} capture must be a non-empty string` });
-        }
-        if (!isPlainObject(step.expect)) {
-          problems.push({ code: "invalid-scenario", message: `Scenario ${scenario.id} step ${step.id} requires an expect object` });
-        } else {
-          unknownFields(step.expect, SCENARIO_EXPECT_FIELDS, `Scenario ${scenario.id} step ${step.id} expect`, problems);
-          if (typeof step.expect.status !== "number" || !Number.isInteger(step.expect.status)) {
-            problems.push({ code: "invalid-scenario", message: `Scenario ${scenario.id} step ${step.id} expect.status must be an integer` });
-          }
-          if (step.expect.body !== undefined && !isPlainObject(step.expect.body)) {
-            problems.push({ code: "invalid-scenario", message: `Scenario ${scenario.id} step ${step.id} expect.body must be an object` });
-          }
-        }
-      }
     }
   }
 }

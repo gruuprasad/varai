@@ -81,6 +81,25 @@ export function renderBuildPacket({ seed, brief } = {}) {
     }
     lines.push("");
   }
+  if (Array.isArray(seed.scenarios) && seed.scenarios.length) {
+    lines.push("## Product scenarios (examples, not invariants)");
+    lines.push("");
+    lines.push("Scenarios are bounded sequential examples: principals bound to actor concepts,");
+    lines.push("ordered steps that invoke behaviors, scalar/JSON input (including `$capture.path`");
+    lines.push("references), exact HTTP status assertions, and optional partial JSON body assertions.");
+    lines.push("Do not invent concurrency, temporal windows, performance checks, arbitrary");
+    lines.push("expressions, database inspection, or user-supplied test code — those are out of language.");
+    lines.push("A passing scenario proves one concrete interaction; it does not prove a universal rule.");
+    lines.push("");
+    for (const scenario of [...seed.scenarios].sort((a, b) => a.id.localeCompare(b.id))) {
+      const principals = (scenario.principals ?? [])
+        .map((principal) => `${principal.as}=${principal.actor}`)
+        .join(", ");
+      const stepCount = Array.isArray(scenario.steps) ? scenario.steps.length : 0;
+      lines.push(`- \`${scenario.id}\`: ${scenario.name} — ${stepCount} step(s); principals: ${principals || "(none)"}`);
+    }
+    lines.push("");
+  }
   lines.push("## Requirements");
   lines.push("");
   for (const commitment of [...seed.commitments].sort((a, b) => a.id.localeCompare(b.id))) {

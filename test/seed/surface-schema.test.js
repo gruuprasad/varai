@@ -172,10 +172,31 @@ test("surfaces and scenarios are sorted into the canonical form and content hash
       },
     ],
     scenarios: [
-      { id: "scenario.z", name: "Z", principals: [], steps: [] },
-      { id: "scenario.a", name: "A", principals: [], steps: [] },
+      {
+        id: "scenario.z",
+        name: "Z",
+        principals: [{ as: "actor", actor: "actor.employee" }],
+        steps: [{
+          id: "go",
+          as: "actor",
+          invoke: "behavior.submit-request",
+          expect: { status: 200 },
+        }],
+      },
+      {
+        id: "scenario.a",
+        name: "A",
+        principals: [{ as: "actor", actor: "actor.employee" }],
+        steps: [{
+          id: "go",
+          as: "actor",
+          invoke: "behavior.withdraw-request",
+          expect: { status: 200 },
+        }],
+      },
     ],
   });
+  assert.equal(checkSeed(seed).valid, true, checkSeed(seed).problems.map((p) => p.message).join("; "));
   const canonical = canonicalizeSeed(seed);
   assert.deepEqual(canonical.surfaces.map((s) => s.id), ["surface.a-api", "surface.z-api"]);
   assert.deepEqual(canonical.scenarios.map((s) => s.id), ["scenario.a", "scenario.z"]);

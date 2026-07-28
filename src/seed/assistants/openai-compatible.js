@@ -18,7 +18,7 @@ Rules:
 - Checkable relations: ${SEED_RELATIONS.filter((relation) => !RECORDED_ONLY_RELATIONS.includes(relation)).join(", ")}. Commitment targets are {"concept": "<id>"} or {"literal": "<scalar>"}.
 - Commitment ids look like "commitment.booking-creates-booking". Every commitment has "expectation": "present" or "absent".
 - Surfaces (ids like "surface.withdraw-request-api") name one externally reachable way into the system: behavior concept, channel (${SURFACE_CHANNELS.join("|")}), access (${SURFACE_ACCESS.join("|")}). No HTTP paths, files, symbols, or framework names in surfaces.
-- Scenarios (ids like "scenario.owner-can-withdraw") are bounded ordered examples: principals bound to actor concepts, sequential steps that invoke behaviors, scalar/JSON input, capture, and expect.status / optional expect.body. Scenarios may be an empty array when the human has not authored examples yet.
+- Scenarios (ids like "scenario.owner-can-withdraw") are bounded ordered examples only: non-empty principals (each \`as\` slug bound to an actor concept), non-empty sequential steps (each \`as\` a declared principal, \`invoke\` a behavior), scalar/JSON \`input\` (optional \`$capture.path\` refs), optional \`capture\`, and required \`expect.status\` (integer) with optional partial \`expect.body\`. No concurrency, windows, performance, expressions, DB inspection, or test code. The \`scenarios\` array itself may be empty when the human has not authored examples yet; each scenario entry must have principals and steps.
 - Keep stable ids when renaming; never invent a relation outside the list.
 - Prefer a small set of meaningful commitments. Put anything uncheckable in "unsupported", never in commitments.`;
 

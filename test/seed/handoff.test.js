@@ -99,3 +99,35 @@ test("handoff documents realization v2 surfaceBindings", () => {
   assert.ok(packet.includes("surfaceBindings"), "builder map documents surfaceBindings");
   assert.ok(packet.includes("surface-binding."), "surface binding id pattern is shown");
 });
+
+test("handoff documents bounded product scenarios when present", () => {
+  const draft = {
+    formatVersion: 3,
+    system: { id: "demo", name: "Demo" },
+    concepts: [
+      { id: "actor.employee", role: "actor", name: "Employee" },
+      { id: "behavior.submit-request", role: "behavior", name: "Submit" },
+    ],
+    commitments: [],
+    surfaces: [],
+    scenarios: [{
+      id: "scenario.owner-can-submit",
+      name: "Owner can submit",
+      principals: [{ as: "owner", actor: "actor.employee" }],
+      steps: [{
+        id: "submit",
+        as: "owner",
+        invoke: "behavior.submit-request",
+        expect: { status: 201 },
+      }],
+    }],
+    context: [],
+  };
+  const seed = { ...draft, ratification: { status: "ratified", contentHash: seedContentHash(draft) } };
+  const packet = renderBuildPacket({ seed });
+  assert.ok(packet.includes("## Product scenarios"), "packet has a scenarios section");
+  assert.ok(packet.includes("scenario.owner-can-submit"), "packet lists scenario ids");
+  assert.ok(packet.includes("$capture.path"), "packet documents capture refs");
+  assert.ok(packet.includes("concurrency"), "packet states concurrency is out of language");
+  assert.ok(packet.includes("examples, not invariants"), "packet frames scenarios as examples");
+});
