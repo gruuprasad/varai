@@ -198,7 +198,7 @@ async function walk(info, env, ctx, resolver, factIndex, acc, flow, graph, depth
         });
       }
     } else if (depth === 0 && !isFileWriteName(name) && !KNOWN_NOISE.has(name)
-               && !isDeclaredConstructor(name, factIndex) && !/Response$/.test(name)) {
+               && !await isDeclaredConstructor(name, factIndex, file, resolver)) {
       acc.untraced.push({
         call: name,
         reason: "unresolved function",
@@ -209,14 +209,40 @@ async function walk(info, env, ctx, resolver, factIndex, acc, flow, graph, depth
   }
 }
 
-// Constructing a declared schema or ORM model is understood construction, not an
-// unresolved call: the declaration is already in the model and the constructor
-// runs no analyzer-opaque logic. Recognition is deliberately tied to a
-// registered declaration rather than to a name shape — a global list of
-// plausible-looking constructor names would quietly license false absence
-// verdicts for whatever else happened to match.
-function isDeclaredConstructor(name, factIndex) {
-  return factIndex.schemaNames.has(name) || factIndex.modelNames.has(name);
+// Constructing a *declarative* schema or ORM model is understood construction,
+// not an unresolved call: the declaration is already in the model and the
+// constructor body runs nothing the trace would have to enter.
+//
+// All three conditions are load-bearing, because this is the one place the
+// analyzer forgives a call it could not resolve, and forgiving one wrongly
+// licenses a false absence verdict downstream:
+//
+//   1. the name is a registered schema/model kind — not just any class;
+//   2. it resolves to a declaration *from this file*, locally or through this
+//      file's imports. The registered-name sets are global, so a name match
+//      alone would accept a third-party `Session(...)` merely because some
+//      other module declares a model of the same name;
+//   3. the declaration is declarative. A class defining its own constructor
+//      runs code this trace never walked, so its effects are unknown.
+async function isDeclaredConstructor(name, factIndex, file, resolver) {
+  if (!factIndex.schemaNames.has(name) && !factIndex.modelNames.has(name)) return false;
+  const declaration = await resolver.resolveDeclaration(file, name);
+  if (!declaration?.node) return false;
+  return !hasCustomConstructor(declaration.node);
+}
+
+const CONSTRUCTOR_METHODS = new Set(["__init__", "__new__", "__post_init__"]);
+
+function hasCustomConstructor(classNode) {
+  const body = classNode.childForFieldName("body");
+  for (const member of body?.namedChildren ?? []) {
+    const definition = member.type === "decorated_definition"
+      ? member.namedChildren.find((child) => child.type === "function_definition")
+      : member;
+    if (definition?.type !== "function_definition") continue;
+    if (CONSTRUCTOR_METHODS.has(definition.childForFieldName("name")?.text)) return true;
+  }
+  return false;
 }
 
 function isStableApplicationBoundary(info, subject) {

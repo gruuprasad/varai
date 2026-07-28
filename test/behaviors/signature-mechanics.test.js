@@ -14,14 +14,18 @@ import { createResolver } from "../../src/scanners/behaviors/resolver.js";
 import { traceBody } from "../../src/scanners/behaviors/body.js";
 
 async function traceNamed(source, name, factIndex = {}) {
+  return traceFiles({ "h.py": source }, "h.py", name, factIndex);
+}
+
+async function traceFiles(files, entryFile, name, factIndex = {}) {
   const dir = await mkdtemp(join(tmpdir(), "varai-sigmech-"));
-  await writeFile(join(dir, "h.py"), source);
+  for (const [file, source] of Object.entries(files)) await writeFile(join(dir, file), source);
   const ctx = createScanContext(dir);
-  const tree = await ctx.tree("h.py", "python");
+  const tree = await ctx.tree(entryFile, "python");
   const caps = await queryTree(tree, "python", "(function_definition) @fn");
   const fn = caps.map((cap) => cap.node).find((node) => node.childForFieldName("name").text === name);
-  const resolver = createResolver(["h.py"], ctx);
-  return traceBody(fn, "h.py", ctx, resolver, {
+  const resolver = createResolver(Object.keys(files), ctx);
+  return traceBody(fn, entryFile, ctx, resolver, {
     schemaNames: new Set(), modelNames: new Set(), envNames: new Set(), ...factIndex,
   });
 }
@@ -68,7 +72,11 @@ def book_slot(db):
 });
 
 test("a registered schema constructor in the body is a known call", async () => {
-  const out = await traceNamed(`def read_slot(db):
+  const out = await traceNamed(`class SlotView(BaseModel):
+    id: int
+    label: str
+
+def read_slot(db):
     return SlotView(id=1, label="a")
 `, "read_slot", { schemaNames: new Set(["SlotView"]) });
 
@@ -79,7 +87,14 @@ test("an unregistered constructor-shaped call stays unresolved", async () => {
   // Nothing about CapitalCase alone makes a call understood. Only a call that
   // resolves to a declared schema or model is known; a global noise list of
   // plausible-looking names would silently license false absence verdicts.
-  const out = await traceNamed(`def book_slot(db):
+  const out = await traceNamed(`class Booking:
+    slot_id: int
+
+class AuditTrail:
+    def __init__(self, booking):
+        remote_audit(booking)
+
+def book_slot(db):
     booking = Booking(slot_id=1)
     audit = AuditTrail(booking)
     db.add(booking)
@@ -88,8 +103,70 @@ test("an unregistered constructor-shaped call stays unresolved", async () => {
   assert.deepEqual(untracedCalls(out), ["AuditTrail"]);
 });
 
+test("a same-named declaration elsewhere in the repo does not excuse a foreign call", async () => {
+  // The registered-name sets are global, so a third-party `Session(...)` shares
+  // a name with a locally declared model. Suppressing on the name alone would
+  // accept a call this file never imported and cannot resolve.
+  const out = await traceFiles({
+    "models.py": `class Session:
+    pass
+`,
+    "main.py": `from sqlalchemy.orm import Session
+
+def handler(db):
+    scoped = Session(bind=db)
+    db.commit()
+`,
+  }, "main.py", "handler", { modelNames: new Set(["Session"]) });
+
+  assert.deepEqual(untracedCalls(out), ["Session"]);
+});
+
+test("a declared constructor with custom __init__ keeps the trace incomplete", async () => {
+  // A declarative model's constructor only assigns fields. One that defines
+  // __init__ runs code the trace never entered, so treating it as understood
+  // would claim analyzed coverage over an effect nobody looked at.
+  const out = await traceFiles({
+    "models.py": `class Booking:
+    def __init__(self, slot_id):
+        self.slot_id = slot_id
+        external_audit_write(slot_id)
+`,
+    "main.py": `from models import Booking
+
+def handler(db):
+    booking = Booking(slot_id=1)
+    db.add(booking)
+`,
+  }, "main.py", "handler", { modelNames: new Set(["Booking"]) });
+
+  assert.deepEqual(untracedCalls(out), ["Booking"]);
+});
+
+test("a declarative model imported across modules is still a known call", async () => {
+  const out = await traceFiles({
+    "models.py": `class Booking:
+    slot_id: int
+`,
+    "main.py": `from models import Booking
+
+def handler(db):
+    booking = Booking(slot_id=1)
+    db.add(booking)
+`,
+  }, "main.py", "handler", { modelNames: new Set(["Booking"]) });
+
+  assert.deepEqual(untracedCalls(out), []);
+});
+
 test("an unknown body helper keeps the trace incomplete", async () => {
-  const out = await traceNamed(`def book_slot(
+  const out = await traceNamed(`class Booking:
+    slot_id: int
+
+class BookingRequest(BaseModel):
+    slot_id: int
+
+def book_slot(
     request: BookingRequest,
     db: Session = Depends(get_db),
 ):

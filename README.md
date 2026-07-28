@@ -125,7 +125,7 @@ closed judge of "does this match your intent" is just another black box to trust
 npm test
 ```
 
-426 tests, all passing, on Node 20+. The suite is the release gate: it exits
+429 tests, all passing, on Node 20+. The suite is the release gate: it exits
 non-zero on any failure, and no documented claim about Varai's behavior should
 outrun it.
 

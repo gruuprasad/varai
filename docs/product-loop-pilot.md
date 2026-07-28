@@ -91,3 +91,13 @@ introducing a single new positive claim.
 The remaining `cannot_verify`, `commitment.book-slot-requires-availability`,
 rests on `api.condition`, a different capability that is still subsystem-scoped
 `partial`. It is honestly unverifiable, not a coverage record this work missed.
+
+**What a constructor has to satisfy to be forgiven.** This is the only place the
+analyzer excuses a call it could not resolve, so all three conditions matter: the
+name is a registered schema/model kind, it resolves to a declaration reachable
+from *that file's* imports, and the class defines no constructor of its own. A
+bare name match against the global registered-name sets would accept a
+third-party `Session(...)` because some unrelated module declares a model of the
+same name, and a class with a custom `__init__` runs code the trace never walked.
+Either would produce `analyzed` coverage over an effect nobody looked at, which
+is precisely the false-absence licence this work exists to avoid.
