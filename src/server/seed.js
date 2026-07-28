@@ -148,6 +148,11 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
       send(res, 409, { error: "The posted draft differs from the draft under review; draft again and review before ratifying." });
       return;
     }
+    const unresolvedCount = (session.review.questions?.length ?? 0) + (session.review.unsupported?.length ?? 0);
+    if (unresolvedCount > 0) {
+      send(res, 409, { error: "Resolve unresolved questions and unsupported statements before approving." });
+      return;
+    }
     const check = checkSeed({ context: [], ...body.draft });
     if (!check.valid) {
       send(res, 422, { error: "Draft is not a valid seed", problems: check.problems });
@@ -159,13 +164,111 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
     send(res, 200, { contentHash: result.contentHash, path: result.path });
   }
 
+  async function resolveUnresolved(req, res, body) {
+    const session = sessionForCurrentSeed();
+    if (!session?.review?.draft) {
+      send(res, 409, { error: "No draft under review." });
+      return;
+    }
+    if (session.stale) {
+      send(res, 409, { error: "The approved spec changed since this draft began." });
+      return;
+    }
+    const { action, kind, index, answer } = body;
+    if (!["answer", "to_context", "remove"].includes(action)) {
+      send(res, 400, { error: "action must be answer, to_context, or remove" });
+      return;
+    }
+    if (!["question", "unsupported"].includes(kind)) {
+      send(res, 400, { error: "kind must be question or unsupported" });
+      return;
+    }
+    const listKey = kind === "question" ? "questions" : "unsupported";
+    const list = [...(session.review[listKey] ?? [])];
+    if (!Number.isInteger(index) || index < 0 || index >= list.length) {
+      send(res, 400, { error: "index is out of range" });
+      return;
+    }
+    const itemText = list[index];
+    let draft = session.review.draft;
+    let questions = [...(session.review.questions ?? [])];
+    let unsupported = [...(session.review.unsupported ?? [])];
+
+    if (action === "answer") {
+      if (typeof answer !== "string" || !answer.trim()) {
+        send(res, 400, { error: "answer text is required" });
+        return;
+      }
+      // Record the human answer in conversation and drop the queue item; the
+      // next assistant turn can incorporate it. No JSON pasting required.
+      if (kind === "question") questions.splice(index, 1);
+      else unsupported.splice(index, 1);
+      const conversation = [
+        ...(session.conversation ?? []),
+        { role: "user", content: `Answer (${kind}): ${itemText}\n${answer.trim()}` },
+      ];
+      const review = {
+        ...session.review,
+        questions,
+        unsupported,
+        draft,
+        diff: diffSeeds(currentSeed(), draft),
+        contentHash: seedContentHash({ context: [], ...draft }),
+      };
+      const next = writeAuthoringSession(repoPath, {
+        baseSeedHash: session.baseSeedHash,
+        conversation,
+        review,
+      });
+      send(res, 200, { ...review, authoring: { ...next, stale: false } });
+      return;
+    }
+
+    if (action === "to_context") {
+      const contextId = `context.recorded-${Date.now().toString(36)}`;
+      draft = {
+        ...draft,
+        context: [...(draft.context ?? []), { id: contextId, text: itemText }],
+      };
+      if (kind === "question") questions.splice(index, 1);
+      else unsupported.splice(index, 1);
+    } else {
+      // remove via reviewed proposal — drop from queue only; draft unchanged
+      if (kind === "question") questions.splice(index, 1);
+      else unsupported.splice(index, 1);
+    }
+
+    const problems = checkSeed({ context: [], ...draft }).problems;
+    const review = {
+      ...session.review,
+      draft,
+      questions,
+      unsupported,
+      problems,
+      diff: diffSeeds(currentSeed(), draft),
+      contentHash: problems.length ? null : seedContentHash({ context: [], ...draft }),
+      source: session.review.source ?? "assistant",
+    };
+    const next = writeAuthoringSession(repoPath, {
+      baseSeedHash: session.baseSeedHash,
+      conversation: session.conversation ?? [],
+      review,
+    });
+    send(res, 200, { ...review, authoring: { ...next, stale: false } });
+  }
+
   return {
     async handle(req, res, url) {
       if (req.method === "GET" && url.pathname === "/api/seed") {
         send(res, 200, await seedStatus());
         return true;
       }
-      if (req.method === "POST" && (url.pathname === "/api/seed/draft" || url.pathname === "/api/seed/ratify" || url.pathname === "/api/seed/draft/reject")) {
+      if (req.method === "POST" && (
+        url.pathname === "/api/seed/draft" ||
+        url.pathname === "/api/seed/ratify" ||
+        url.pathname === "/api/seed/draft/reject" ||
+        url.pathname === "/api/seed/draft/resolve"
+      )) {
         if (!originOk(req, port)) {
           send(res, 403, { error: "Unexpected origin" });
           return true;
@@ -173,6 +276,7 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
         const body = await readJsonBody(req);
         if (url.pathname === "/api/seed/draft") await draft(req, res, body);
         else if (url.pathname === "/api/seed/ratify") await ratify(req, res, body);
+        else if (url.pathname === "/api/seed/draft/resolve") await resolveUnresolved(req, res, body);
         else {
           clearAuthoringSession(repoPath);
           send(res, 200, { draft: null });

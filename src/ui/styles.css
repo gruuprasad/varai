@@ -1924,3 +1924,128 @@ body {
   color: var(--danger, #a33);
   font-weight: 600;
 }
+
+/* ── Product control room (Blueprint / Build / Verify) ── */
+.nav-divider {
+  height: 1px;
+  margin: 10px 14px;
+  background: var(--border);
+}
+
+.blueprint, .build-view, .verification {
+  padding: 8px 4px 24px;
+  max-width: 920px;
+}
+
+.blueprint-head, .build-head, .verification-head {
+  margin-bottom: 16px;
+}
+
+.blueprint-group, .build-files, .build-interventions, .build-log,
+.verification-decisions, .unresolved-queue {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.blueprint-list, .decision-list, .unresolved-list, .build-events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.blueprint-item, .decision, .unresolved-item, .build-event {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.blueprint-item:last-child, .decision:last-child, .unresolved-item:last-child, .build-event:last-child {
+  border-bottom: none;
+}
+
+.observation-chip {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-mid);
+}
+
+.observation-realized { border-color: var(--verdict-confirmed); color: var(--verdict-confirmed); }
+.observation-missing { border-color: var(--verdict-missing); color: var(--verdict-missing); }
+.observation-unaccounted { border-color: var(--verdict-missing); color: var(--verdict-missing); }
+.observation-ambiguous, .observation-unverifiable, .observation-unknown {
+  border-color: var(--verdict-unknown);
+  color: var(--verdict-unknown);
+}
+
+.surface-meta { color: var(--text-dim); font-size: 12px; }
+.scenario-steps { width: 100%; margin: 6px 0 0 1.2em; color: var(--text-mid); font-size: 13px; }
+
+.build-fingerprint, .build-adapter, .build-preview { color: var(--text-mid); font-size: 13px; }
+.build-state-building, .build-state-verifying { border-color: var(--verdict-unknown); color: var(--verdict-unknown); }
+.build-state-ready { border-color: var(--verdict-confirmed); color: var(--verdict-confirmed); }
+.build-state-needs_attention, .build-state-build_failed { border-color: var(--verdict-missing); color: var(--verdict-missing); }
+
+.build-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.build-actions textarea, .build-actions select {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--bg);
+  color: inherit;
+}
+
+.event-kind {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.verification.gate-ready {
+  border: 1px solid var(--verdict-confirmed);
+  border-radius: 12px;
+  padding: 16px;
+  background: rgba(var(--accent-rgb), 0.04);
+}
+
+.verification.gate-blocked {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.decision-label { color: var(--text); }
+.unresolved-kind {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--verdict-unknown);
+}
+.unresolved-actions { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; margin-top: 4px; }
+.unresolved-text { flex: 1; min-width: 12rem; }
+
+.verification-reasons, .verification-drilldown {
+  margin-top: 12px;
+  color: var(--text-mid);
+}

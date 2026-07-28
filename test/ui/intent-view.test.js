@@ -6,6 +6,7 @@ import {
   renderSeedDiff,
   renderSeedStatus,
   renderUnsupported,
+  renderUnresolvedQueue,
   shortHash,
 } from "../../src/ui/intent-view.js";
 import { diffSeeds } from "../../src/seed/diff.js";
@@ -34,16 +35,31 @@ test("the review view renders the proposal diff and an explicit ratify action", 
   assert.ok(diffHtml.includes("resource.waitlist"));
   assert.ok(diffHtml.includes("diff-added"));
 
-  const actions = renderReviewActions(state);
+  const actions = renderReviewActions({ ...state, questions: [], unsupported: [] });
   assert.ok(actions.includes("intent-ratify"), "ratification is an explicit button");
   assert.ok(actions.includes(shortHash(state.contentHash)), "the hash under review is visible");
   assert.ok(!actions.includes("disabled"), "a clean draft can be ratified");
 });
 
 test("validation problems block the ratify action", () => {
-  const state = { ...draftState(), problems: [{ code: "unknown-relation", message: "forbids is not checkable" }] };
+  const state = { ...draftState(), problems: [{ code: "unknown-relation", message: "forbids is not checkable" }], questions: [], unsupported: [] };
   const actions = renderReviewActions(state);
   assert.ok(actions.includes("disabled"));
+});
+
+test("unresolved questions block approval with an accessible reason and queue actions", () => {
+  const state = draftState();
+  const actions = renderReviewActions(state);
+  assert.ok(actions.includes("disabled"));
+  assert.ok(actions.includes("aria-describedby=\"intent-approve-blocked\""));
+  assert.match(actions, /Resolve unresolved/i);
+
+  const queue = renderUnresolvedQueue(state);
+  assert.match(queue, /Unresolved \(2\)/);
+  assert.match(queue, /unresolved-answer/);
+  assert.match(queue, /unresolved-to-context/);
+  assert.match(queue, /unresolved-remove/);
+  assert.match(queue, /aria-label="Answer:/);
 });
 
 test("unsupported prose stays visible instead of disappearing", () => {

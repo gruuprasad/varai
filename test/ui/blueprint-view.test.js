@@ -1,0 +1,56 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { renderBlueprint } from "../../src/ui/blueprint-view.js";
+
+const empty = {
+  empty: true,
+  actors: [],
+  behaviors: [],
+  surfaces: [],
+  scenarios: [],
+  resources: [],
+  unaccounted: [],
+  ambiguous: [],
+};
+
+const populated = {
+  empty: false,
+  system: { id: "demo", name: "Demo" },
+  actors: [{ id: "actor.employee", name: "Employee", observation: "realized", commitmentIds: ["c1"], evidenceIds: ["c1"] }],
+  behaviors: [{ id: "behavior.submit", name: "Submit", observation: "missing", commitmentIds: ["c2"], evidenceIds: ["c2"] }],
+  resources: [{ id: "resource.request", name: "Request", observation: null, commitmentIds: [], evidenceIds: [] }],
+  surfaces: [
+    { id: "surface.submit-api", name: "Submit API", channel: "api", access: "authenticated", observation: "realized", evidenceIds: ["surface.submit-api"] },
+    { id: "surface.submit-ui", name: "Submit UI", channel: "ui", access: "authenticated", observation: "missing", evidenceIds: ["surface.submit-ui"] },
+  ],
+  scenarios: [{
+    id: "scenario.happy",
+    name: "Happy path",
+    observation: "missing",
+    result: "failed",
+    evidenceIds: ["scenario.happy", "status-mismatch"],
+    steps: [{ as: "requester", invoke: "behavior.submit" }],
+  }],
+  unaccounted: [{ key: "DELETE /x", name: "DELETE /x", observation: "unaccounted", evidenceIds: ["DELETE /x"] }],
+  ambiguous: [{ surfaceId: "surface.stale", observation: "ambiguous", evidenceIds: ["surface.stale"] }],
+};
+
+test("empty blueprint renders an empty control-room state", () => {
+  const html = renderBlueprint(empty);
+  assert.match(html, /blueprint-empty|No product blueprint/i);
+  assert.doesNotMatch(html, /observation-realized/);
+});
+
+test("blueprint renders actors, behaviors, surfaces, scenarios with observation chips and evidence ids", () => {
+  const html = renderBlueprint(populated);
+  assert.match(html, /Employee/);
+  assert.match(html, /Submit API/);
+  assert.match(html, /Happy path/);
+  assert.match(html, /observation-realized/);
+  assert.match(html, /observation-missing/);
+  assert.match(html, /observation-unaccounted/);
+  assert.match(html, /observation-ambiguous/);
+  assert.match(html, /data-evidence-id="surface\.submit-ui"/);
+  assert.match(html, /data-evidence-id="scenario\.happy"/);
+  assert.match(html, /data-evidence-id="DELETE \/x"/);
+});

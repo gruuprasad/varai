@@ -1,7 +1,8 @@
 // Pure Seed Studio presentation helpers. The intent view separates three
 // things visually: ratified seed state, the untrusted assistant proposal under
 // review, and the deterministic diff between them. Ratification is always an
-// explicit button, never a side effect.
+// explicit button, never a side effect. Approval is disabled while the
+// unresolved queue (questions + unsupported) still has items.
 
 const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
@@ -12,6 +13,26 @@ export function shortHash(hash) {
 function formatTarget(target) {
   if (target?.concept !== undefined) return target.concept;
   return JSON.stringify(target?.literal);
+}
+
+export function unresolvedItems(draftState) {
+  const items = [];
+  for (const [index, question] of (draftState?.questions ?? []).entries()) {
+    items.push({ kind: "question", index, text: question });
+  }
+  for (const [index, text] of (draftState?.unsupported ?? []).entries()) {
+    items.push({ kind: "unsupported", index, text });
+  }
+  return items;
+}
+
+export function approvalBlockedReason(draftState) {
+  if (!draftState?.draft) return "No draft under review.";
+  if (draftState.problems?.length) return "Fix the validation problems before approving.";
+  if (unresolvedItems(draftState).length) {
+    return "Resolve unresolved questions and unsupported statements before approving.";
+  }
+  return null;
 }
 
 export function renderSeedStatus(seedData) {
@@ -48,6 +69,27 @@ export function renderUnsupported(unsupported) {
     `</ul></section>`;
 }
 
+export function renderUnresolvedQueue(draftState) {
+  const items = unresolvedItems(draftState);
+  if (!items.length) return "";
+  return `<section class="unresolved-queue" aria-label="Unresolved queue">` +
+    `<h4>Unresolved (${items.length})</h4>` +
+    `<p class="intent-note">Approval stays disabled until each item is answered, converted to context, or removed via a reviewed proposal.</p>` +
+    `<ul class="unresolved-list">` + items.map((item) =>
+      `<li class="unresolved-item unresolved-${esc(item.kind)}" data-kind="${esc(item.kind)}" data-index="${item.index}">` +
+      `<span class="unresolved-kind">${esc(item.kind)}</span> ` +
+      `<span class="unresolved-text">${esc(item.text)}</span>` +
+      `<div class="unresolved-actions">` +
+      `<button type="button" class="btn-quiet unresolved-answer" data-kind="${esc(item.kind)}" data-index="${item.index}" ` +
+      `aria-label="Answer: ${esc(item.text)}">Answer</button>` +
+      `<button type="button" class="btn-quiet unresolved-to-context" data-kind="${esc(item.kind)}" data-index="${item.index}" ` +
+      `aria-label="Convert to context: ${esc(item.text)}">Convert to context</button>` +
+      `<button type="button" class="btn-quiet unresolved-remove" data-kind="${esc(item.kind)}" data-index="${item.index}" ` +
+      `aria-label="Remove via proposal: ${esc(item.text)}">Remove</button>` +
+      `</div></li>`
+    ).join("") + `</ul></section>`;
+}
+
 export function renderProblems(problems) {
   if (!problems?.length) return "";
   return `<section class="intent-problems"><h4>Validation problems</h4><ul>` +
@@ -71,12 +113,13 @@ export function renderDraftStructure(draft) {
 export function renderSeedDiff(diff) {
   if (!diff) return "";
   const groups = [];
-  for (const key of ["concepts", "commitments", "context"]) {
+  for (const key of ["concepts", "commitments", "surfaces", "scenarios", "context"]) {
     const group = diff[key];
+    if (!group) continue;
     const rows = [];
-    for (const item of group.added) rows.push(`<li class="diff-added">+ ${esc(item.id)}</li>`);
-    for (const item of group.removed) rows.push(`<li class="diff-removed">− ${esc(item.id)}</li>`);
-    for (const pair of group.changed) rows.push(`<li class="diff-changed">~ ${esc(pair.after.id)}</li>`);
+    for (const item of group.added ?? []) rows.push(`<li class="diff-added">+ ${esc(item.id)}</li>`);
+    for (const item of group.removed ?? []) rows.push(`<li class="diff-removed">− ${esc(item.id)}</li>`);
+    for (const pair of group.changed ?? []) rows.push(`<li class="diff-changed">~ ${esc(pair.after.id)}</li>`);
     if (rows.length) groups.push(`<section class="diff-group"><h4>${esc(key)}</h4><ul>${rows.join("")}</ul></section>`);
   }
   if (diff.systemChanged) groups.unshift(`<section class="diff-group"><h4>system</h4><ul><li class="diff-changed">~ system identity changed</li></ul></section>`);
@@ -87,11 +130,15 @@ export function renderSeedDiff(diff) {
 
 export function renderReviewActions(draftState) {
   if (!draftState?.draft) return "";
-  const blocked = draftState.problems?.length > 0;
+  const reason = approvalBlockedReason(draftState);
+  const blocked = Boolean(reason);
   return `<div class="intent-actions">` +
-    `<button class="intent-ratify" id="intent-ratify" type="button"${blocked ? " disabled" : ""}>` +
+    `<button class="intent-ratify" id="intent-ratify" type="button"` +
+    `${blocked ? " disabled" : ""}` +
+    ` aria-label="Approve this draft"` +
+    `${blocked ? ` aria-disabled="true" aria-describedby="intent-approve-blocked"` : ""}>` +
     `Approve this draft${draftState.contentHash ? ` (${esc(shortHash(draftState.contentHash))})` : ""}</button>` +
-    `<button class="intent-reject" id="intent-reject" type="button">Discard draft</button>` +
-    (blocked ? `<p class="intent-note">Fix the problems before approving.</p>` : "") +
+    `<button class="intent-reject" id="intent-reject" type="button" aria-label="Discard draft">Discard draft</button>` +
+    (blocked ? `<p class="intent-note" id="intent-approve-blocked">${esc(reason)}</p>` : "") +
     `</div>`;
 }

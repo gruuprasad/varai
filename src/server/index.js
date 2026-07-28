@@ -14,6 +14,7 @@ import { readSourceSnippet } from "./source.js";
 import { createReconciliationHandler } from "./reconciliation.js";
 import { createSeedHandlers } from "./seed.js";
 import { createBuilderHandlers } from "./builder.js";
+import { createControlRoomHandlers } from "./control-room.js";
 import { createEvolutionHandler } from "./evolution.js";
 import { assistantFromEnvironment } from "../seed/assistants/openai-compatible.js";
 import { displayLanguage } from "../reporters/display-language.js";
@@ -171,12 +172,26 @@ export async function startServer({
   const reconciliationHandler = createReconciliationHandler({ repoPath: absRepo, getModel: seedGetModel });
   const evolutionHandler = createEvolutionHandler({ repoPath: absRepo });
   const builderHandlers = createBuilderHandlers({ repoPath: absRepo, port, broadcast });
+  const controlRoomHandlers = createControlRoomHandlers({ repoPath: absRepo, getModel: seedGetModel });
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
 
     if (url.pathname.startsWith("/api/build")) {
       builderHandlers.handle(req, res, url).then((handled) => {
+        if (!handled) {
+          res.writeHead(404);
+          res.end("Not Found");
+        }
+      }).catch((err) => {
+        res.writeHead(err.statusCode ?? 500, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ error: err.message }));
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/control-room") {
+      controlRoomHandlers.handle(req, res, url).then((handled) => {
         if (!handled) {
           res.writeHead(404);
           res.end("Not Found");

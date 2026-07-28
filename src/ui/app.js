@@ -7,7 +7,11 @@ import {
   renderDraftStructure,
   renderProblems,
   renderUnsupported,
+  renderUnresolvedQueue,
 } from "./intent-view.js";
+import { renderBlueprint } from "./blueprint-view.js";
+import { renderBuild } from "./build-view.js";
+import { renderVerification } from "./verification-view.js";
 import { renderReport } from "./report-view.js";
 import {
   countSpecMatches, renderSpecDoc, renderSpecEvidence, renderSpecHeader, renderSpecNotes, renderSpecSurfaces, requirementVisible,
@@ -40,8 +44,9 @@ if (el.backBtn) {
   });
 }
 
-let activeView = "review";
+let activeView = "blueprint";
 let progressionData = null;
+let controlRoomData = null;
 let expandedId = null;
 let changesOnly = false;
 let scanData = null;
@@ -54,9 +59,10 @@ const openSnippets = new Set();
 const events = new EventSource("/api/events");
 events.addEventListener("message", (event) => {
   const message = JSON.parse(event.data);
-  if (message.type === "model") { scanData = message.data; setStatus("live", "Live"); refreshSeed(); render(); }
+  if (message.type === "model") { scanData = message.data; setStatus("live", "Live"); refreshSeed(); refreshControlRoom(); render(); }
   else if (message.type === "semantic-diff") { diffData = message.data; render(); }
-  else if (message.type === "seed") { refreshSeed(); }
+  else if (message.type === "seed") { refreshSeed(); refreshControlRoom(); }
+  else if (message.type === "build") { refreshControlRoom(); }
   else if (message.type === "error") setStatus("error", "Error");
 });
 events.addEventListener("open", () => setStatus("scanning", "Connecting..."));
@@ -72,7 +78,11 @@ function refreshSeed() {
   fetch("/api/seed").then((response) => response.json()).then((data) => { seedData = data; render(); }).catch(() => {});
   fetch("/api/reconciliation").then((response) => response.json()).then((data) => { reconciliationData = data; render(); }).catch(() => {});
 }
+function refreshControlRoom() {
+  return fetch("/api/control-room").then((response) => response.json()).then((data) => { controlRoomData = data; render(); }).catch(() => {});
+}
 refreshSeed();
+refreshControlRoom();
 
 function setStatus(kind, text) {
   if (el.statusDot) el.statusDot.className = `status-dot ${kind}`;
@@ -162,27 +172,19 @@ function emptyDetailPlaceholder(title = "Select an item", message = "Select an i
 }
 
 function render() {
-  if (activeView === "intent") {
-    renderTopbar();
-    renderNav();
-    renderIntent();
-    return;
-  }
-  if (activeView === "review") {
-    renderTopbar();
-    renderNav();
-    renderReview();
-    return;
-  }
-  if (activeView === "progression") {
-    renderTopbar();
-    renderNav();
-    renderProgression();
-    return;
-  }
-  if (!scanData?.model) return;
   renderTopbar();
   renderNav();
+  if (activeView === "blueprint") { renderBlueprintView(); return; }
+  if (activeView === "intent" || activeView === "change") { renderIntent(); return; }
+  if (activeView === "build") { renderBuildView(); return; }
+  if (activeView === "verify") { renderVerifyView(); return; }
+  if (activeView === "review") { renderReview(); return; }
+  if (activeView === "progression") { renderProgression(); return; }
+  if (!scanData?.model) {
+    renderPanes(`<div class="empty-state"><div class="empty-spinner"></div><span>Scanning repository...</span></div>`, "", { inlineExpand: true });
+    return;
+  }
+  // Architecture = existing System Model / code-map projections (no second IR).
   if (activeView === "subjects") renderSubjects();
   else if (activeView === "capabilities") renderCapabilities();
   else if (activeView === "changes") renderChanges();
@@ -201,6 +203,10 @@ function renderTopbar() {
 }
 
 const NAV_ICONS = {
+  blueprint: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg>`,
+  change: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+  build: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
+  verify: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
   system: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>`,
   subjects: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
   capabilities: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
@@ -221,13 +227,17 @@ const MAP_MODES = [
 function renderNav() {
   const changes = diffData?.diff?.summary?.semanticChanges ?? 0;
   el.sidebarNav.innerHTML =
-    navItem("review", "✓", "Report", null) +
-    navItem("intent", "✦", "Spec", null) +
-    navItem("system", "◎", "Code map", null) +
-    navItem("changes", "∆", "Changes", changes || null) +
+    navItem("blueprint", "▦", "Blueprint", null) +
+    navItem("change", "✦", "Change", null) +
+    navItem("build", "▸", "Build", null) +
+    navItem("verify", "✓", "Verify", null) +
+    navItem("system", "◎", "Architecture", null) +
+    `<div class="nav-divider" aria-hidden="true"></div>` +
+    navItem("review", "☰", "Report", null) +
+    navItem("changes", "∆", "Model Δ", changes || null) +
     navItem("progression", "↗", "Progression", null);
   el.sidebarNav.querySelectorAll("[data-view]").forEach((item) => item.addEventListener("click", () => {
-    activeView = item.dataset.view;
+    activeView = item.dataset.view === "change" ? "intent" : item.dataset.view;
     expandedId = null;
     changesOnly = false;
     el.search.value = "";
@@ -255,8 +265,9 @@ function renderProgression() {
 }
 
 function navItem(view, fallbackIcon, name, count) {
-  const iconSvg = NAV_ICONS[view] || esc(fallbackIcon);
+  const iconSvg = NAV_ICONS[view] || NAV_ICONS[view === "change" ? "change" : view] || esc(fallbackIcon);
   const active = activeView === view ||
+    (view === "change" && activeView === "intent") ||
     (view === "system" && MAP_MODES.some(([mode]) => mode === activeView));
   return `<button class="nav-item${active ? " active" : ""}" data-view="${view}">` +
     `<span class="nav-icon">${iconSvg}</span><span class="nav-name">${esc(name)}</span>` +
@@ -398,6 +409,7 @@ function renderIntent() {
     hideSearch();
     renderPanes(`<div class="spec-doc"><section class="spec-review">` +
       `<h3 class="group-heading">Draft under review (${esc(draft.source)})</h3>` +
+      renderUnresolvedQueue(draft) +
       renderQuestions(draft.questions) +
       renderUnsupported(draft.unsupported) +
       renderProblems(draft.problems) +
@@ -406,6 +418,7 @@ function renderIntent() {
       renderReviewActions(draft) +
       `</section></div>`, "", { inlineExpand: true });
     bindComposer(draft);
+    bindUnresolved(draft);
     return;
   }
 
@@ -474,6 +487,96 @@ function bindComposer(draft) {
     const data = await response.json();
     if (!response.ok) { alert(data.error ?? "Ratification failed"); return; }
     refreshSeed();
+    refreshControlRoom();
+  });
+}
+
+function bindUnresolved(draft) {
+  document.querySelectorAll(".unresolved-answer").forEach((button) => button.addEventListener("click", async () => {
+    const answer = window.prompt("Your answer:");
+    if (answer == null || !answer.trim()) return;
+    await postResolve({
+      action: "answer",
+      kind: button.dataset.kind,
+      index: Number(button.dataset.index),
+      answer,
+    });
+  }));
+  document.querySelectorAll(".unresolved-to-context").forEach((button) => button.addEventListener("click", async () => {
+    await postResolve({
+      action: "to_context",
+      kind: button.dataset.kind,
+      index: Number(button.dataset.index),
+    });
+  }));
+  document.querySelectorAll(".unresolved-remove").forEach((button) => button.addEventListener("click", async () => {
+    await postResolve({
+      action: "remove",
+      kind: button.dataset.kind,
+      index: Number(button.dataset.index),
+    });
+  }));
+}
+
+async function postResolve(body) {
+  const response = await fetch("/api/seed/draft/resolve", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const data = await response.json();
+  if (!response.ok) { alert(data.error ?? "Could not update unresolved item"); return; }
+  seedData = { ...seedData, draft: data };
+  refreshControlRoom();
+  render();
+}
+
+function renderBlueprintView() {
+  hideSearch();
+  const blueprint = controlRoomData?.blueprint ?? { empty: true };
+  renderPanes(renderBlueprint(blueprint), "", { inlineExpand: true });
+}
+
+function renderBuildView() {
+  hideSearch();
+  const build = controlRoomData?.build ?? { session: null, live: { running: false }, events: [], adapters: [] };
+  renderPanes(renderBuild(build), "", { inlineExpand: true });
+  bindBuildControls();
+}
+
+function renderVerifyView() {
+  hideSearch();
+  const verification = controlRoomData?.verification ?? { phase: "empty", gate: null, decisions: [] };
+  renderPanes(renderVerification(verification), "", { inlineExpand: true });
+}
+
+function bindBuildControls() {
+  $("build-run")?.addEventListener("click", async () => {
+    const adapter = $("build-adapter")?.value;
+    if (!adapter) return;
+    const response = await fetch("/api/build/run", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adapter }),
+    });
+    const data = await response.json();
+    if (!response.ok) { alert(data.error ?? "Build failed to start"); return; }
+    await refreshControlRoom();
+    activeView = "verify";
+    render();
+  });
+  $("build-send")?.addEventListener("click", async () => {
+    const message = $("build-message")?.value?.trim();
+    if (!message) return;
+    const response = await fetch("/api/build/message", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }),
+    });
+    if (!response.ok) {
+      const data = await response.json();
+      alert(data.error ?? "Message failed");
+      return;
+    }
+    refreshControlRoom();
+  });
+  $("build-stop")?.addEventListener("click", async () => {
+    await fetch("/api/build/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    refreshControlRoom();
   });
 }
 
