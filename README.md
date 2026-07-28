@@ -113,6 +113,7 @@ closed judge of "does this match your intent" is just another black box to trust
 ## Learn more
 
 - **[The idea](docs/the-varai-idea.md)** — the full essay, including what survives adversarial pressure and what doesn't.
+- **[The product control room](docs/product-control-room.md)** — who Varai is for, the supported substrate, and exactly what each kind of evidence can and cannot prove.
 - **[Status & direction](docs/roadmap.md)** — what's proven, what's unproven, what's next.
 - **[Semantic language](docs/semantic-language.md)** — the normative vocabulary.
 - **[Spec](docs/spec.md)** — the running tool's contract. **[Glossary](docs/glossary.md)** — canonical terms.

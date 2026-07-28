@@ -1,0 +1,724 @@
+{
+  "formatVersion": 3,
+  "system": {
+    "id": "purchase-approvals",
+    "name": "Purchase Approvals"
+  },
+  "concepts": [
+    {
+      "id": "actor.employee",
+      "role": "actor",
+      "name": "Employee",
+      "summary": "Anyone who can ask the company to buy something."
+    },
+    {
+      "id": "actor.manager",
+      "role": "actor",
+      "name": "Manager",
+      "summary": "Approves spending up to the amount the company trusts a manager with."
+    },
+    {
+      "id": "actor.finance",
+      "role": "actor",
+      "name": "Finance",
+      "summary": "Approves spending above the manager limit."
+    },
+    {
+      "id": "behavior.submit-request",
+      "role": "behavior",
+      "name": "Submit a purchase request",
+      "summary": "An employee asks for something to be bought."
+    },
+    {
+      "id": "behavior.withdraw-request",
+      "role": "behavior",
+      "name": "Withdraw a purchase request",
+      "summary": "The person who asked takes their own pending request back."
+    },
+    {
+      "id": "behavior.approve-request",
+      "role": "behavior",
+      "name": "Approve a purchase request",
+      "summary": "An approver agrees the company should buy this."
+    },
+    {
+      "id": "behavior.reject-request",
+      "role": "behavior",
+      "name": "Reject a purchase request",
+      "summary": "An approver decides the company should not buy this."
+    },
+    {
+      "id": "behavior.get-request",
+      "role": "behavior",
+      "name": "Look at a purchase request",
+      "summary": "Read one request and its current state."
+    },
+    {
+      "id": "behavior.list-audit-entries",
+      "role": "behavior",
+      "name": "Read the decision history",
+      "summary": "Read the record of who decided what about a request."
+    },
+    {
+      "id": "resource.purchase-request",
+      "role": "resource",
+      "name": "Purchase request",
+      "summary": "The record of what someone asked for, how much it costs, and where it stands."
+    },
+    {
+      "id": "resource.purchase-order",
+      "role": "resource",
+      "name": "Purchase order",
+      "summary": "The commitment to actually buy, created once a request is approved."
+    },
+    {
+      "id": "resource.audit-entry",
+      "role": "resource",
+      "name": "Decision record",
+      "summary": "A permanent note of one decision taken about a request."
+    },
+    {
+      "id": "resource.submission-details",
+      "role": "resource",
+      "name": "Submission details",
+      "summary": "What is being asked for and how much it costs."
+    },
+    {
+      "id": "resource.request-summary",
+      "role": "resource",
+      "name": "Request summary",
+      "summary": "What a person is shown back about a request."
+    },
+    {
+      "id": "condition.requester-owns-request",
+      "role": "condition",
+      "name": "The request belongs to the person acting",
+      "summary": "Only the person who asked may take their own request back."
+    },
+    {
+      "id": "condition.request-is-pending",
+      "role": "condition",
+      "name": "The request is still waiting for a decision",
+      "summary": "A request that has already been decided cannot be taken back."
+    },
+    {
+      "id": "condition.within-manager-limit",
+      "role": "condition",
+      "name": "The amount is within the manager limit",
+      "summary": "A manager may approve only up to the configured limit."
+    },
+    {
+      "id": "condition.above-manager-limit",
+      "role": "condition",
+      "name": "The amount is above the manager limit",
+      "summary": "Above the limit, only Finance may approve."
+    },
+    {
+      "id": "outcome.not-allowed",
+      "role": "outcome",
+      "name": "Not allowed",
+      "summary": "The person acting is not permitted to do this."
+    }
+  ],
+  "commitments": [
+    {
+      "id": "commitment.employee-performs-submit",
+      "source": "actor.employee",
+      "relation": "performs",
+      "target": { "concept": "behavior.submit-request" },
+      "expectation": "present",
+      "note": "Rule 1: an employee can submit a purchase request."
+    },
+    {
+      "id": "commitment.submit-accepts-details",
+      "source": "behavior.submit-request",
+      "relation": "accepts",
+      "target": { "concept": "resource.submission-details" },
+      "expectation": "present"
+    },
+    {
+      "id": "commitment.submit-creates-request",
+      "source": "behavior.submit-request",
+      "relation": "creates",
+      "target": { "concept": "resource.purchase-request" },
+      "expectation": "present",
+      "note": "Rule 1: submitting produces a request record."
+    },
+    {
+      "id": "commitment.submit-produces-summary",
+      "source": "behavior.submit-request",
+      "relation": "produces",
+      "target": { "concept": "resource.request-summary" },
+      "expectation": "present"
+    },
+    {
+      "id": "commitment.withdraw-requires-ownership",
+      "source": "behavior.withdraw-request",
+      "relation": "requires",
+      "target": { "concept": "condition.requester-owns-request" },
+      "expectation": "present",
+      "note": "Rule 2: only the requester may withdraw."
+    },
+    {
+      "id": "commitment.withdraw-requires-pending",
+      "source": "behavior.withdraw-request",
+      "relation": "requires",
+      "target": { "concept": "condition.request-is-pending" },
+      "expectation": "present",
+      "note": "Rule 2: only a pending request may be withdrawn."
+    },
+    {
+      "id": "commitment.withdraw-changes-request",
+      "source": "behavior.withdraw-request",
+      "relation": "changes",
+      "target": { "concept": "resource.purchase-request" },
+      "expectation": "present"
+    },
+    {
+      "id": "commitment.withdraw-fails-not-allowed",
+      "source": "behavior.withdraw-request",
+      "relation": "fails_with",
+      "target": { "literal": "403" },
+      "expectation": "present",
+      "note": "Rule 2: someone else's attempt is refused."
+    },
+    {
+      "id": "commitment.withdraw-creates-audit",
+      "source": "behavior.withdraw-request",
+      "relation": "creates",
+      "target": { "concept": "resource.audit-entry" },
+      "expectation": "present",
+      "note": "Rule 6: a withdrawal is recorded."
+    },
+    {
+      "id": "commitment.approve-requires-manager-limit",
+      "source": "behavior.approve-request",
+      "relation": "requires",
+      "target": { "concept": "condition.within-manager-limit" },
+      "expectation": "present",
+      "note": "Rule 3: a manager approves at or below the limit."
+    },
+    {
+      "id": "commitment.approve-requires-finance-above-limit",
+      "source": "behavior.approve-request",
+      "relation": "requires",
+      "target": { "concept": "condition.above-manager-limit" },
+      "expectation": "present",
+      "note": "Rule 4: above the limit the decision belongs to Finance."
+    },
+    {
+      "id": "commitment.approve-changes-request",
+      "source": "behavior.approve-request",
+      "relation": "changes",
+      "target": { "concept": "resource.purchase-request" },
+      "expectation": "present"
+    },
+    {
+      "id": "commitment.approve-creates-order",
+      "source": "behavior.approve-request",
+      "relation": "creates",
+      "target": { "concept": "resource.purchase-order" },
+      "expectation": "present",
+      "note": "Rule 5: an approved request creates one purchase order."
+    },
+    {
+      "id": "commitment.approve-creates-audit",
+      "source": "behavior.approve-request",
+      "relation": "creates",
+      "target": { "concept": "resource.audit-entry" },
+      "expectation": "present",
+      "note": "Rule 6: an approval is recorded."
+    },
+    {
+      "id": "commitment.approve-fails-not-allowed",
+      "source": "behavior.approve-request",
+      "relation": "fails_with",
+      "target": { "literal": "403" },
+      "expectation": "present",
+      "note": "Rules 3 and 4: an approver acting outside their authority is refused."
+    },
+    {
+      "id": "commitment.reject-changes-request",
+      "source": "behavior.reject-request",
+      "relation": "changes",
+      "target": { "concept": "resource.purchase-request" },
+      "expectation": "present"
+    },
+    {
+      "id": "commitment.reject-creates-audit",
+      "source": "behavior.reject-request",
+      "relation": "creates",
+      "target": { "concept": "resource.audit-entry" },
+      "expectation": "present",
+      "note": "Rule 6: a rejection is recorded."
+    },
+    {
+      "id": "commitment.reject-creates-no-order",
+      "source": "behavior.reject-request",
+      "relation": "creates",
+      "target": { "concept": "resource.purchase-order" },
+      "expectation": "absent",
+      "note": "Rule 5: only approval buys anything. A rejection must not."
+    },
+    {
+      "id": "commitment.get-request-reads-request",
+      "source": "behavior.get-request",
+      "relation": "reads",
+      "target": { "concept": "resource.purchase-request" },
+      "expectation": "present"
+    },
+    {
+      "id": "commitment.get-request-produces-summary",
+      "source": "behavior.get-request",
+      "relation": "produces",
+      "target": { "concept": "resource.request-summary" },
+      "expectation": "present"
+    },
+    {
+      "id": "commitment.audit-reads-entries",
+      "source": "behavior.list-audit-entries",
+      "relation": "reads",
+      "target": { "concept": "resource.audit-entry" },
+      "expectation": "present",
+      "note": "Rule 6: the record can be read back."
+    },
+    {
+      "id": "commitment.manager-performs-approve",
+      "source": "actor.manager",
+      "relation": "performs",
+      "target": { "concept": "behavior.approve-request" },
+      "expectation": "present"
+    },
+    {
+      "id": "commitment.finance-performs-approve",
+      "source": "actor.finance",
+      "relation": "performs",
+      "target": { "concept": "behavior.approve-request" },
+      "expectation": "present"
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "surface.submit-request-api",
+      "name": "Submit purchase request API",
+      "behavior": "behavior.submit-request",
+      "channel": "api",
+      "access": "authenticated"
+    },
+    {
+      "id": "surface.submit-request-ui",
+      "name": "New purchase request form",
+      "behavior": "behavior.submit-request",
+      "channel": "ui",
+      "access": "authenticated"
+    },
+    {
+      "id": "surface.withdraw-request-api",
+      "name": "Withdraw purchase request API",
+      "behavior": "behavior.withdraw-request",
+      "channel": "api",
+      "access": "authenticated"
+    },
+    {
+      "id": "surface.withdraw-request-ui",
+      "name": "Withdraw request action",
+      "behavior": "behavior.withdraw-request",
+      "channel": "ui",
+      "access": "authenticated"
+    },
+    {
+      "id": "surface.approve-request-api",
+      "name": "Approve purchase request API",
+      "behavior": "behavior.approve-request",
+      "channel": "api",
+      "access": "authenticated"
+    },
+    {
+      "id": "surface.approve-request-ui",
+      "name": "Approve request action",
+      "behavior": "behavior.approve-request",
+      "channel": "ui",
+      "access": "authenticated"
+    },
+    {
+      "id": "surface.reject-request-api",
+      "name": "Reject purchase request API",
+      "behavior": "behavior.reject-request",
+      "channel": "api",
+      "access": "authenticated"
+    },
+    {
+      "id": "surface.reject-request-ui",
+      "name": "Reject request action",
+      "behavior": "behavior.reject-request",
+      "channel": "ui",
+      "access": "authenticated"
+    },
+    {
+      "id": "surface.get-request-api",
+      "name": "Read purchase request API",
+      "behavior": "behavior.get-request",
+      "channel": "api",
+      "access": "authenticated"
+    },
+    {
+      "id": "surface.request-detail-ui",
+      "name": "Purchase request detail screen",
+      "behavior": "behavior.get-request",
+      "channel": "ui",
+      "access": "authenticated"
+    },
+    {
+      "id": "surface.audit-entries-api",
+      "name": "Read decision history API",
+      "behavior": "behavior.list-audit-entries",
+      "channel": "api",
+      "access": "authenticated"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "scenario.owner-can-withdraw",
+      "name": "The person who asked can take their own pending request back",
+      "principals": [
+        { "as": "owner", "actor": "actor.employee" }
+      ],
+      "steps": [
+        {
+          "id": "submit",
+          "as": "owner",
+          "invoke": "behavior.submit-request",
+          "input": { "amount": 500, "description": "Monitor" },
+          "capture": "request",
+          "expect": { "status": 201, "body": { "state": "pending" } }
+        },
+        {
+          "id": "withdraw",
+          "as": "owner",
+          "invoke": "behavior.withdraw-request",
+          "input": { "requestId": "$request.id" },
+          "expect": { "status": 200 }
+        },
+        {
+          "id": "read",
+          "as": "owner",
+          "invoke": "behavior.get-request",
+          "input": { "requestId": "$request.id" },
+          "expect": { "status": 200, "body": { "state": "withdrawn" } }
+        }
+      ]
+    },
+    {
+      "id": "scenario.non-owner-cannot-withdraw",
+      "name": "Another employee cannot withdraw a pending request",
+      "principals": [
+        { "as": "owner", "actor": "actor.employee" },
+        { "as": "other", "actor": "actor.employee" }
+      ],
+      "steps": [
+        {
+          "id": "submit",
+          "as": "owner",
+          "invoke": "behavior.submit-request",
+          "input": { "amount": 500, "description": "Monitor" },
+          "capture": "request",
+          "expect": { "status": 201 }
+        },
+        {
+          "id": "withdraw",
+          "as": "other",
+          "invoke": "behavior.withdraw-request",
+          "input": { "requestId": "$request.id" },
+          "expect": { "status": 403 }
+        },
+        {
+          "id": "read",
+          "as": "owner",
+          "invoke": "behavior.get-request",
+          "input": { "requestId": "$request.id" },
+          "expect": { "status": 200, "body": { "state": "pending" } }
+        }
+      ]
+    },
+    {
+      "id": "scenario.manager-approves-within-limit",
+      "name": "A manager can approve an amount within the manager limit",
+      "principals": [
+        { "as": "requester", "actor": "actor.employee" },
+        { "as": "approver", "actor": "actor.manager" }
+      ],
+      "steps": [
+        {
+          "id": "submit",
+          "as": "requester",
+          "invoke": "behavior.submit-request",
+          "input": { "amount": 500, "description": "Monitor" },
+          "capture": "request",
+          "expect": { "status": 201 }
+        },
+        {
+          "id": "approve",
+          "as": "approver",
+          "invoke": "behavior.approve-request",
+          "input": { "requestId": "$request.id" },
+          "expect": { "status": 200, "body": { "state": "approved" } }
+        },
+        {
+          "id": "read",
+          "as": "requester",
+          "invoke": "behavior.get-request",
+          "input": { "requestId": "$request.id" },
+          "expect": {
+            "status": 200,
+            "body": { "state": "approved", "purchaseOrder": { "state": "open" } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "scenario.manager-cannot-approve-above-limit",
+      "name": "A manager cannot approve an amount above the manager limit",
+      "principals": [
+        { "as": "requester", "actor": "actor.employee" },
+        { "as": "approver", "actor": "actor.manager" }
+      ],
+      "steps": [
+        {
+          "id": "submit",
+          "as": "requester",
+          "invoke": "behavior.submit-request",
+          "input": { "amount": 25000, "description": "Server rack" },
+          "capture": "request",
+          "expect": { "status": 201 }
+        },
+        {
+          "id": "approve",
+          "as": "approver",
+          "invoke": "behavior.approve-request",
+          "input": { "requestId": "$request.id" },
+          "expect": { "status": 403 }
+        },
+        {
+          "id": "read",
+          "as": "requester",
+          "invoke": "behavior.get-request",
+          "input": { "requestId": "$request.id" },
+          "expect": { "status": 200, "body": { "state": "pending" } }
+        }
+      ]
+    },
+    {
+      "id": "scenario.finance-approves-above-limit",
+      "name": "Finance can approve an amount above the manager limit",
+      "principals": [
+        { "as": "requester", "actor": "actor.employee" },
+        { "as": "approver", "actor": "actor.finance" }
+      ],
+      "steps": [
+        {
+          "id": "submit",
+          "as": "requester",
+          "invoke": "behavior.submit-request",
+          "input": { "amount": 25000, "description": "Server rack" },
+          "capture": "request",
+          "expect": { "status": 201 }
+        },
+        {
+          "id": "approve",
+          "as": "approver",
+          "invoke": "behavior.approve-request",
+          "input": { "requestId": "$request.id" },
+          "expect": { "status": 200, "body": { "state": "approved" } }
+        },
+        {
+          "id": "read",
+          "as": "requester",
+          "invoke": "behavior.get-request",
+          "input": { "requestId": "$request.id" },
+          "expect": {
+            "status": 200,
+            "body": { "state": "approved", "purchaseOrder": { "state": "open" } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "scenario.approval-is-recorded",
+      "name": "An approval leaves a decision record",
+      "principals": [
+        { "as": "requester", "actor": "actor.employee" },
+        { "as": "approver", "actor": "actor.manager" }
+      ],
+      "steps": [
+        {
+          "id": "submit",
+          "as": "requester",
+          "invoke": "behavior.submit-request",
+          "input": { "amount": 500, "description": "Monitor" },
+          "capture": "request",
+          "expect": { "status": 201 }
+        },
+        {
+          "id": "approve",
+          "as": "approver",
+          "invoke": "behavior.approve-request",
+          "input": { "requestId": "$request.id" },
+          "expect": { "status": 200 }
+        },
+        {
+          "id": "history",
+          "as": "requester",
+          "invoke": "behavior.list-audit-entries",
+          "input": { "requestId": "$request.id" },
+          "expect": {
+            "status": 200,
+            "body": { "entries": [{ "decision": "approved" }] }
+          }
+        }
+      ]
+    },
+    {
+      "id": "scenario.rejection-is-recorded",
+      "name": "A rejection leaves a decision record and buys nothing",
+      "principals": [
+        { "as": "requester", "actor": "actor.employee" },
+        { "as": "approver", "actor": "actor.manager" }
+      ],
+      "steps": [
+        {
+          "id": "submit",
+          "as": "requester",
+          "invoke": "behavior.submit-request",
+          "input": { "amount": 500, "description": "Monitor" },
+          "capture": "request",
+          "expect": { "status": 201 }
+        },
+        {
+          "id": "reject",
+          "as": "approver",
+          "invoke": "behavior.reject-request",
+          "input": { "requestId": "$request.id" },
+          "expect": { "status": 200, "body": { "state": "rejected" } }
+        },
+        {
+          "id": "read",
+          "as": "requester",
+          "invoke": "behavior.get-request",
+          "input": { "requestId": "$request.id" },
+          "expect": {
+            "status": 200,
+            "body": { "state": "rejected", "purchaseOrder": null }
+          }
+        },
+        {
+          "id": "history",
+          "as": "requester",
+          "invoke": "behavior.list-audit-entries",
+          "input": { "requestId": "$request.id" },
+          "expect": {
+            "status": 200,
+            "body": { "entries": [{ "decision": "rejected" }] }
+          }
+        }
+      ]
+    },
+    {
+      "id": "scenario.withdrawal-is-recorded",
+      "name": "A withdrawal leaves a decision record",
+      "principals": [
+        { "as": "owner", "actor": "actor.employee" }
+      ],
+      "steps": [
+        {
+          "id": "submit",
+          "as": "owner",
+          "invoke": "behavior.submit-request",
+          "input": { "amount": 500, "description": "Monitor" },
+          "capture": "request",
+          "expect": { "status": 201 }
+        },
+        {
+          "id": "withdraw",
+          "as": "owner",
+          "invoke": "behavior.withdraw-request",
+          "input": { "requestId": "$request.id" },
+          "expect": { "status": 200 }
+        },
+        {
+          "id": "history",
+          "as": "owner",
+          "invoke": "behavior.list-audit-entries",
+          "input": { "requestId": "$request.id" },
+          "expect": {
+            "status": 200,
+            "body": { "entries": [{ "decision": "withdrawn" }] }
+          }
+        }
+      ]
+    },
+    {
+      "id": "scenario.decided-request-cannot-be-withdrawn",
+      "name": "A request that has already been decided cannot be taken back",
+      "principals": [
+        { "as": "owner", "actor": "actor.employee" },
+        { "as": "approver", "actor": "actor.manager" }
+      ],
+      "steps": [
+        {
+          "id": "submit",
+          "as": "owner",
+          "invoke": "behavior.submit-request",
+          "input": { "amount": 500, "description": "Monitor" },
+          "capture": "request",
+          "expect": { "status": 201 }
+        },
+        {
+          "id": "approve",
+          "as": "approver",
+          "invoke": "behavior.approve-request",
+          "input": { "requestId": "$request.id" },
+          "expect": { "status": 200 }
+        },
+        {
+          "id": "withdraw",
+          "as": "owner",
+          "invoke": "behavior.withdraw-request",
+          "input": { "requestId": "$request.id" },
+          "expect": { "status": 409 }
+        },
+        {
+          "id": "read",
+          "as": "owner",
+          "invoke": "behavior.get-request",
+          "input": { "requestId": "$request.id" },
+          "expect": { "status": 200, "body": { "state": "approved" } }
+        }
+      ]
+    }
+  ],
+  "context": [
+    {
+      "id": "context.manager-limit",
+      "text": "The manager limit is a configured amount, currently 10000. Changing it is a product decision made here, not a code change made in passing."
+    },
+    {
+      "id": "context.public-surfaces",
+      "text": "Every way into this system from outside is listed under surfaces. Nothing that changes or deletes a request may be reachable without signing in, and anything reachable that is not listed here was not asked for."
+    },
+    {
+      "id": "context.one-order-per-approval",
+      "text": "Approving a request must result in exactly one purchase order. Whether a single approval can ever produce two orders under concurrent load is not something the current checks establish."
+    },
+    {
+      "id": "context.scenarios-are-examples",
+      "text": "The scenarios above are concrete examples that either ran and passed or did not. They do not establish that the rule holds for every possible input."
+    },
+    {
+      "id": "context.finance-may-also-approve-small",
+      "text": "Finance approving an amount within the manager limit is acceptable and deliberately not committed either way."
+    }
+  ],
+  "ratification": {
+    "status": "draft"
+  }
+}

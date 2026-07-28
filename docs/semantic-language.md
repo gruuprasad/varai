@@ -567,6 +567,44 @@ have. Reconciliation also refuses to trust a builder witness that maps two disti
 the same observed element: such a binding is `ambiguous` (reason `concept-collision`), because a
 mislabeled element could otherwise borrow another concept's Claim and produce a false `holds`.
 
+### Expected surfaces and product scenarios (seed v3)
+
+Commitments say what a behavior must do. They do not say which behavior is
+reachable from outside the system, and they say nothing at all about behavior
+nobody asked for. Seed v3 adds two human-owned vocabularies for that, decided in
+[ADR 0007](adr/0007-product-control-room-and-constrained-substrate.md).
+
+A **surface** is one expected externally reachable way into the system. It names
+a `behavior` concept, a `channel` (`ui`, `api`, `webhook`, `job`, `cli`), and an
+`access` level (`public`, `authenticated`, `internal`). It deliberately carries
+no HTTP path, framework name, file, or symbol — those are realization details a
+builder supplies as untrusted bindings. A UI action and the API operation behind
+it are two surfaces that may name the same behavior.
+
+Surfaces give the language its missing direction. Commitments check
+specification against code; surfaces check code against specification. Within
+the supported substrate, every observed externally reachable Element must be
+claimed by exactly one ratified surface, so an extra route is `unaccounted` even
+when every positive commitment holds. Where the stack is unsupported or routes
+are registered dynamically, surface accounting reports `cannot_account` — never a
+clean empty result.
+
+A **scenario** is a bounded, ordered interaction: sequential steps, distinct
+principals bound to actor concepts, behavior invocation, scalar or JSON input,
+references to fields captured from earlier responses, exact status assertions,
+and partial body assertions. That is the whole language. Concurrency, temporal
+windows, performance, arbitrary expressions, database inspection, and
+user-supplied test code are deliberately absent.
+
+Scenarios are examples, not invariants, and the language does not pretend
+otherwise. A passing scenario establishes that one ratified interaction ran and
+produced the asserted result. "Scenario passed" is a sound statement; "only the
+requester can ever withdraw" is not established by two examples. A scenario that
+did not execute is `could_not_run`, which is never a pass.
+
+The worked example is
+[examples/purchase-approvals.seed.v3.json](examples/purchase-approvals.seed.v3.json).
+
 ## Explicit non-claims
 
 Without additional evidence, Varai does not claim:
@@ -579,6 +617,8 @@ Without additional evidence, Varai does not claim:
 - whether similarly named elements are the same domain concept;
 - whether generated code reflects the user's prompt.
 - whether a function is pure or leaves its input unchanged without complete effect coverage or authoritative evidence.
+- whether a rule holds universally because a ratified scenario exercising it passed.
+- that the set of public surfaces is complete outside the supported substrate.
 
 These may later come from runtime evidence, checks, tests, or intent reconciliation, each as a separate claim source. Intent reconciliation states whether authored commitments hold against observed Claims; it does not make Varai the author of the intent.
 

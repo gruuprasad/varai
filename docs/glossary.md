@@ -77,3 +77,31 @@ The builder's testimony (`varai.realization.json`) naming the seed hash it was b
 ## Reconciliation
 
 The deterministic projection that checks ratified commitments against canonical Claims and coverage, reporting binding state (`unbound`, `resolved`, `ambiguous`, `stale`) separately from verdict (`holds`, `violated`, `cannot_verify`, `not_checkable`). Reconciliation mutates nothing and persists no combined graph.
+
+## Surface
+
+One expected externally reachable way into the system, declared by a person in the seed: a behavior concept, a channel (`ui`, `api`, `webhook`, `job`, `cli`), and an access level (`public`, `authenticated`, `internal`). A surface names no path, framework, file, or symbol; those are realization details. A UI action and its API operation are separate surfaces that may name the same behavior.
+
+## Surface accounting
+
+The projection that resolves ratified surfaces against observed externally reachable Elements in both directions, reporting `expected`, `accounted`, `missing`, `unaccounted`, `ambiguous`, and `stale`. It answers the question commitments cannot: what public behavior exists that nobody asked for. Outside the supported substrate it reports `cannot_account` rather than an empty result.
+
+## Unaccounted surface
+
+An observed externally reachable Element that no ratified surface claims. It blocks readiness even when every positive commitment holds. The only way to accept one is a reviewed seed change, ratification, and rebinding.
+
+## Scenario
+
+A bounded ordered interaction authored in the seed: sequential steps, distinct principals bound to actor concepts, behavior invocation, scalar or JSON input, references to captured response fields, exact status assertions, and partial body assertions. A scenario is an example, not an invariant — it resolves to `passed`, `failed`, or `could_not_run`, and `could_not_run` is never a pass.
+
+## Runtime map
+
+The builder's untrusted pointer file (`varai.runtime.json`) saying where a ratified behavior can be reached at runtime and which configured persona to act as. Credentials are referenced by environment-variable name and never persisted. The map says where to check; it never establishes that what was checked is correct.
+
+## Coverage regression
+
+A critical scope moving from `analyzed` to `partial`, `unsupported`, `failed`, or missing between two recorded points. It is reported as a regression rather than a neutral limitation, because reducing analyzability is the cheapest way to turn a `violated` verdict into a calm `cannot_verify`.
+
+## Build gate
+
+The pure evaluation of a completed build session against the readiness criteria, yielding `ready`, `needs_attention`, `build_failed`, or `superseded` with machine-readable reasons. No builder output, test, or LLM statement can set it.

@@ -3,8 +3,19 @@
 Varai is pre-release and published to invite opinions. This page is an honest
 account of what works, what doesn't yet, and where the effort goes next. The
 motivating idea is in [the-varai-idea.md](the-varai-idea.md); the accepted
-product decisions are [ADR 0004](adr/0004-system-model-is-the-product.md) and
-[ADR 0005](adr/0005-seed-realization-and-reconciliation.md).
+product decisions are [ADR 0004](adr/0004-system-model-is-the-product.md),
+[ADR 0005](adr/0005-seed-realization-and-reconciliation.md), and
+[ADR 0007](adr/0007-product-control-room-and-constrained-substrate.md).
+
+## What Varai is aiming at
+
+A **local product control room for AI-built operational software** — not a
+general AI IDE and not a prompt-to-app builder. The first customer is a product
+owner who does not want to work primarily through code; the first application
+class is multi-role workflow software; the first substrate is exactly
+React/Vite, FastAPI, and SQLAlchemy. Framework breadth is explicitly not a
+success metric. The contract, including what each kind of evidence can and
+cannot prove, is [product-control-room.md](product-control-room.md).
 
 ## What runs
 
@@ -37,6 +48,17 @@ product decisions are [ADR 0004](adr/0004-system-model-is-the-product.md) and
   rich enough to bind, loose enough for a human to speak — is not settled.
 - **Coverage and meaning drift.** Which absences can be reported, and which
   domain statements are checkable at all versus irreducibly human declarations.
+- **Product-rule verification.** What is checked today is mostly structural and
+  sits close to scanner output: routes, entities, effects, imports. The rules
+  that actually make operational software trustworthy — who may act, which state
+  transitions are legal, which side effects must accompany a decision — are not
+  yet verified. Expected surfaces and executable scenarios exist as a decided
+  language ([ADR 0007](adr/0007-product-control-room-and-constrained-substrate.md))
+  and a worked example, not yet as an implementation.
+- **Whether the audience wants this.** No target user has run the loop. If the
+  semantic checks work but product owners return to raw builder chat, the honest
+  response is to narrow toward a developer-facing architecture and trust tool —
+  not to add frameworks or grow an IDE.
 - **Arch-unit identity.** Module-grain unit keys are lexicographically smallest
   evidence files — deterministic rollups, not designated homes. That is not yet
   a name a human can seed an `arch.dependency` rule against. Package/component
@@ -51,6 +73,15 @@ product decisions are [ADR 0004](adr/0004-system-model-is-the-product.md) and
   effect/failure coverage — zero `analyzed` — so absence cannot be reported
   there at all. The recorded baseline is in
   [product-loop-pilot.md](product-loop-pilot.md).
+- Make coverage degradation a build result rather than a neutral limitation. A
+  builder that cannot satisfy a rule can otherwise make the code harder to
+  analyze and watch `violated` decay into a calm `cannot_verify`.
+- Add ratified surfaces and surface accounting, so the check answers "what public
+  behavior exists that nobody asked for?" and not only "was what I asked for
+  built?"
+- Execute ratified scenarios independently against a running application, to
+  reach authorization and state-transition mistakes that static evidence cannot
+  settle.
 - Run adversarial pilot trials for lying, stale, ambiguous, refactored, and
   expected-absent requirements; use the results to narrow the contract before
   expanding the language.
@@ -63,6 +94,11 @@ product decisions are [ADR 0004](adr/0004-system-model-is-the-product.md) and
 
 - Hosted repository upload; LLM-first discovery; exhaustive framework coverage;
   runtime guarantees without runtime evidence; generic architecture diagrams.
+- A general-purpose IDE or browser code editor; arbitrary application stacks;
+  production deployment and hosting; a universal policy or temporal-logic
+  language; general invariant proving; concurrency and atomicity proof;
+  performance verification; mobile and native applications; a builder model
+  marketplace; any automatic inference of human intent from code.
 
 ## Non-goals
 
