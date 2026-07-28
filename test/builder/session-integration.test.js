@@ -75,24 +75,77 @@ test("non-zero builder exit records build_failed without a ready gate", async ()
 test("seed change while active marks the session superseded", async () => {
   const root = await repoWithConfig(["--mode", "hang"]);
   try {
-    const runPromise = runBuildRun({ repo: root, adapter: "fake", json: true, cache: false });
-    // Wait until session is active/building
+    const runPromise = runBuildRun({ repo: root, adapter: "fake", json: true, cache: false, quiet: true });
+    // Wait until the live adapter is attached (past begin / cancel-before-spawn window).
     let active = null;
-    for (let i = 0; i < 50; i++) {
-      const store = createBuildSessionStore(root);
-      active = await store.getActive();
-      if (active) break;
-      await new Promise((r) => setTimeout(r, 50));
+    for (let i = 0; i < 100; i++) {
+      const { getLiveBuilderRun } = await import("../../src/builder/runtime.js");
+      const live = getLiveBuilderRun(root);
+      active = await createBuildSessionStore(root).getActive();
+      if (active && live?.adapter) break;
+      await new Promise((r) => setTimeout(r, 25));
     }
     assert.ok(active, "expected an active build session");
     const next = slotkeeperDraft();
     next.system = { ...next.system, name: "Slotkeeper Changed" };
     ratifySeed(root, next, { ratifiedAt: "2026-07-28T01:00:00.000Z" });
-    await runBuildStop({ repo: root, json: true });
+    await runBuildStop({ repo: root, json: true, quiet: true });
     const result = await runPromise;
     assert.equal(result.session.lifecycleState, BUILD_STATES.SUPERSEDED);
     assert.equal(result.session.gate?.state, GATE_STATES.SUPERSEDED);
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("seed change then cancel-before-spawn prefers superseded over build_failed", async () => {
+  clearAdapters();
+  const root = await mkdtemp(path.join(tmpdir(), "varai-builder-supersede-cancel-"));
+  try {
+    await writeFile(path.join(root, "app.py"), "def app():\n    return 1\n");
+    execFileSync("git", ["init", "-q", root]);
+    execFileSync("git", ["-C", root, "config", "user.email", "test@example.com"]);
+    execFileSync("git", ["-C", root, "config", "user.name", "Test"]);
+    execFileSync("git", ["-C", root, "add", "."]);
+    execFileSync("git", ["-C", root, "commit", "-qm", "base"]);
+    ratifySeed(root, slotkeeperDraft(), { ratifiedAt: "2026-07-28T00:00:00.000Z" });
+
+    let startEntered = false;
+    registerAdapter({
+      id: "blocked-start",
+      async start() {
+        startEntered = true;
+        await new Promise((r) => setTimeout(r, 10_000));
+        return { exitCode: 0, signal: null, shell: false };
+      },
+      async send() {},
+      async stop() {},
+    });
+
+    const runPromise = runBuildRun({
+      repo: root,
+      adapter: "blocked-start",
+      json: true,
+      cache: false,
+      quiet: true,
+    });
+    for (let i = 0; i < 200; i++) {
+      const { getLiveBuilderRun } = await import("../../src/builder/runtime.js");
+      if (getLiveBuilderRun(root) && await createBuildSessionStore(root).getActive()) break;
+      await new Promise((r) => setImmediate(r));
+    }
+    assert.ok(await createBuildSessionStore(root).getActive(), "session must be active");
+    const next = slotkeeperDraft();
+    next.system = { ...next.system, name: "Slotkeeper Superseded Early" };
+    ratifySeed(root, next, { ratifiedAt: "2026-07-28T01:00:00.000Z" });
+    await runBuildStop({ repo: root, json: true, quiet: true });
+    const result = await runPromise;
+    assert.equal(startEntered, false, "cancel-before-spawn path should skip start");
+    assert.equal(result.session.lifecycleState, BUILD_STATES.SUPERSEDED);
+    assert.equal(result.session.gate?.state, GATE_STATES.SUPERSEDED);
+    assert.notEqual(result.session.lifecycleState, BUILD_STATES.BUILD_FAILED);
+  } finally {
+    clearAdapters();
     await rm(root, { recursive: true, force: true });
   }
 });

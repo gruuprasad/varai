@@ -47,6 +47,22 @@ function seedChanged(repoPath, session) {
   return !input?.ratified || input.contentHash !== session.seedHash;
 }
 
+/**
+ * Seed change mid-build always wins over cancel/non-zero/crash as the terminal
+ * recorded state — superseded is inspectable and must not be overwritten by
+ * build_failed from a later stop.
+ */
+async function failOrSupersede(repoPath, sessionId, failure = {}) {
+  const store = createBuildSessionStore(repoPath);
+  const session = await store.getSession(sessionId);
+  if (seedChanged(repoPath, session) || session.lifecycleState === BUILD_STATES.SUPERSEDED) {
+    return markBuildSuperseded(repoPath, sessionId, {
+      reason: "Approved Seed changed during the build session",
+    });
+  }
+  return failBuildSession(repoPath, sessionId, failure);
+}
+
 /** Paths the managed builder is expected to write; not human interventions. */
 const BUILDER_OWNED_BASENAMES = new Set([
   "varai.realization.json",
@@ -168,7 +184,7 @@ export async function runBuildRun(options = {}) {
     if (runHandle.cancelRequested) {
       clearLiveBuilderRun(repoPath);
       if (active) {
-        const canceled = await failBuildSession(repoPath, active.id, {
+        const canceled = await failOrSupersede(repoPath, active.id, {
           reason: "Build canceled before the builder process started",
         });
         return { session: { ...canceled, builder: { ...(canceled.builder ?? {}), canceled: true } }, exitCode: 1, canceled: true };
@@ -197,7 +213,7 @@ export async function runBuildRun(options = {}) {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     if (runHandle.cancelRequested) {
-      const canceled = await failBuildSession(repoPath, session.id, {
+      const canceled = await failOrSupersede(repoPath, session.id, {
         reason: "Build canceled before the builder process started",
       });
       clearLiveBuilderRun(repoPath);
@@ -231,7 +247,7 @@ export async function runBuildRun(options = {}) {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     if (runHandle.cancelRequested) {
-      const canceled = await failBuildSession(repoPath, session.id, {
+      const canceled = await failOrSupersede(repoPath, session.id, {
         reason: "Build canceled before the builder process started",
       });
       clearLiveBuilderRun(repoPath);
@@ -251,7 +267,7 @@ export async function runBuildRun(options = {}) {
     } catch (err) {
       await drain.flush();
       clearLiveBuilderRun(repoPath);
-      const failed = await failBuildSession(repoPath, session.id, {
+      const failed = await failOrSupersede(repoPath, session.id, {
         reason: err.message,
         exitCode: null,
       });
@@ -282,7 +298,7 @@ export async function runBuildRun(options = {}) {
     }
 
     if (exitResult.exitCode !== 0) {
-      const failed = await failBuildSession(repoPath, session.id, {
+      const failed = await failOrSupersede(repoPath, session.id, {
         reason: `Builder exited with code ${exitResult.exitCode}${exitResult.signal ? ` (${exitResult.signal})` : ""}`,
         exitCode: exitResult.exitCode,
         signal: exitResult.signal,
@@ -330,11 +346,15 @@ export async function runBuildRun(options = {}) {
       }
       return { session: completed, report: closed.report, exitCode: closed.exitCode ?? 0 };
     } catch (err) {
-      if (/Seed changed|approve/i.test(err.message)) {
-        const superseded = await markBuildSuperseded(repoPath, session.id, { reason: err.message });
+      if (/Seed changed|approve/i.test(err.message) || seedChanged(repoPath, session)) {
+        const superseded = await markBuildSuperseded(repoPath, session.id, {
+          reason: seedChanged(repoPath, session)
+            ? "Approved Seed changed during the build session"
+            : err.message,
+        });
         return { session: superseded, exitCode: 1 };
       }
-      const failed = await failBuildSession(repoPath, session.id, { reason: err.message });
+      const failed = await failOrSupersede(repoPath, session.id, { reason: err.message });
       if (options.json) {
         if (!options.quiet) process.stdout.write(`${JSON.stringify({ session: failed, exitCode: 1, error: err.message }, null, 2)}\n`);
       } else if (!options.quiet) {
