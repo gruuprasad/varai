@@ -1,5 +1,7 @@
 // Build-session state vocabulary for the product control room.
 // Terminal gate outcomes are the only values persisted on a completed session.
+// Lifecycle progress (building → verifying → gate) is driven by managed builders
+// and close/verify; builder stdout never sets these values directly.
 
 export const BUILD_STATES = Object.freeze({
   DRAFT: "draft",

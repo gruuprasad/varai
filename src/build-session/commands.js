@@ -10,7 +10,7 @@ import { renderBuildPacket } from "../seed/handoff.js";
 import { readSeed } from "../seed/store.js";
 import { runVerifyScenarios } from "../runtime/commands.js";
 import { evaluateBuildGate } from "./evaluate.js";
-import { isNonZeroExitGate } from "./state.js";
+import { BUILD_STATES, GATE_STATES, isNonZeroExitGate } from "./state.js";
 import { createBuildSessionStore } from "./store.js";
 
 function sessionId({ seedHash, packetHash, start }) {
@@ -27,7 +27,17 @@ function statusSummary(session) {
     startTree: session.start.implementationTreeHash,
     endTree: session.completion?.implementationTreeHash ?? null,
     gate: session.gate ?? null,
+    lifecycleState: session.lifecycleState ?? (session.completedAt ? session.gate?.state ?? null : null),
+    builder: session.builder ?? null,
+    interventions: session.interventions ?? [],
+    provenanceHint: session.provenanceHint ?? null,
   };
+}
+
+function writeOutput(options, jsonValue, textValue) {
+  if (options.quiet) return;
+  if (options.json) process.stdout.write(`${JSON.stringify(jsonValue, null, 2)}\n`);
+  else process.stdout.write(textValue);
 }
 
 async function loadSnapshotModel(repoPath, snapshotId) {
@@ -63,11 +73,17 @@ export async function runBuildBegin(options = {}) {
     packetHash,
     start,
     startedAt: new Date().toISOString(),
+    lifecycleState: BUILD_STATES.APPROVED,
+    builder: null,
+    interventions: [],
   };
   await store.putSession(session);
   await store.setActive({ id: session.id });
-  if (options.json) process.stdout.write(`${JSON.stringify({ session: statusSummary(session), packet }, null, 2)}\n`);
-  else process.stdout.write(`${packet}\nBuild session ${session.id} recorded. Close it after the builder changes the repository.\n`);
+  writeOutput(
+    options,
+    { session: statusSummary(session), packet },
+    `${packet}\nBuild session ${session.id} recorded. Close it after the builder changes the repository.\n`,
+  );
   return { session, packet };
 }
 
@@ -154,18 +170,24 @@ export async function runBuildClose(options = {}) {
       ...(scenarioRunHash ? { scenarioRunHash } : {}),
     },
     gate,
+    lifecycleState: gate.state,
     completedAt: new Date().toISOString(),
+    builder: {
+      ...(session.builder ?? {}),
+      running: false,
+      orphaned: false,
+    },
   };
   await store.putSession(completed);
   await store.clearActive();
   const exitCode = isNonZeroExitGate(gate.state) ? 1 : 0;
-  if (options.json) process.stdout.write(`${JSON.stringify({ session: statusSummary(completed), report, exitCode }, null, 2)}\n`);
-  else {
-    process.stdout.write(`Build session ${completed.id} closed as ${options.mode}.\n`);
-    process.stdout.write(`Gate ${gate.state}` +
+  writeOutput(
+    options,
+    { session: statusSummary(completed), report, exitCode },
+    `Build session ${completed.id} closed as ${options.mode}.\nGate ${gate.state}` +
       (gate.reasons.length ? ` (${gate.reasons.length} reason${gate.reasons.length === 1 ? "" : "s"})` : "") +
-      `.\n`);
-  }
+      `.\n`,
+  );
   return { session: completed, report, exitCode };
 }
 
@@ -191,9 +213,106 @@ export async function runBuildStatus(options = {}) {
   const store = createBuildSessionStore(repoPath);
   const active = await store.getActive();
   const sessions = await store.listSessions();
-  const result = { active: active ? statusSummary(await store.getSession(active.id)) : null, sessions: sessions.map(statusSummary) };
-  process.stdout.write(options.json ? `${JSON.stringify(result, null, 2)}\n` : formatStatusText(result));
+  const activeSession = active ? await store.getSession(active.id) : null;
+  let activeSummary = activeSession ? statusSummary(activeSession) : null;
+  if (activeSummary?.builder) {
+    const { getLiveBuilderRun } = await import("../builder/runtime.js");
+    const live = getLiveBuilderRun(repoPath);
+    if (!live) {
+      activeSummary = {
+        ...activeSummary,
+        builder: {
+          ...activeSummary.builder,
+          running: false,
+          orphaned: activeSummary.builder.orphaned || Boolean(activeSummary.builder.running),
+        },
+      };
+    }
+  }
+  const latestCompleted = sessions.find((session) => session.completedAt) ?? null;
+  const provenanceHint = latestCompleted?.provenanceHint
+    ?? (latestCompleted?.unattested ? { state: "unattested", sessionId: latestCompleted.id } : null);
+  const result = {
+    active: activeSummary,
+    sessions: sessions.map(statusSummary),
+    provenanceHint,
+  };
+  writeOutput(options, result, formatStatusText(result));
   return result;
+}
+
+export async function setBuildLifecycle(repoPath, sessionId, patch, { completedSession } = {}) {
+  const store = createBuildSessionStore(repoPath);
+  const base = completedSession ?? await store.getSession(sessionId);
+  const updated = {
+    ...base,
+    ...patch,
+    builder: patch.builder !== undefined ? patch.builder : base.builder,
+  };
+  await store.putSession(updated);
+  return updated;
+}
+
+export async function failBuildSession(repoPath, sessionId, { reason, exitCode = null, signal = null } = {}) {
+  const store = createBuildSessionStore(repoPath);
+  const session = await store.getSession(sessionId);
+  const gate = {
+    state: GATE_STATES.BUILD_FAILED,
+    reasons: [reason ?? "Builder failed"],
+    coverageRegressions: [],
+    requirementRegressions: [],
+    coverageTransitions: [],
+  };
+  const failed = {
+    ...session,
+    lifecycleState: BUILD_STATES.BUILD_FAILED,
+    gate,
+    builder: {
+      ...(session.builder ?? {}),
+      running: false,
+      orphaned: false,
+      exitCode,
+      signal,
+      finishedAt: new Date().toISOString(),
+    },
+    completedAt: new Date().toISOString(),
+    completion: session.completion ?? {
+      mode: "build_failed",
+      exitCode,
+      signal,
+    },
+  };
+  await store.putSession(failed);
+  await store.clearActive();
+  return failed;
+}
+
+export async function markBuildSuperseded(repoPath, sessionId, { reason } = {}) {
+  const store = createBuildSessionStore(repoPath);
+  const session = await store.getSession(sessionId);
+  const gate = {
+    state: GATE_STATES.SUPERSEDED,
+    reasons: [reason ?? "Approved Seed changed during the build session"],
+    coverageRegressions: [],
+    requirementRegressions: [],
+    coverageTransitions: [],
+  };
+  const superseded = {
+    ...session,
+    lifecycleState: BUILD_STATES.SUPERSEDED,
+    gate,
+    builder: {
+      ...(session.builder ?? {}),
+      running: false,
+      orphaned: false,
+      finishedAt: new Date().toISOString(),
+    },
+    completedAt: new Date().toISOString(),
+    completion: session.completion ?? { mode: "superseded" },
+  };
+  await store.putSession(superseded);
+  await store.clearActive();
+  return superseded;
 }
 
 export async function findBuildProvenance(repoPath, { seedHash, scannedTreeHash, scanConfigHash, realization } = {}) {

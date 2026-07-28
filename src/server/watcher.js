@@ -21,22 +21,26 @@ function yieldEventLoop() {
 
 /**
  * @param {string} repoPath
- * @param {() => void} onChange
+ * @param {(change?: { relativePath?: string }) => void} onChange
  * @param {{ include?: string[] }} [options]
  */
 export function createWatcher(repoPath, onChange, options = {}) {
   let timer = null;
   let pending = false;
+  let pendingPath = null;
   const watchers = [];
   let closed = false;
 
-  const schedule = () => {
-    if (pending || closed) return;
+  const schedule = (relativePath) => {
+    if (closed) return;
+    if (relativePath) pendingPath = relativePath;
     pending = true;
     clearTimeout(timer);
     timer = setTimeout(() => {
       pending = false;
-      if (!closed) onChange();
+      const pathForEvent = pendingPath;
+      pendingPath = null;
+      if (!closed) onChange(pathForEvent ? { relativePath: pathForEvent } : undefined);
     }, DEBOUNCE_MS);
   };
 
@@ -46,7 +50,7 @@ export function createWatcher(repoPath, onChange, options = {}) {
     for (const part of parts) {
       if (IGNORE_DIRS.has(part)) return;
     }
-    schedule();
+    schedule(filename);
   }
 
   function onError(err) {

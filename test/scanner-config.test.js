@@ -29,3 +29,24 @@ test("unknown fields are rejected instead of silently ignored", async () => {
   await writeFile(join(dir, "varai.config.json"), JSON.stringify({ stock: {} }));
   await assert.rejects(() => loadRepoConfig(dir), /varai\.config\.json: stock: unknown field/);
 });
+
+test("loads builders adapter configs alongside include/exclude", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-cfg-"));
+  await writeFile(join(dir, "varai.config.json"), JSON.stringify({
+    include: ["src"],
+    builders: {
+      fake: { executable: "/usr/bin/node", args: ["fake.js"] },
+    },
+  }));
+  const cfg = await loadRepoConfig(dir);
+  assert.deepEqual(cfg.include, ["src"]);
+  assert.deepEqual(cfg.builders.fake, { executable: "/usr/bin/node", args: ["fake.js"] });
+});
+
+test("rejects builder entries without executable", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-cfg-"));
+  await writeFile(join(dir, "varai.config.json"), JSON.stringify({
+    builders: { fake: { args: ["x"] } },
+  }));
+  await assert.rejects(() => loadRepoConfig(dir), /builders\.fake\.executable/);
+});

@@ -5,6 +5,7 @@ import { runCheck } from "../src/reconciliation/commands.js";
 import { runHandoff, runSeedMigrate, runSeedRatify, runSeedValidate } from "../src/seed/commands.js";
 import { startServer } from "../src/server/index.js";
 import { runBuildBegin, runBuildClose, runBuildStatus } from "../src/build-session/commands.js";
+import { runBuildMessage, runBuildRun, runBuildStop } from "../src/builder/commands.js";
 import { runProgression } from "../src/evolution/commands.js";
 import { runDiff, runLog, runSnapshot } from "../src/semantic-commands.js";
 import { runVerifyScenarios } from "../src/runtime/commands.js";
@@ -26,6 +27,9 @@ Usage:
   varai seed migrate [<repo-path>] [--write]
   varai handoff [<repo-path>] [--json] [--brief <file>]
   varai build begin [<repo-path>] [--brief <file>] [--json]
+  varai build run [<repo-path>] --adapter <configured-id> [--json]
+  varai build message [<repo-path>] "<product clarification>"
+  varai build stop [<repo-path>]
   varai build close [<repo-path>] --mode built|carry-forward [--json]
   varai build status [<repo-path>] [--json]
   varai progression [<repo-path>] --from <session> [--to <session>] [--json]
@@ -239,20 +243,39 @@ async function main() {
     const subcommand = args[1];
     const opts = { include: [], exclude: [] };
     const rest = args.slice(2);
+    const positionals = [];
     for (let i = 0; i < rest.length; i++) {
       const arg = rest[i];
       if (arg === "--brief" && rest[i + 1]) opts.brief = rest[++i];
       else if (arg === "--mode" && rest[i + 1]) opts.mode = rest[++i];
+      else if (arg === "--adapter" && rest[i + 1]) opts.adapter = rest[++i];
       else if (arg === "--json") opts.json = true;
       else if (arg === "--no-cache") opts.cache = false;
       else if (arg === "--parser" && rest[i + 1]) opts.parser = rest[++i];
-      else if (!arg.startsWith("-")) opts.repo = arg;
+      else if (!arg.startsWith("-")) positionals.push(arg);
       else throw new Error(`Unknown build option: ${arg}`);
     }
-    const run = subcommand === "begin" ? runBuildBegin : subcommand === "close" ? runBuildClose : subcommand === "status" ? runBuildStatus : null;
+    if (positionals[0]) opts.repo = positionals[0];
+    if (subcommand === "message") {
+      // `build message "text"` or `build message <repo> "text"`
+      if (positionals.length >= 2) {
+        opts.repo = positionals[0];
+        opts.message = positionals.slice(1).join(" ");
+      } else {
+        delete opts.repo;
+        opts.message = positionals[0];
+      }
+    }
+    const run = subcommand === "begin" ? runBuildBegin
+      : subcommand === "run" ? runBuildRun
+        : subcommand === "message" ? runBuildMessage
+          : subcommand === "stop" ? runBuildStop
+            : subcommand === "close" ? runBuildClose
+              : subcommand === "status" ? runBuildStatus
+                : null;
     if (!run) throw new Error(`Unknown build subcommand: ${subcommand ?? "(none)"}`);
     const result = await run(opts);
-    if (subcommand === "close" && result?.exitCode) process.exitCode = result.exitCode;
+    if ((subcommand === "close" || subcommand === "run") && result?.exitCode) process.exitCode = result.exitCode;
     return;
   }
 

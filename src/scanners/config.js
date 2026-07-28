@@ -9,6 +9,33 @@ export class ConfigError extends Error {
   }
 }
 
+function validateBuilders(builders) {
+  if (!builders || typeof builders !== "object" || Array.isArray(builders)) {
+    throw new ConfigError("builders", "expected an object of adapter configs");
+  }
+  const out = {};
+  for (const [id, entry] of Object.entries(builders)) {
+    if (!id || typeof id !== "string") throw new ConfigError("builders", "adapter id must be a string");
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new ConfigError(`builders.${id}`, "expected an object");
+    }
+    if (typeof entry.executable !== "string" || !entry.executable) {
+      throw new ConfigError(`builders.${id}.executable`, "expected a non-empty string");
+    }
+    if (entry.args !== undefined &&
+        (!Array.isArray(entry.args) || entry.args.some((item) => typeof item !== "string"))) {
+      throw new ConfigError(`builders.${id}.args`, "expected an array of strings");
+    }
+    const unknown = Object.keys(entry).filter((key) => !["executable", "args"].includes(key));
+    if (unknown.length) throw new ConfigError(`builders.${id}.${unknown[0]}`, "unknown field");
+    out[id] = {
+      executable: entry.executable,
+      ...(entry.args ? { args: [...entry.args] } : { args: [] }),
+    };
+  }
+  return out;
+}
+
 function validateConfig(parsed) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new ConfigError("root", "expected object");
@@ -21,11 +48,13 @@ function validateConfig(parsed) {
       (!Array.isArray(parsed.exclude) || parsed.exclude.some((item) => typeof item !== "string"))) {
     throw new ConfigError("exclude", "expected an array of strings");
   }
-  const unknown = Object.keys(parsed).filter((key) => !["include", "exclude"].includes(key));
+  if (parsed.builders !== undefined) validateBuilders(parsed.builders);
+  const unknown = Object.keys(parsed).filter((key) => !["include", "exclude", "builders"].includes(key));
   if (unknown.length) throw new ConfigError(unknown[0], "unknown field");
   return {
     ...(parsed.include ? { include: [...parsed.include] } : {}),
     ...(parsed.exclude ? { exclude: [...parsed.exclude] } : {}),
+    ...(parsed.builders ? { builders: validateBuilders(parsed.builders) } : {}),
   };
 }
 

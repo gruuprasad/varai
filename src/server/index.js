@@ -13,11 +13,13 @@ import { SYSTEM_MODEL_SCHEMA_VERSION } from "../system-model/version.js";
 import { readSourceSnippet } from "./source.js";
 import { createReconciliationHandler } from "./reconciliation.js";
 import { createSeedHandlers } from "./seed.js";
+import { createBuilderHandlers } from "./builder.js";
 import { createEvolutionHandler } from "./evolution.js";
 import { assistantFromEnvironment } from "../seed/assistants/openai-compatible.js";
 import { displayLanguage } from "../reporters/display-language.js";
 import { serializeProjections } from "./projections.js";
 import { analyzeCurrentInWorker, AnalyzeAbortedError } from "./analyze-in-worker.js";
+import { recordBuildIntervention } from "../builder/commands.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.resolve(__dirname, "..", "ui");
@@ -168,9 +170,23 @@ export async function startServer({
   });
   const reconciliationHandler = createReconciliationHandler({ repoPath: absRepo, getModel: seedGetModel });
   const evolutionHandler = createEvolutionHandler({ repoPath: absRepo });
+  const builderHandlers = createBuilderHandlers({ repoPath: absRepo, port, broadcast });
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
+
+    if (url.pathname.startsWith("/api/build")) {
+      builderHandlers.handle(req, res, url).then((handled) => {
+        if (!handled) {
+          res.writeHead(404);
+          res.end("Not Found");
+        }
+      }).catch((err) => {
+        res.writeHead(err.statusCode ?? 500, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ error: err.message }));
+      });
+      return;
+    }
 
     if (url.pathname.startsWith("/api/seed") || url.pathname === "/api/reconciliation" || url.pathname === "/api/progression") {
       const handler = url.pathname === "/api/reconciliation" ? reconciliationHandler
@@ -268,7 +284,10 @@ export async function startServer({
 
       // Start the file watcher after announcing the URL so recursive fs.watch
       // setup cannot delay the first browser paint.
-      watcher = createWatcher(absRepo, () => {
+      watcher = createWatcher(absRepo, (change) => {
+        if (change?.relativePath) {
+          void recordBuildIntervention(absRepo, { path: change.relativePath }).catch(() => {});
+        }
         console.error("[server] change detected, rescanning...");
         runScan().then((ok) => {
           if (ok) console.error("[server] rescan complete");
