@@ -5,7 +5,7 @@ Gate 8 adversarial proof for the product control room.
 - **POC path:** `/home/gp/dreamLand/jodulabs/varai-purchase-approvals-poc`
 - **POC HEAD:** `3957b29`
 - **Varai branch:** `feat/product-control-room-slice-1` (worktree)
-- **Varai HEAD:** *(see latest `fix(poc): harden trial honesty…` commit)*
+- **Varai HEAD:** `c7a0a93`
 - **Harness:** `test/poc/purchase-approvals-trials.test.js`
 - **Human eval:** **pending** — see [purchase-approvals-human-eval.md](purchase-approvals-human-eval.md)
 - **Product release gate:** **not passed** (human evaluation required before go/no-go)
