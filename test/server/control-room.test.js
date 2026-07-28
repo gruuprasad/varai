@@ -159,6 +159,105 @@ test("seed with model and no prior build does not invent an unattested regressio
   assert.doesNotMatch(JSON.stringify(body.verification), /Repository changed after ready/);
 });
 
+test("shouldSurfaceUnattested ignores other seeds and never-built current seed", async () => {
+  const { shouldSurfaceUnattested } = await import("../../src/server/control-room.js");
+  const currentHash = "sha256:current";
+  const otherReady = {
+    id: "build:other",
+    seedHash: "sha256:other",
+    gate: { state: "ready", reasons: [] },
+    lifecycleState: "ready",
+    completion: { mode: "built" },
+  };
+  assert.equal(
+    shouldSurfaceUnattested({ state: "unattested", sessionId: null }, {
+      seedHash: currentHash,
+      sessions: [otherReady],
+    }),
+    false,
+    "other seed ready must not invent unattested for never-built current seed",
+  );
+  assert.equal(
+    shouldSurfaceUnattested({ state: "unattested", sessionId: null }, {
+      seedHash: currentHash,
+      sessions: [],
+    }),
+    false,
+  );
+});
+
+test("post-ready edit blocks ready chrome even when frozen report provenance is recorded_build", async (t) => {
+  const { createBuildSessionStore } = await import("../../src/build-session/store.js");
+  const { renderVerification, READY_CHROME_CLASS, READY_BADGE_TEXT } = await import("../../src/ui/verification-view.js");
+  const { readSeed } = await import("../../src/seed/store.js");
+
+  const repo = tempRepo();
+  const seedInput = readSeed(repo);
+  const store = createBuildSessionStore(repo);
+  const frozenReport = {
+    formatVersion: 1,
+    summary: { holds: 0, violated: 0, cannotVerify: 0, notCheckable: 0 },
+    commitments: [],
+    surfaces: { state: "closed", missing: [], unaccounted: [], ambiguous: [], stale: [] },
+    provenance: { state: "recorded_build", sessionId: "build:ready-1" },
+  };
+  const reportHash = await store.putObject(frozenReport);
+  await store.putSession({
+    formatVersion: 1,
+    id: "build:ready-1",
+    seedHash: seedInput.contentHash,
+    seedObjectHash: await store.putObject(seedInput.seed),
+    startedAt: "2026-07-28T00:00:00.000Z",
+    completedAt: "2026-07-28T00:01:00.000Z",
+    lifecycleState: "ready",
+    start: {
+      snapshotId: "snap:1",
+      scannedTreeHash: "a",
+      implementationTreeHash: "b",
+      scanConfigHash: "c",
+    },
+    gate: {
+      state: "ready",
+      reasons: [],
+      coverageRegressions: [],
+      requirementRegressions: [],
+      surfaceProblems: { missing: 0, unaccounted: 0, ambiguous: 0, stale: 0 },
+      scenarioProblems: [],
+    },
+    completion: {
+      mode: "built",
+      scannedTreeHash: "a",
+      scanConfigHash: "c",
+      implementationTreeHash: "b",
+      reportHash,
+      realizationObjectHash: await store.putObject({ formatVersion: 1, seedHash: seedInput.contentHash, bindings: [], witnesses: [] }),
+    },
+    // Live post-ready edit flag — frozen report still says recorded_build.
+    unattested: true,
+    provenanceHint: { state: "unattested", sessionId: "build:ready-1", path: "app.py" },
+  });
+
+  const { server, api } = await start(repo);
+  t.after(() => server.close());
+
+  const response = await api("/api/control-room");
+  const body = await response.json();
+  assert.equal(response.status, 200, `control-room failed: ${JSON.stringify(body)}`);
+  assert.ok(body.verification, `missing verification: ${JSON.stringify(body)}`);
+  assert.ok(body.verification.decisions.some((d) => d.kind === "unattested"),
+    `expected unattested decision, got ${JSON.stringify(body.verification.decisions)}`);
+  assert.equal(body.verification.gate?.state, "needs_attention");
+  assert.notEqual(body.verification.gate?.state, "ready");
+
+  const html = renderVerification(body.verification);
+  assert.doesNotMatch(html, new RegExp(READY_CHROME_CLASS));
+  assert.doesNotMatch(html, new RegExp(`>${READY_BADGE_TEXT}<`));
+  assert.doesNotMatch(html, /seed-badge[^>]*aria-label\s*=\s*["']Ready["']/i);
+  assert.doesNotMatch(html, /seed-badge[^>]*aria-label\s*=\s*["']ready["']/);
+  assert.match(html, /gate-blocked/);
+  assert.match(html, /unattested|Repository changed after ready|no longer matches/i);
+});
+
 test("removing an unresolved item records an auditable draft context note and diff", async (t) => {
   const repo = tempRepo();
   const approved = JSON.parse(fs.readFileSync(path.join(repo, "varai.seed.json"), "utf8"));

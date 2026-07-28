@@ -48,22 +48,48 @@ function buildChangeProjection({ seedInput, authoring }) {
   };
 }
 
-/** Unattested is only a regression when a prior ready/recorded build exists. */
-export function shouldSurfaceUnattested(provenance, sessions = []) {
-  if (!provenance) return false;
-  if (provenance.state === "stale") return true;
-  if (provenance.state !== "unattested") return false;
-  // Never-built repos get unattested with null sessionId — not a regression.
-  return sessions.some((session) =>
+/**
+ * Unattested/stale is a regression only after a ready/recorded build for the
+ * *current* Seed. Never invent it for a never-built seed, and never borrow
+ * readiness from another Seed's sessions.
+ */
+export function shouldSurfaceUnattested(liveProvenance, {
+  seedHash = null,
+  sessions = [],
+  focusSession = null,
+} = {}) {
+  if (!seedHash) return false;
+
+  const forSeed = sessions.filter((session) => session.seedHash === seedHash);
+  if (focusSession?.seedHash === seedHash && !forSeed.some((s) => s.id === focusSession.id)) {
+    forSeed.push(focusSession);
+  }
+
+  const hadReadyOrRecorded = forSeed.some((session) =>
     session.gate?.state === "ready"
     || session.lifecycleState === "ready"
-    || session.unattested === true
-    || Boolean(session.provenanceHint?.state === "unattested"));
+    || session.completion?.mode === "built"
+    || session.completion?.mode === "carry-forward");
+  if (!hadReadyOrRecorded) return false;
+
+  // Post-ready human/edit flag on the session (may keep matching tree hashes).
+  if (forSeed.some((session) =>
+    session.unattested === true || session.provenanceHint?.state === "unattested")) {
+    return true;
+  }
+
+  if (!liveProvenance) return false;
+  return liveProvenance.state === "stale" || liveProvenance.state === "unattested";
 }
 
-function decisionFromGate(gate, report, { sessions = [] } = {}) {
+function decisionFromGate(gate, report, {
+  sessions = [],
+  seedHash = null,
+  focusSession = null,
+  liveProvenance = null,
+} = {}) {
   const decisions = [];
-  if (!gate && !report) return decisions;
+  if (!gate && !report && !liveProvenance) return decisions;
 
   for (const item of gate?.requirementRegressions ?? []) {
     decisions.push({
@@ -124,14 +150,22 @@ function decisionFromGate(gate, report, { sessions = [] } = {}) {
       evidenceIds: [item.surfaceId, item.bindingId, item.reason].filter(Boolean),
     });
   }
-  if (shouldSurfaceUnattested(report?.provenance, sessions)) {
+
+  // Live provenance + session unattested flags — never the frozen close report alone.
+  if (shouldSurfaceUnattested(liveProvenance, { seedHash, sessions, focusSession })) {
+    const sessionId = liveProvenance?.sessionId
+      ?? focusSession?.provenanceHint?.sessionId
+      ?? focusSession?.id
+      ?? "repo";
+    const state = liveProvenance?.state
+      ?? (focusSession?.provenanceHint?.state ?? "unattested");
     decisions.push({
       kind: "unattested",
-      id: report.provenance.sessionId ?? "repo",
-      label: report.provenance.state === "stale"
+      id: sessionId,
+      label: state === "stale"
         ? "Recorded build no longer matches the repository"
         : "Repository changed after ready",
-      evidenceIds: ["provenance", report.provenance.sessionId].filter(Boolean),
+      evidenceIds: ["provenance", sessionId].filter(Boolean),
     });
   }
   return decisions;
@@ -229,6 +263,13 @@ export async function loadControlRoom({
     ? await sessionStore.getObject(focusSession.completion.reportHash).catch(() => report)
     : report;
 
+  // Prefer live reconcile report when present; overlay live provenance so a
+  // frozen close blob cannot hide post-ready unattested edits.
+  const decisionReport = completionReport
+    ? { ...completionReport, provenance: provenance ?? completionReport.provenance }
+    : report;
+
+  const seedHash = seedInput?.contentHash ?? null;
   const decisionSessions = focusSession ? [focusSession, ...listedSessions] : listedSessions;
   const decisions = decisionFromGate(gate ?? {
     state: report && (report.summary?.violated || report.surfaces?.missing?.length || report.surfaces?.unaccounted?.length)
@@ -237,24 +278,48 @@ export async function loadControlRoom({
     reasons: [],
     coverageRegressions: [],
     requirementRegressions: [],
-    scenarioProblems: (completionReport?.scenarios?.results ?? [])
+    scenarioProblems: (decisionReport?.scenarios?.results ?? [])
       .filter((item) => item.result === "failed" || item.result === "could_not_run")
       .map((item) => ({ id: item.id, result: item.result, reasons: item.reasons ?? [] })),
     surfaceProblems: null,
-  }, completionReport, { sessions: decisionSessions });
+  }, decisionReport, {
+    sessions: decisionSessions,
+    seedHash,
+    focusSession,
+    liveProvenance: provenance,
+  });
 
   let verificationGate = gate;
-  if (!verificationGate && decisions.length) {
+  const blockedByUnattested = decisions.some((d) => d.kind === "unattested");
+  if (blockedByUnattested) {
+    verificationGate = {
+      ...(gate ?? {}),
+      state: BUILD_STATES.NEEDS_ATTENTION,
+      reasons: [...new Set([
+        ...(gate?.reasons ?? []),
+        ...decisions.filter((d) => d.kind === "unattested").map((d) => `unattested:${d.id}`),
+      ])],
+      coverageRegressions: gate?.coverageRegressions ?? [],
+      requirementRegressions: gate?.requirementRegressions ?? [],
+      surfaceProblems: gate?.surfaceProblems ?? {
+        missing: decisionReport?.surfaces?.missing?.length ?? 0,
+        unaccounted: decisionReport?.surfaces?.unaccounted?.length ?? 0,
+        ambiguous: decisionReport?.surfaces?.ambiguous?.length ?? 0,
+        stale: decisionReport?.surfaces?.stale?.length ?? 0,
+      },
+      scenarioProblems: gate?.scenarioProblems ?? [],
+    };
+  } else if (!verificationGate && decisions.length) {
     verificationGate = {
       state: "needs_attention",
       reasons: decisions.map((d) => `${d.kind}:${d.id}`),
       coverageRegressions: [],
       requirementRegressions: [],
       surfaceProblems: {
-        missing: completionReport?.surfaces?.missing?.length ?? 0,
-        unaccounted: completionReport?.surfaces?.unaccounted?.length ?? 0,
-        ambiguous: completionReport?.surfaces?.ambiguous?.length ?? 0,
-        stale: completionReport?.surfaces?.stale?.length ?? 0,
+        missing: decisionReport?.surfaces?.missing?.length ?? 0,
+        unaccounted: decisionReport?.surfaces?.unaccounted?.length ?? 0,
+        ambiguous: decisionReport?.surfaces?.ambiguous?.length ?? 0,
+        stale: decisionReport?.surfaces?.stale?.length ?? 0,
       },
       scenarioProblems: decisions.filter((d) => d.kind === "failed_scenario").map((d) => ({
         id: d.id, result: "failed", reasons: d.evidenceIds.slice(1),
