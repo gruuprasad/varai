@@ -105,6 +105,7 @@ export function evaluateBuildGate({
   completionModel,
   startReport,
   completionReport,
+  scenarioRun = null,
 } = {}) {
   const coverage = compareCoverage(startModel, completionModel);
   const coverageRegressions = coverage
@@ -142,18 +143,36 @@ export function evaluateBuildGate({
     reasons.push(`stale-surface:${item.surfaceId}`);
   }
 
+  const scenarioResults = scenarioRun?.scenarios
+    ?? completionReport?.scenarios?.results
+    ?? [];
+  const scenarioProblems = [];
+  for (const item of scenarioResults) {
+    if (item.result === "failed" || item.result === "could_not_run") {
+      scenarioProblems.push(item);
+      reasons.push(`scenario-${item.result}:${item.id}`);
+    }
+  }
+
   const surfaceBlocks = surfaceProblems.missing > 0
     || surfaceProblems.unaccounted > 0
     || surfaceProblems.ambiguous > 0
     || surfaceProblems.stale > 0;
+  const scenarioBlocks = scenarioProblems.length > 0;
   const blocksReady = coverageRegressions.length > 0
     || requirementRegressions.length > 0
-    || surfaceBlocks;
+    || surfaceBlocks
+    || scenarioBlocks;
   return {
     state: blocksReady ? GATE_STATES.NEEDS_ATTENTION : GATE_STATES.READY,
     reasons,
     coverageRegressions,
     requirementRegressions,
     surfaceProblems,
+    scenarioProblems: scenarioProblems.map((item) => ({
+      id: item.id,
+      result: item.result,
+      reasons: item.reasons ?? [],
+    })),
   };
 }

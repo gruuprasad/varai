@@ -68,6 +68,22 @@ export function renderCheckText(report, { model } = {}) {
     lines.push("");
   }
 
+  if (report.scenarios) {
+    lines.push("Scenarios (examples, not universal invariants)");
+    for (const item of report.scenarios.results ?? []) {
+      const label = item.result === "passed" ? "scenario passed"
+        : item.result === "failed" ? "scenario failed"
+          : "scenario could not run";
+      lines.push(`${label}  ${item.id}`);
+      if (item.reasons?.length) lines.push(`    why: ${item.reasons.join("; ")}`);
+    }
+    const s = report.scenarios.summary;
+    if (s) {
+      lines.push(`${s.total} scenarios: ${s.passed} passed, ${s.failed} failed, ${s.couldNotRun} could not run`);
+    }
+    lines.push("");
+  }
+
   const { summary } = report;
   lines.push([
     `${summary.total} requirements:`,

@@ -7,6 +7,7 @@ import { startServer } from "../src/server/index.js";
 import { runBuildBegin, runBuildClose, runBuildStatus } from "../src/build-session/commands.js";
 import { runProgression } from "../src/evolution/commands.js";
 import { runDiff, runLog, runSnapshot } from "../src/semantic-commands.js";
+import { runVerifyScenarios } from "../src/runtime/commands.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -29,6 +30,7 @@ Usage:
   varai build status [<repo-path>] [--json]
   varai progression [<repo-path>] --from <session> [--to <session>] [--json]
   varai check [<repo-path>] [--json] [scan options]
+  varai verify scenarios [<repo-path>] [--json]
 
 Options (map):
   --include <prefix>   Scan only files under this path prefix (repeatable)
@@ -53,6 +55,7 @@ Examples:
   varai diff ../kalakar
   varai seed validate ../varai-slotkeeper-pilot
   varai check ../varai-slotkeeper-pilot
+  varai verify scenarios test/fixtures/purchase-approval-runtime
 `;
 }
 
@@ -264,6 +267,27 @@ async function main() {
       else throw new Error(`Unknown progression option: ${rest[i]}`);
     }
     await runProgression(opts);
+    return;
+  }
+
+  if (command === "verify") {
+    const subcommand = args[1];
+    if (subcommand !== "scenarios") {
+      process.stderr.write(`Unknown verify subcommand: ${subcommand ?? "(none)"}\n\n${usage()}`);
+      process.exitCode = 1;
+      return;
+    }
+    const opts = {};
+    const rest = args.slice(2);
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === "--json") opts.json = true;
+      else if (rest[i] === "--no-cache") opts.cache = false;
+      else if (rest[i] === "--parser" && rest[i + 1]) opts.parser = rest[++i];
+      else if (!rest[i].startsWith("-")) opts.repo = rest[i];
+      else throw new Error(`Unknown verify option: ${rest[i]}`);
+    }
+    const result = await runVerifyScenarios(opts);
+    if (result?.exitCode) process.exitCode = result.exitCode;
     return;
   }
 

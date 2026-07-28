@@ -8,6 +8,7 @@ import { reconcile } from "../reconciliation/check.js";
 import { readRealization } from "../reconciliation/witness-store.js";
 import { renderBuildPacket } from "../seed/handoff.js";
 import { readSeed } from "../seed/store.js";
+import { loadLatestScenarioRun, runVerifyScenarios } from "../runtime/commands.js";
 import { evaluateBuildGate } from "./evaluate.js";
 import { isNonZeroExitGate } from "./state.js";
 import { createBuildSessionStore } from "./store.js";
@@ -88,6 +89,31 @@ export async function runBuildClose(options = {}) {
   if (!realization) throw new Error("Build close requires varai.realization.json");
   const snapshot = await persistCurrentModel(repoPath, current);
   const realizationObjectHash = await store.putObject(realization);
+
+  let scenarioRun = null;
+  if ((input.seed.scenarios ?? []).length > 0) {
+    try {
+      const verified = await runVerifyScenarios({
+        repo: repoPath,
+        current,
+        quiet: true,
+      });
+      scenarioRun = verified.run;
+    } catch (err) {
+      scenarioRun = {
+        id: null,
+        scenarios: (input.seed.scenarios ?? []).map((scenario) => ({
+          id: scenario.id,
+          name: scenario.name,
+          result: "could_not_run",
+          reasons: [err.message],
+        })),
+      };
+    }
+  } else {
+    scenarioRun = await loadLatestScenarioRun(repoPath);
+  }
+
   const startModel = await loadSnapshotModel(repoPath, session.start.snapshotId);
   const startReport = reconcile({
     model: startModel,
@@ -103,14 +129,17 @@ export async function runBuildClose(options = {}) {
       state: options.mode === "carry-forward" ? "recorded_carry_forward" : "recorded_build",
       sessionId: session.id,
     },
+    scenarioRun,
   });
   const gate = evaluateBuildGate({
     startModel,
     completionModel: snapshot.model,
     startReport,
     completionReport: report,
+    scenarioRun,
   });
   const reportHash = await store.putObject(report);
+  const scenarioRunHash = scenarioRun ? await store.putObject(scenarioRun) : null;
   const completed = {
     ...session,
     completion: {
@@ -122,6 +151,7 @@ export async function runBuildClose(options = {}) {
       scanConfigHash: current.scanConfigHash,
       realizationObjectHash,
       reportHash,
+      ...(scenarioRunHash ? { scenarioRunHash } : {}),
     },
     gate,
     completedAt: new Date().toISOString(),

@@ -1,0 +1,95 @@
+{
+  "formatVersion": 2,
+  "seedHash": "sha256:e5768c89c63efc271f9fa94fa52799b36345ff39686ddfe2fbfdd694cc04fcd8",
+  "builder": {
+    "tool": "fixture",
+    "version": "0",
+    "builtAt": "2026-07-28T00:00:00.000Z"
+  },
+  "bindings": [
+    {
+      "id": "binding.submit",
+      "concept": "behavior.submit-request",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "POST /api/purchase-requests"
+      }
+    },
+    {
+      "id": "binding.withdraw",
+      "concept": "behavior.withdraw-request",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "POST /api/purchase-requests/{request_id}/withdraw"
+      }
+    },
+    {
+      "id": "binding.get",
+      "concept": "behavior.get-request",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "GET /api/purchase-requests/{request_id}"
+      }
+    },
+    {
+      "id": "binding.audit",
+      "concept": "behavior.list-audit-entries",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "GET /api/purchase-requests/{request_id}/audit"
+      }
+    }
+  ],
+  "surfaceBindings": [
+    {
+      "id": "surface-binding.submit-request-api",
+      "surface": "surface.submit-request-api",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "POST /api/purchase-requests"
+      }
+    },
+    {
+      "id": "surface-binding.withdraw-request-api",
+      "surface": "surface.withdraw-request-api",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "POST /api/purchase-requests/{request_id}/withdraw"
+      }
+    },
+    {
+      "id": "surface-binding.get-request-api",
+      "surface": "surface.get-request-api",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "GET /api/purchase-requests/{request_id}"
+      }
+    },
+    {
+      "id": "surface-binding.audit-entries-api",
+      "surface": "surface.audit-entries-api",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "GET /api/purchase-requests/{request_id}/audit"
+      }
+    },
+    {
+      "id": "surface-binding.health-api",
+      "surface": "surface.health-api",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "GET /health"
+      }
+    }
+  ],
+  "witnesses": []
+}

@@ -1,0 +1,286 @@
+{
+  "commitments": [
+    {
+      "expectation": "present",
+      "id": "commitment.withdraw-creates-audit",
+      "relation": "creates",
+      "source": "behavior.withdraw-request",
+      "target": {
+        "concept": "resource.audit-entry"
+      }
+    },
+    {
+      "expectation": "present",
+      "id": "commitment.withdraw-requires-ownership",
+      "relation": "requires",
+      "source": "behavior.withdraw-request",
+      "target": {
+        "concept": "condition.requester-owns-request"
+      }
+    }
+  ],
+  "concepts": [
+    {
+      "id": "actor.employee",
+      "name": "Employee",
+      "role": "actor",
+      "summary": "Anyone who can ask the company to buy something."
+    },
+    {
+      "id": "behavior.get-request",
+      "name": "Look at a purchase request",
+      "role": "behavior"
+    },
+    {
+      "id": "behavior.health-check",
+      "name": "Health check",
+      "role": "behavior"
+    },
+    {
+      "id": "behavior.list-audit-entries",
+      "name": "Read the decision history",
+      "role": "behavior"
+    },
+    {
+      "id": "behavior.submit-request",
+      "name": "Submit a purchase request",
+      "role": "behavior"
+    },
+    {
+      "id": "behavior.withdraw-request",
+      "name": "Withdraw a purchase request",
+      "role": "behavior"
+    },
+    {
+      "id": "condition.requester-owns-request",
+      "name": "The request belongs to the person acting",
+      "role": "condition"
+    },
+    {
+      "id": "resource.audit-entry",
+      "name": "Decision record",
+      "role": "resource"
+    },
+    {
+      "id": "resource.purchase-request",
+      "name": "Purchase request",
+      "role": "resource"
+    }
+  ],
+  "context": [
+    {
+      "id": "context.scenarios-are-examples",
+      "text": "The scenarios above are concrete examples that either ran and passed or did not. They do not establish that the rule holds for every possible input."
+    }
+  ],
+  "formatVersion": 3,
+  "ratification": {
+    "contentHash": "sha256:e5768c89c63efc271f9fa94fa52799b36345ff39686ddfe2fbfdd694cc04fcd8",
+    "ratifiedAt": "2026-07-28T00:00:00.000Z",
+    "status": "ratified"
+  },
+  "scenarios": [
+    {
+      "id": "scenario.non-owner-cannot-withdraw",
+      "name": "Another employee cannot withdraw a pending request",
+      "principals": [
+        {
+          "actor": "actor.employee",
+          "as": "owner"
+        },
+        {
+          "actor": "actor.employee",
+          "as": "other"
+        }
+      ],
+      "steps": [
+        {
+          "as": "owner",
+          "capture": "request",
+          "expect": {
+            "status": 201
+          },
+          "id": "submit",
+          "input": {
+            "amount": 500,
+            "description": "Monitor"
+          },
+          "invoke": "behavior.submit-request"
+        },
+        {
+          "as": "other",
+          "expect": {
+            "status": 403
+          },
+          "id": "withdraw",
+          "input": {
+            "requestId": "$request.id"
+          },
+          "invoke": "behavior.withdraw-request"
+        },
+        {
+          "as": "owner",
+          "expect": {
+            "body": {
+              "state": "pending"
+            },
+            "status": 200
+          },
+          "id": "read",
+          "input": {
+            "requestId": "$request.id"
+          },
+          "invoke": "behavior.get-request"
+        }
+      ]
+    },
+    {
+      "id": "scenario.owner-can-withdraw",
+      "name": "The person who asked can take their own pending request back",
+      "principals": [
+        {
+          "actor": "actor.employee",
+          "as": "owner"
+        }
+      ],
+      "steps": [
+        {
+          "as": "owner",
+          "capture": "request",
+          "expect": {
+            "body": {
+              "state": "pending"
+            },
+            "status": 201
+          },
+          "id": "submit",
+          "input": {
+            "amount": 500,
+            "description": "Monitor"
+          },
+          "invoke": "behavior.submit-request"
+        },
+        {
+          "as": "owner",
+          "expect": {
+            "status": 200
+          },
+          "id": "withdraw",
+          "input": {
+            "requestId": "$request.id"
+          },
+          "invoke": "behavior.withdraw-request"
+        },
+        {
+          "as": "owner",
+          "expect": {
+            "body": {
+              "state": "withdrawn"
+            },
+            "status": 200
+          },
+          "id": "read",
+          "input": {
+            "requestId": "$request.id"
+          },
+          "invoke": "behavior.get-request"
+        }
+      ]
+    },
+    {
+      "id": "scenario.withdrawal-is-recorded",
+      "name": "A withdrawal leaves a decision record",
+      "principals": [
+        {
+          "actor": "actor.employee",
+          "as": "owner"
+        }
+      ],
+      "steps": [
+        {
+          "as": "owner",
+          "capture": "request",
+          "expect": {
+            "status": 201
+          },
+          "id": "submit",
+          "input": {
+            "amount": 500,
+            "description": "Monitor"
+          },
+          "invoke": "behavior.submit-request"
+        },
+        {
+          "as": "owner",
+          "expect": {
+            "status": 200
+          },
+          "id": "withdraw",
+          "input": {
+            "requestId": "$request.id"
+          },
+          "invoke": "behavior.withdraw-request"
+        },
+        {
+          "as": "owner",
+          "expect": {
+            "body": {
+              "entries": [
+                {
+                  "decision": "withdrawn"
+                }
+              ]
+            },
+            "status": 200
+          },
+          "id": "history",
+          "input": {
+            "requestId": "$request.id"
+          },
+          "invoke": "behavior.list-audit-entries"
+        }
+      ]
+    }
+  ],
+  "surfaces": [
+    {
+      "access": "authenticated",
+      "behavior": "behavior.list-audit-entries",
+      "channel": "api",
+      "id": "surface.audit-entries-api",
+      "name": "Read decision history API"
+    },
+    {
+      "access": "authenticated",
+      "behavior": "behavior.get-request",
+      "channel": "api",
+      "id": "surface.get-request-api",
+      "name": "Read purchase request API"
+    },
+    {
+      "access": "public",
+      "behavior": "behavior.health-check",
+      "channel": "api",
+      "id": "surface.health-api",
+      "name": "Health check API"
+    },
+    {
+      "access": "authenticated",
+      "behavior": "behavior.submit-request",
+      "channel": "api",
+      "id": "surface.submit-request-api",
+      "name": "Submit purchase request API"
+    },
+    {
+      "access": "authenticated",
+      "behavior": "behavior.withdraw-request",
+      "channel": "api",
+      "id": "surface.withdraw-request-api",
+      "name": "Withdraw purchase request API"
+    }
+  ],
+  "system": {
+    "id": "purchase-approvals",
+    "name": "Purchase Approvals"
+  }
+}

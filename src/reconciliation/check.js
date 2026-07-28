@@ -2,12 +2,15 @@ import { seedContentHash } from "../seed/identity.js";
 import { literalMatches, partitionClaims, relationContract } from "./relations.js";
 import { resolveBindings, resolveSurfaceBindings } from "./resolve.js";
 import { accountSurfaces, surfacesSummary } from "./surface.js";
+import { attachScenariosSection } from "../runtime/report.js";
 
 // Reconciliation is a pure, deterministic projection over
 //   ratified seed + realization witness + canonical System Model + coverage.
 // It mutates nothing, persists no combined graph, and never calls an LLM.
 // Binding state (unbound/resolved/ambiguous/stale) stays separate from the
 // verification verdict (holds/violated/cannot_verify/not_checkable).
+// Optional scenarioRun evidence is attached as a separate report section and
+// never translated into static Claims.
 
 function byId(a, b) {
   return String(a.id).localeCompare(String(b.id));
@@ -165,7 +168,7 @@ function checkCommitment(model, commitment, context) {
   return result;
 }
 
-export function reconcile({ model, seed, realization = null, provenance = null }) {
+export function reconcile({ model, seed, realization = null, provenance = null, scenarioRun = null }) {
   const currentSeedHash = seedContentHash(seed);
   const bindings = [...(realization?.bindings ?? [])].sort(byId);
   const witnesses = [...(realization?.witnesses ?? [])]
@@ -205,7 +208,7 @@ export function reconcile({ model, seed, realization = null, provenance = null }
     surfaceResolution,
   });
 
-  return {
+  const report = {
     formatVersion: 1,
     system: model.system ? { id: model.system.id, key: model.system.key, name: model.system.name } : null,
     seedHash: currentSeedHash,
@@ -237,4 +240,5 @@ export function reconcile({ model, seed, realization = null, provenance = null }
       surfaces: surfacesSummary(surfaces),
     },
   };
+  return attachScenariosSection(report, scenarioRun);
 }

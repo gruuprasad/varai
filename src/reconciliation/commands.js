@@ -3,6 +3,7 @@ import { analyzeCurrent } from "../snapshots/snapshot.js";
 import { findBuildProvenance } from "../build-session/commands.js";
 import { SEED_FILE } from "../seed/schema.js";
 import { readSeed } from "../seed/store.js";
+import { loadLatestScenarioRun } from "../runtime/commands.js";
 import { reconcile } from "./check.js";
 import { renderCheckText } from "./report.js";
 import { readRealization } from "./witness-store.js";
@@ -31,11 +32,13 @@ export async function runCheck(options = {}) {
     scanConfigHash: current.scanConfigHash,
     realization: realizationInput?.realization ?? null,
   });
+  const scenarioRun = options.scenarioRun ?? await loadLatestScenarioRun(repoPath);
   const report = reconcile({
     model,
     seed: seedInput.seed,
     realization: realizationInput?.realization ?? null,
     provenance,
+    scenarioRun,
   });
   if (options.json) process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else process.stdout.write(renderCheckText(report, { model }));
