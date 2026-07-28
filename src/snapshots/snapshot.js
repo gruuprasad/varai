@@ -9,7 +9,7 @@ import { validateSystemModel } from "../system-model/validate.js";
 import { readGitState } from "./git-state.js";
 import { createSnapshotStore, SNAPSHOT_FORMAT_VERSION } from "./store.js";
 
-async function hashScannedTree(repoPath, files) {
+export async function hashScannedTree(repoPath, files) {
   const hash = createHash("sha256");
   for (const file of [...files].sort()) {
     hash.update(file);
@@ -18,6 +18,14 @@ async function hashScannedTree(repoPath, files) {
     hash.update("\0");
   }
   return hash.digest("hex");
+}
+
+// Build provenance compares implementation, not the protocol artifacts that
+// describe the build. A newly written Seed or realization witness must not
+// masquerade as an implementation edit during reviewed carry-forward.
+export async function hashImplementationTree(repoPath, files) {
+  return hashScannedTree(repoPath, files.filter((file) =>
+    file !== "varai.seed.json" && file !== "varai.realization.json"));
 }
 
 export async function analyzeCurrent(repoPath, options = {}) {
@@ -31,6 +39,7 @@ export async function analyzeCurrent(repoPath, options = {}) {
     scan,
     git,
     scannedTreeHash: await hashScannedTree(repoPath, scan.files),
+    implementationTreeHash: await hashImplementationTree(repoPath, scan.files),
     scanConfigHash: semanticHash(canonicalStringify({ include: [...include].sort(), exclude: [...exclude].sort() })),
   };
 }

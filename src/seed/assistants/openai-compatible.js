@@ -1,5 +1,5 @@
 import { normalizeProposal } from "../assistant.js";
-import { CONCEPT_ROLES, SEED_RELATIONS } from "../schema.js";
+import { CONCEPT_ROLES, RECORDED_ONLY_RELATIONS, SEED_RELATIONS } from "../schema.js";
 
 // One real SeedAssistant adapter: any OpenAI-compatible chat-completions
 // endpoint. Configured through explicit endpoint/model and an environment-
@@ -9,14 +9,14 @@ import { CONCEPT_ROLES, SEED_RELATIONS } from "../schema.js";
 const SYSTEM_PROMPT = `You draft Varai seed proposals. A seed is human-ratified source intent for a software system.
 Reply with ONLY a JSON object of the form:
 {
-  "draft": { "formatVersion": 1, "system": {"id": ..., "name": ...}, "concepts": [...], "commitments": [...], "context": [...] } | null,
+  "draft": { "formatVersion": 2, "system": {"id": ..., "name": ...}, "concepts": [...], "commitments": [...], "context": [...] } | null,
   "questions": ["clarifying question for the human", ...],
   "unsupported": ["human statements you could not express in the vocabulary", ...]
 }
 Rules:
 - Concept roles: ${CONCEPT_ROLES.join(", ")}. Concept ids look like "behavior.book-slot".
-- Checkable relations: ${SEED_RELATIONS.join(", ")}. Commitment targets are {"concept": "<id>"} or {"literal": "<scalar>"}.
-- Commitment ids look like "commitment.booking-creates-booking".
+- Checkable relations: ${SEED_RELATIONS.filter((relation) => !RECORDED_ONLY_RELATIONS.includes(relation)).join(", ")}. Commitment targets are {"concept": "<id>"} or {"literal": "<scalar>"}.
+- Commitment ids look like "commitment.booking-creates-booking". Every commitment has "expectation": "present" or "absent".
 - Keep stable ids when renaming; never invent a relation outside the list.
 - Prefer a small set of meaningful commitments. Put anything uncheckable in "unsupported", never in commitments.`;
 
@@ -35,7 +35,7 @@ export function createOpenAICompatibleAssistant({ endpoint, model, apiKey, fetch
     provider: "openai-compatible",
     model,
     endpoint,
-    async propose({ conversation, seed }) {
+    async propose({ conversation, seed, draft = null }) {
       const response = await fetcher(endpoint, {
         method: "POST",
         headers: {
@@ -46,7 +46,7 @@ export function createOpenAICompatibleAssistant({ endpoint, model, apiKey, fetch
           model,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: JSON.stringify({ conversation, currentSeed: seed ?? null }) },
+            { role: "user", content: JSON.stringify({ conversation, currentSeed: seed ?? null, currentDraft: draft }) },
           ],
           temperature: 0,
         }),

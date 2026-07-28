@@ -41,6 +41,7 @@ if (el.backBtn) {
 }
 
 let activeView = "review";
+let progressionData = null;
 let expandedId = null;
 let changesOnly = false;
 let scanData = null;
@@ -65,6 +66,7 @@ fetch("/api/model").then((response) => response.json()).then((data) => {
   if (data.model) { scanData = data; setStatus("live", "Live"); render(); }
 }).catch(() => setStatus("error", "Connection error"));
 fetch("/api/diff").then((response) => response.json()).then((data) => { diffData = data; render(); }).catch(() => {});
+fetch("/api/progression").then((response) => response.json()).then((data) => { progressionData = data; render(); }).catch(() => {});
 
 function refreshSeed() {
   fetch("/api/seed").then((response) => response.json()).then((data) => { seedData = data; render(); }).catch(() => {});
@@ -172,6 +174,12 @@ function render() {
     renderReview();
     return;
   }
+  if (activeView === "progression") {
+    renderTopbar();
+    renderNav();
+    renderProgression();
+    return;
+  }
   if (!scanData?.model) return;
   renderTopbar();
   renderNav();
@@ -216,7 +224,8 @@ function renderNav() {
     navItem("review", "✓", "Report", null) +
     navItem("intent", "✦", "Spec", null) +
     navItem("system", "◎", "Code map", null) +
-    navItem("changes", "∆", "Changes", changes || null);
+    navItem("changes", "∆", "Changes", changes || null) +
+    navItem("progression", "↗", "Progression", null);
   el.sidebarNav.querySelectorAll("[data-view]").forEach((item) => item.addEventListener("click", () => {
     activeView = item.dataset.view;
     expandedId = null;
@@ -225,6 +234,17 @@ function renderNav() {
     if (el.searchClear) el.searchClear.hidden = true;
     render();
   }));
+}
+
+function renderProgression() {
+  hideSearch();
+  const progression = progressionData?.progression;
+  if (!progression) {
+    renderPanes(`<div class="report"><h2>Build progression</h2><p class="empty-copy">Complete two build sessions to compare how each requirement progressed.</p></div>`, "", { inlineExpand: true });
+    return;
+  }
+  const rows = progression.requirements.map((item) => `<tr><td>${esc(item.id)}</td><td>${esc(item.seed)}</td><td>${esc(item.implementation)}</td><td>${esc(item.binding)}</td><td>${esc(item.verdict.from ?? "—")} → ${esc(item.verdict.to ?? "—")}</td></tr>`).join("");
+  renderPanes(`<div class="report"><h2>Build progression</h2><p class="empty-copy">${esc(progression.from.id)} → ${esc(progression.to.id)}</p><table class="progression-table"><thead><tr><th>Requirement</th><th>Spec</th><th>Evidence</th><th>Binding</th><th>Verdict</th></tr></thead><tbody>${rows}</tbody></table></div>`, "", { inlineExpand: true });
 }
 
 function navItem(view, fallbackIcon, name, count) {

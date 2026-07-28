@@ -1,5 +1,6 @@
 import path from "node:path";
-import { scanRepo } from "../scanners/index.js";
+import { analyzeCurrent } from "../snapshots/snapshot.js";
+import { findBuildProvenance } from "../build-session/commands.js";
 import { SEED_FILE } from "../seed/schema.js";
 import { readSeed } from "../seed/store.js";
 import { reconcile } from "./check.js";
@@ -22,11 +23,19 @@ export async function runCheck(options = {}) {
     process.stderr.write("Note: this spec is still a draft; results describe an unapproved draft.\n");
   }
   const realizationInput = readRealization(repoPath, { seed: seedInput.seed });
-  const { model } = await scanRepo(repoPath, options);
+  const current = await analyzeCurrent(repoPath, options);
+  const { model } = current.scan;
+  const provenance = await findBuildProvenance(repoPath, {
+    seedHash: seedInput.contentHash,
+    scannedTreeHash: current.scannedTreeHash,
+    scanConfigHash: current.scanConfigHash,
+    realization: realizationInput?.realization ?? null,
+  });
   const report = reconcile({
     model,
     seed: seedInput.seed,
     realization: realizationInput?.realization ?? null,
+    provenance,
   });
   if (options.json) process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else process.stdout.write(renderCheckText(report, { model }));

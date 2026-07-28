@@ -2,7 +2,8 @@
 // not an analyzer model. The checkable relations are deliberately bounded to
 // those already represented in the System Model relationship vocabulary.
 
-export const SEED_FORMAT_VERSION = 1;
+export const SEED_FORMAT_VERSION = 2;
+export const SUPPORTED_SEED_FORMAT_VERSIONS = Object.freeze([1, SEED_FORMAT_VERSION]);
 
 export const CONCEPT_ROLES = Object.freeze(["actor", "behavior", "resource", "condition", "outcome"]);
 
@@ -25,7 +26,8 @@ export const SEED_FILE = "varai.seed.json";
 export const ROOT_FIELDS = Object.freeze(["formatVersion", "system", "concepts", "commitments", "context", "ratification"]);
 export const SYSTEM_FIELDS = Object.freeze(["id", "name"]);
 export const CONCEPT_FIELDS = Object.freeze(["id", "role", "name", "summary"]);
-export const COMMITMENT_FIELDS = Object.freeze(["id", "source", "relation", "target", "note"]);
+export const COMMITMENT_FIELDS = Object.freeze(["id", "source", "relation", "target", "expectation", "note"]);
+export const COMMITMENT_EXPECTATIONS = Object.freeze(["present", "absent"]);
 export const CONTEXT_FIELDS = Object.freeze(["id", "text"]);
 export const RATIFICATION_FIELDS = Object.freeze(["status", "contentHash", "ratifiedAt"]);
 

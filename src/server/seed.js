@@ -2,6 +2,7 @@ import { readGitState } from "../snapshots/git-state.js";
 import { normalizeProposal } from "../seed/assistant.js";
 import { diffSeeds } from "../seed/diff.js";
 import { seedContentHash } from "../seed/identity.js";
+import { clearAuthoringSession, readAuthoringSession, writeAuthoringSession } from "../seed/authoring-session.js";
 import { SEED_FILE } from "../seed/schema.js";
 import { ratifySeed, readSeed } from "../seed/store.js";
 import { checkSeed, SeedValidationError } from "../seed/validate.js";
@@ -13,7 +14,8 @@ import { checkSeed, SeedValidationError } from "../seed/validate.js";
 // - the only writable file is the fixed seed file, via atomic writes;
 // - provider credentials are never sent to the browser;
 // - nothing is committed to Git automatically;
-// - drafts live in memory only and are never persisted.
+// - the approved Seed remains the only durable intent; a local authoring
+//   session is merely recoverable, unapproved working state.
 
 const MAX_BODY_BYTES = 256 * 1024;
 
@@ -62,7 +64,14 @@ export function readJsonBody(req, limit = MAX_BODY_BYTES) {
 }
 
 export function createSeedHandlers({ repoPath, port, assistant = null, broadcast = () => {} }) {
-  let currentDraft = null; // in-memory review copy; never persisted
+  function currentSeed() { return readSeed(repoPath)?.seed ?? null; }
+
+  function sessionForCurrentSeed() {
+    const session = readAuthoringSession(repoPath);
+    if (!session) return null;
+    const baseSeedHash = currentSeed() ? seedContentHash(currentSeed()) : null;
+    return { ...session, stale: session.baseSeedHash !== baseSeedHash };
+  }
 
   async function seedStatus() {
     let input = null;
@@ -81,12 +90,18 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
       contentHash: input?.contentHash ?? null,
       ratified: input?.ratified ?? false,
       gitDirty: git ? !git.clean : null,
-      draft: currentDraft,
+      draft: sessionForCurrentSeed()?.review ?? null,
+      authoring: sessionForCurrentSeed(),
       assistant: assistant ? { provider: assistant.provider, model: assistant.model } : null,
     };
   }
 
   async function draft(req, res, body) {
+    const existing = sessionForCurrentSeed();
+    if (existing?.stale) {
+      send(res, 409, { error: "The approved spec changed since this draft began. Reject or restart the authoring session before continuing.", authoring: existing });
+      return;
+    }
     let proposal;
     if (body.proposal !== undefined) {
       proposal = normalizeProposal(body.proposal);
@@ -95,15 +110,17 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
         send(res, 409, { error: "No assistant is configured for this server; import a proposal JSON instead." });
         return;
       }
-      proposal = await assistant.propose({ conversation: [{ role: "user", content: body.message }], seed: readSeed(repoPath)?.seed ?? null });
+      const conversation = [...(existing?.conversation ?? []), { role: "user", content: body.message.trim() }];
+      proposal = await assistant.propose({ conversation, seed: currentSeed(), draft: existing?.review?.draft ?? null });
+      body = { ...body, conversation };
     } else {
       send(res, 400, { error: "POST a message for the assistant or a proposal object to import." });
       return;
     }
 
-    const ratified = readSeed(repoPath)?.seed ?? null;
+    const ratified = currentSeed();
     const problems = proposal.draft ? checkSeed({ context: [], ...proposal.draft }).problems : [];
-    currentDraft = {
+    const review = {
       draft: proposal.draft,
       questions: proposal.questions,
       unsupported: proposal.unsupported,
@@ -112,7 +129,13 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
       contentHash: proposal.draft && !problems.length ? seedContentHash({ context: [], ...proposal.draft }) : null,
       source: body.proposal !== undefined ? "import" : "assistant",
     };
-    send(res, 200, currentDraft);
+    const conversation = body.conversation ?? (existing?.conversation ?? []);
+    const session = writeAuthoringSession(repoPath, {
+      baseSeedHash: ratified ? seedContentHash(ratified) : null,
+      conversation: [...conversation, { role: "assistant", content: JSON.stringify({ questions: proposal.questions, unsupported: proposal.unsupported }) }],
+      review,
+    });
+    send(res, 200, { ...review, authoring: { ...session, stale: false } });
   }
 
   async function ratify(req, res, body) {
@@ -120,7 +143,8 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
       send(res, 400, { error: "POST the reviewed draft to ratify." });
       return;
     }
-    if (!currentDraft?.draft || JSON.stringify(body.draft) !== JSON.stringify(currentDraft.draft)) {
+    const session = sessionForCurrentSeed();
+    if (session?.stale || !session?.review?.draft || JSON.stringify(body.draft) !== JSON.stringify(session.review.draft)) {
       send(res, 409, { error: "The posted draft differs from the draft under review; draft again and review before ratifying." });
       return;
     }
@@ -130,7 +154,7 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
       return;
     }
     const result = ratifySeed(repoPath, body.draft, { ratifiedAt: new Date().toISOString() });
-    currentDraft = null;
+    clearAuthoringSession(repoPath);
     broadcast({ type: "seed" });
     send(res, 200, { contentHash: result.contentHash, path: result.path });
   }
@@ -150,7 +174,7 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
         if (url.pathname === "/api/seed/draft") await draft(req, res, body);
         else if (url.pathname === "/api/seed/ratify") await ratify(req, res, body);
         else {
-          currentDraft = null;
+          clearAuthoringSession(repoPath);
           send(res, 200, { draft: null });
         }
         return true;

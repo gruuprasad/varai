@@ -26,6 +26,9 @@ export function renderCheckText(report, { model } = {}) {
   } else {
     lines.push("Builder's map — none supplied; nothing can be located in the code");
   }
+  if (report.provenance) {
+    lines.push(`Build provenance ${report.provenance.state}${report.provenance.sessionId ? ` (${report.provenance.sessionId})` : ""}`);
+  }
   lines.push("");
 
   for (const item of report.commitments) {

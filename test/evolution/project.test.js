@@ -1,0 +1,30 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { createBuildSessionStore } from "../../src/build-session/store.js";
+import { projectProgression } from "../../src/evolution/project.js";
+import { slotkeeperDraft } from "../seed/fixtures.js";
+
+test("progression keeps seed, evidence, binding, and verdict transitions separate", async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "varai-progression-"));
+  const store = createBuildSessionStore(repo);
+  const beforeSeed = slotkeeperDraft();
+  const afterSeed = { ...beforeSeed, context: [...beforeSeed.context, { id: "context.note", text: "A note" }] };
+  const baseResult = { id: "commitment.booking-creates-booking", claimIds: ["claim.one"], bindings: [{ id: "binding.behavior", state: "resolved" }], coverage: [{ capability: "api.effect", state: "analyzed" }], verdict: "holds" };
+  const beforeReportHash = await store.putObject({ commitments: [baseResult] });
+  const afterReportHash = await store.putObject({ commitments: [baseResult] });
+  const beforeSeedObjectHash = await store.putObject(beforeSeed);
+  const afterSeedObjectHash = await store.putObject(afterSeed);
+  const ids = ["build:before", "build:after"];
+  await store.putSession({ id: ids[0], seedObjectHash: beforeSeedObjectHash, completedAt: "2026-01-01T00:00:00.000Z", completion: { mode: "built", reportHash: beforeReportHash } });
+  await store.putSession({ id: ids[1], seedObjectHash: afterSeedObjectHash, completedAt: "2026-01-02T00:00:00.000Z", completion: { mode: "carry-forward", reportHash: afterReportHash } });
+  const result = await projectProgression(repo, { from: ids[0], to: ids[1] });
+  const item = result.requirements.find((entry) => entry.id === baseResult.id);
+  assert.equal(item.seed, "unchanged");
+  assert.equal(item.implementation, "unchanged", "a recorded-note-only seed change is not implementation drift");
+  assert.equal(item.binding, "unchanged");
+  assert.deepEqual(item.verdict, { from: "holds", to: "holds" });
+  assert.equal(result.seedDiff.context.added.length, 1);
+});

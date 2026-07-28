@@ -2,7 +2,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, readFile, rename } from "node:fs/promises";
 
-export const EXTRACTOR_VERSION = 25; // SQLAlchemy Session.get primary-key load types its bound variable
+export const EXTRACTOR_VERSION = 27; // Dependency coverage downgrades on unresolved attribution
 
 
 const CACHE_FORMAT_VERSION = 1;

@@ -19,10 +19,11 @@ product decisions are [ADR 0004](adr/0004-system-model-is-the-product.md) and
   Dependency extraction currently reads Python imports only, so units appear
   without edges in other languages — the surface says so rather than implying
   an absence of dependencies.
-- **Seed → witness → reconciliation.** `varai seed validate` / `approve`,
-  `varai handoff` (vendor-neutral build packet), and `varai check` are wired end
-  to end: a human-ratified seed, an untrusted builder realization witness, and
-  deterministic reconciliation that reports binding state and verdict separately.
+- **Intent → build → verify.** Recoverable multi-turn Seed drafting, explicit
+  Seed polarity, a vendor-neutral build packet, recorded build sessions, and
+  deterministic reconciliation are wired end to end. A realization remains
+  untrusted testimony; provenance is reported separately from requirement
+  verdicts.
 
 ## What is unproven
 
@@ -44,8 +45,13 @@ product decisions are [ADR 0004](adr/0004-system-model-is-the-product.md) and
 
 ## What's next
 
-- Harden reconciliation soundness against adversarial witnesses (lying, stale,
-  ambiguous, refactored bindings).
+- Improve FastAPI dependency tracing so more real operations reach exact
+  effect/failure coverage. The omission trial is now proven for a small route;
+  the existing availability route remains honestly `cannot_verify`. See
+  [product-loop-pilot.md](product-loop-pilot.md).
+- Run adversarial pilot trials for lying, stale, ambiguous, refactored, and
+  expected-absent requirements; use the results to narrow the contract before
+  expanding the language.
 - Grow analyzer coverage where it changes a real decision on a real repo, not to
   chase framework breadth for its own sake.
 - Register analyzers behind a stable contract so new framework support never

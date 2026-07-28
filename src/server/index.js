@@ -13,6 +13,7 @@ import { SYSTEM_MODEL_SCHEMA_VERSION } from "../system-model/version.js";
 import { readSourceSnippet } from "./source.js";
 import { createReconciliationHandler } from "./reconciliation.js";
 import { createSeedHandlers } from "./seed.js";
+import { createEvolutionHandler } from "./evolution.js";
 import { assistantFromEnvironment } from "../seed/assistants/openai-compatible.js";
 import { displayLanguage } from "../reporters/display-language.js";
 import { serializeProjections } from "./projections.js";
@@ -166,12 +167,14 @@ export async function startServer({
     broadcast,
   });
   const reconciliationHandler = createReconciliationHandler({ repoPath: absRepo, getModel: seedGetModel });
+  const evolutionHandler = createEvolutionHandler({ repoPath: absRepo });
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
 
-    if (url.pathname.startsWith("/api/seed") || url.pathname === "/api/reconciliation") {
-      const handler = url.pathname === "/api/reconciliation" ? reconciliationHandler : seedHandlers;
+    if (url.pathname.startsWith("/api/seed") || url.pathname === "/api/reconciliation" || url.pathname === "/api/progression") {
+      const handler = url.pathname === "/api/reconciliation" ? reconciliationHandler
+        : url.pathname === "/api/progression" ? { handle: evolutionHandler } : seedHandlers;
       handler.handle(req, res, url).then((handled) => {
         if (!handled) {
           res.writeHead(404);

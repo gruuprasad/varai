@@ -1,5 +1,5 @@
 import { seedContentHash } from "../seed/identity.js";
-import { RELATION_CAPABILITIES } from "./schema.js";
+import { literalMatches, partitionClaims, relationContract } from "./relations.js";
 import { resolveBindings } from "./resolve.js";
 
 // Reconciliation is a pure, deterministic projection over
@@ -26,24 +26,7 @@ function uniqueEvidence(entries) {
   return [...seen.values()].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 }
 
-function literalTokens(value) {
-  return String(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
-}
-
-// Literal targets match deterministically: normalize both sides to token
-// sequences; the seed literal holds when its tokens are an exact match or a
-// contiguous phrase inside the observed Claim literal.
-export function literalMatches(seedLiteral, claimValue) {
-  const wanted = literalTokens(seedLiteral);
-  const actual = literalTokens(claimValue);
-  if (!wanted.length || wanted.length > actual.length) return false;
-  for (let start = 0; start + wanted.length <= actual.length; start += 1) {
-    if (wanted.every((token, offset) => actual[start + offset] === token)) return true;
-  }
-  return false;
-}
-
-const STRONG_CLAIM_STATES = new Set(["observed", "inferred"]);
+export { literalMatches } from "./relations.js";
 
 function aggregateBindingState(records) {
   if (!records.length) return { state: "unbound", elementIds: [] };
@@ -59,8 +42,12 @@ function aggregateBindingState(records) {
 function checkCommitment(model, commitment, context) {
   const { bindingsByConcept, resolution, witnessesByCommitment } = context;
   const witnessEntries = witnessesByCommitment.get(commitment.id) ?? [];
+  const expectation = commitment.expectation ?? "present";
 
-  const sourceBindingIds = witnessEntries.length
+  // A positive requirement may use a builder hint to point at the realizing
+  // artifact. A negative requirement must examine every bound artifact: a hint
+  // cannot hide a forbidden Claim elsewhere in the realization set.
+  const sourceBindingIds = expectation !== "absent" && witnessEntries.length
     ? uniqueSorted(witnessEntries.map((witness) => witness.sourceBinding))
     : (bindingsByConcept.get(commitment.source) ?? []).map((binding) => binding.id);
   const sourceRecords = sourceBindingIds.map((id) => resolution.get(id) ?? {
@@ -73,6 +60,7 @@ function checkCommitment(model, commitment, context) {
     id: commitment.id,
     source: commitment.source,
     relation: commitment.relation,
+    expectation,
     target: commitment.target,
     bindingState: source.state,
     verdict: null,
@@ -84,7 +72,8 @@ function checkCommitment(model, commitment, context) {
     coverage: [],
   };
 
-  if (!(commitment.relation in RELATION_CAPABILITIES)) {
+  const contract = relationContract(commitment.relation);
+  if (!contract.checkable) {
     result.verdict = "not_checkable";
     result.reasons = ["no-checker-semantics"];
     return result;
@@ -128,11 +117,10 @@ function checkCommitment(model, commitment, context) {
   const candidates = (model.claims ?? [])
     .filter((claim) => sourceElementIds.has(claim.sourceId) && claim.relation === commitment.relation && targetMatches(claim))
     .sort(byId);
-  const strong = candidates.filter((claim) => STRONG_CLAIM_STATES.has(claim.claimState));
-  const weak = candidates.filter((claim) => !STRONG_CLAIM_STATES.has(claim.claimState));
+  const { strong, weak } = partitionClaims(candidates);
 
   if (strong.length) {
-    result.verdict = "holds";
+    result.verdict = result.expectation === "absent" ? "violated" : "holds";
     result.claimIds = strong.map((claim) => claim.id);
     result.evidence = uniqueEvidence(strong.map((claim) => claim.evidence ?? []));
     result.implementationPath = uniqueEvidence(strong.map((claim) => claim.implementationPath ?? []));
@@ -148,19 +136,22 @@ function checkCommitment(model, commitment, context) {
 
   // Absence discipline: a missing Claim is a violation only when a capability
   // responsible for this relation reports `analyzed` for the resolved scope.
-  const capabilities = RELATION_CAPABILITIES[commitment.relation];
+  const capabilities = contract.capabilities;
   const elementById = new Map((model.elements ?? []).map((element) => [element.id, element]));
-  const scopes = uniqueSorted([...sourceElementIds]
-    .map((id) => elementById.get(id)?.subsystemId)
-    .filter(Boolean));
+  const scopeIds = contract.coverageGrain === "subsystem"
+    ? uniqueSorted([...sourceElementIds].map((id) => elementById.get(id)?.subsystemId).filter(Boolean))
+    : uniqueSorted([...sourceElementIds]);
   const relevant = (model.coverage ?? [])
-    .filter((record) => capabilities.includes(record.capability) && scopes.includes(record.scopeId))
+    .filter((record) => capabilities.includes(record.capability) && scopeIds.includes(record.scopeId))
     .map((record) => ({ capability: record.capability, scopeId: record.scopeId, state: record.state }))
     .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   result.coverage = relevant;
-  if (relevant.some((record) => record.state === "analyzed")) {
-    result.verdict = "violated";
-    result.reasons = ["claim-absent-under-analyzed-coverage"];
+  const analyzedScopes = new Set(relevant.filter((record) => record.state === "analyzed").map((record) => record.scopeId));
+  if (scopeIds.length && scopeIds.every((id) => analyzedScopes.has(id))) {
+    result.verdict = result.expectation === "absent" ? "holds" : "violated";
+    result.reasons = [result.expectation === "absent"
+      ? "claim-absent-under-analyzed-coverage"
+      : "claim-absent-under-analyzed-coverage"];
   } else {
     result.verdict = "cannot_verify";
     result.reasons = ["insufficient-coverage"];
@@ -168,7 +159,7 @@ function checkCommitment(model, commitment, context) {
   return result;
 }
 
-export function reconcile({ model, seed, realization = null }) {
+export function reconcile({ model, seed, realization = null, provenance = null }) {
   const currentSeedHash = seedContentHash(seed);
   const bindings = [...(realization?.bindings ?? [])].sort(byId);
   const witnesses = [...(realization?.witnesses ?? [])]
@@ -211,6 +202,7 @@ export function reconcile({ model, seed, realization = null }) {
         builder: realization.builder ?? null,
       }
       : { present: false, seedHash: null, stale: false, builder: null },
+    provenance: provenance ?? { state: "unattested", sessionId: null },
     commitments,
     context: [...(seed.context ?? [])].sort(byId).map((entry) => ({ id: entry.id, text: entry.text })),
     summary: {
@@ -228,4 +220,3 @@ export function reconcile({ model, seed, realization = null }) {
     },
   };
 }
-

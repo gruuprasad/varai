@@ -2,7 +2,7 @@ import { seedContentHash } from "./identity.js";
 import {
   COMMITMENT_FIELDS, COMMITMENT_ID_PATTERN, CONCEPT_FIELDS, CONCEPT_ID_PATTERN, CONCEPT_ROLES,
   CONTEXT_FIELDS, CONTEXT_ID_PATTERN, RATIFICATION_FIELDS, RATIFICATION_STATES, ROOT_FIELDS,
-  SEED_FORMAT_VERSION, SEED_RELATIONS, SYSTEM_FIELDS, SYSTEM_ID_PATTERN,
+  COMMITMENT_EXPECTATIONS, SEED_RELATIONS, SUPPORTED_SEED_FORMAT_VERSIONS, SYSTEM_FIELDS, SYSTEM_ID_PATTERN,
 } from "./schema.js";
 
 export class SeedValidationError extends Error {
@@ -31,7 +31,7 @@ export function checkSeed(seed) {
     return { valid: false, problems: [{ code: "invalid-root", message: "Seed must be an object" }], contentHash: null };
   }
   unknownFields(seed, ROOT_FIELDS, "Seed", problems);
-  if (seed.formatVersion !== SEED_FORMAT_VERSION) {
+  if (!SUPPORTED_SEED_FORMAT_VERSIONS.includes(seed.formatVersion)) {
     problems.push({ code: "unsupported-format-version", message: `Unsupported seed format version: ${seed.formatVersion}` });
   }
 
@@ -99,6 +99,12 @@ export function checkSeed(seed) {
     }
     if (!SEED_RELATIONS.includes(commitment.relation)) {
       problems.push({ code: "unknown-relation", message: `Commitment ${commitment.id} has unknown relation ${JSON.stringify(commitment.relation)}` });
+    }
+    if (seed.formatVersion >= 2 && !COMMITMENT_EXPECTATIONS.includes(commitment.expectation)) {
+      problems.push({ code: "invalid-expectation", message: `Commitment ${commitment.id} expectation must be "present" or "absent"` });
+    }
+    if (seed.formatVersion === 1 && commitment.expectation !== undefined) {
+      problems.push({ code: "unsupported-field-for-format", message: `Commitment ${commitment.id} expectation requires seed format version 2` });
     }
     const target = commitment.target;
     if (!isPlainObject(target) || (target.concept === undefined) === (target.literal === undefined)) {

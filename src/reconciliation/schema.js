@@ -20,23 +20,9 @@ export const ARTIFACT_SOURCE_FIELDS = Object.freeze(["file", "symbol", "line"]);
 export const WITNESS_FIELDS = Object.freeze(["commitment", "sourceBinding", "target"]);
 export const SEED_HASH_PATTERN = /^sha256:[0-9a-f]{64}$/;
 
-// The analyzer capabilities responsible for producing canonical Claims for
-// each seed relation. Absence discipline (ADR 0005): a missing Claim becomes
-// `violated` only when a responsible capability reports `analyzed` for the
-// resolved scope; anything less stays `cannot_verify`.
-export const RELATION_CAPABILITIES = Object.freeze({
-  invokes: Object.freeze(["ui.api-link", "application.operation"]),
-  accepts: Object.freeze(["api.input"]),
-  requires: Object.freeze(["api.condition", "ui.availability"]),
-  reads: Object.freeze(["api.effect", "application.effect"]),
-  changes: Object.freeze(["api.effect", "application.effect"]),
-  creates: Object.freeze(["api.effect", "application.effect"]),
-  removes: Object.freeze(["api.effect", "application.effect"]),
-  produces: Object.freeze(["api.output"]),
-  fails_with: Object.freeze(["api.failure"]),
-  emits: Object.freeze([]),
-  depends_on: Object.freeze(["arch.dependency"]),
-});
+// Re-export for existing consumers. Relation semantics live in relations.js so
+// matching, absence coverage, and checkability cannot drift apart.
+export { RELATION_CAPABILITIES } from "./relations.js";
 
 export class RealizationValidationError extends Error {
   constructor(problems) {

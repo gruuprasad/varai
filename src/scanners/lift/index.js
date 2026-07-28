@@ -4,6 +4,7 @@ import { SYSTEM_MODEL_ANALYZER_VERSION } from "../../system-model/version.js";
 import { elementId, subsystemId, systemId } from "../../system-model/identity.js";
 import { resolveDependencyEdges, pythonScopedSubsystemKeys } from "./dependency-edges.js";
 import { boundaryContractNames } from "./contracts.js";
+import { buildBehaviorCoverage } from "./behavior-coverage.js";
 
 const CONVERGENCE_MIN_BEHAVIORS = 2;
 
@@ -527,18 +528,22 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
     ...item,
   })));
   const populatedLenses = new Set(subsystems.keys());
+  const dependencyGaps = dependencyDiagnostics.some((item) => item.capability === "arch.dependency");
   // Only subsystems with .py Element evidence were in scope for Python import analysis.
   const archDependencyCoverage = [...pythonScopedSubsystemKeys(identifiedElements)].sort().map((lens) => ({
     analyzerId: MODEL_BUILDER_ID,
     analyzerVersion: SYSTEM_MODEL_ANALYZER_VERSION,
     capability: "arch.dependency",
     scope: { kind: "subsystem", key: lens },
-    state: "analyzed",
+    state: dependencyGaps ? "partial" : "analyzed",
     evidence: [],
-    details: ["Python static imports resolved to owning Elements"],
+    details: [dependencyGaps
+      ? "Python import attribution had unresolved or colliding Element ownership"
+      : "Python static imports resolved to owning Elements"],
   }));
   const coverage = [
     ...buildCoverage({ scanContext, behaviors, diagnostics: finalDiagnostics }, populatedLenses),
+    ...buildBehaviorCoverage(behaviors),
     ...archDependencyCoverage,
   ];
   return buildSystemModel({

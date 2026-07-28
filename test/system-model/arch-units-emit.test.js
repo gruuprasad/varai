@@ -33,7 +33,7 @@ test("the added dependency surfaces through diffSystemModels", { timeout: 30_000
   assert.equal(addedDepends.length, 1);
 });
 
-test("arch.dependency analyzed coverage is only for Python-bearing subsystems", { timeout: 30_000 }, async () => {
+test("arch.dependency coverage is only for Python-bearing subsystems and downgrades on unresolved attribution", { timeout: 30_000 }, async () => {
   const base = await scanRepo(path.resolve("test/fixtures/arch-units/base"), { cache: false });
   const coverage = base.model.coverage.filter((item) => item.capability === "arch.dependency");
   assert.ok(coverage.length >= 1, "arch.dependency coverage entries exist");
@@ -51,16 +51,16 @@ test("arch.dependency analyzed coverage is only for Python-bearing subsystems", 
 
   for (const record of coverage) {
     assert.ok(subsystemById.has(record.scopeId), `coverage scope ${record.scopeId} is a subsystem`);
-    assert.equal(record.state, "analyzed");
+    assert.ok(["analyzed", "partial"].includes(record.state));
     assert.ok(
       pythonSubsystemIds.has(record.scopeId),
-      `analyzed arch.dependency must not cover non-Python subsystem ${subsystemById.get(record.scopeId)?.key}`,
+      `arch.dependency must not cover non-Python subsystem ${subsystemById.get(record.scopeId)?.key}`,
     );
   }
   assert.equal(
     coverage.length,
     pythonSubsystemIds.size,
-    "one analyzed arch.dependency coverage per Python-bearing subsystem",
+    "one arch.dependency coverage record per Python-bearing subsystem",
   );
 });
 
@@ -78,5 +78,5 @@ test("mixed Python+UI fixture omits arch.dependency coverage on non-Python lense
     (item) => item.capability === "arch.dependency" && item.scopeId === api.id,
   );
   assert.equal(apiArch.length, 1);
-  assert.equal(apiArch[0].state, "analyzed");
+  assert.ok(["analyzed", "partial"].includes(apiArch[0].state));
 });

@@ -140,6 +140,9 @@ test("partial effect coverage produces cannot_verify, never a violation", async 
   const aggregate = narrowed.elements.find((item) => item.name === "BuildingModelDocument");
   narrowed.claims = narrowed.claims.filter((claim) =>
     !(claim.sourceId === operation.id && claim.relation === "changes" && claim.target.id === aggregate.id));
+  for (const record of narrowed.coverage) {
+    if (record.capability === "api.effect" && record.scopeId === operation.id) record.state = "partial";
+  }
   const report = reconcile({ model: narrowed, seed, realization });
   const item = byCommitment(report, "commitment.put-changes-document");
   assert.equal(item.verdict, "cannot_verify");

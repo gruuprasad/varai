@@ -2,8 +2,10 @@
 
 import { runMap } from "../src/map.js";
 import { runCheck } from "../src/reconciliation/commands.js";
-import { runHandoff, runSeedRatify, runSeedValidate } from "../src/seed/commands.js";
+import { runHandoff, runSeedMigrate, runSeedRatify, runSeedValidate } from "../src/seed/commands.js";
 import { startServer } from "../src/server/index.js";
+import { runBuildBegin, runBuildClose, runBuildStatus } from "../src/build-session/commands.js";
+import { runProgression } from "../src/evolution/commands.js";
 import { runDiff, runLog, runSnapshot } from "../src/semantic-commands.js";
 
 const args = process.argv.slice(2);
@@ -20,7 +22,12 @@ Usage:
   varai diff [<repo-path>] [--from <selector>] [--to <selector|current>] [--json] [--show-evidence-moves]
   varai seed validate [<repo-path>]
   varai seed approve [<repo-path>]   (alias: ratify)
+  varai seed migrate [<repo-path>] [--write]
   varai handoff [<repo-path>] [--json] [--brief <file>]
+  varai build begin [<repo-path>] [--brief <file>] [--json]
+  varai build close [<repo-path>] --mode built|carry-forward [--json]
+  varai build status [<repo-path>] [--json]
+  varai progression [<repo-path>] --from <session> [--to <session>] [--json]
   varai check [<repo-path>] [--json] [scan options]
 
 Options (map):
@@ -184,10 +191,18 @@ async function main() {
 
   if (command === "seed") {
     const subcommand = args[1];
-    if (subcommand === "validate" || subcommand === "ratify" || subcommand === "approve") {
-      const positional = args.slice(2).filter((arg) => !arg.startsWith("-"));
-      const run = subcommand === "validate" ? runSeedValidate : runSeedRatify;
-      await run({ repo: positional[0] });
+    if (subcommand === "validate" || subcommand === "ratify" || subcommand === "approve" || subcommand === "migrate") {
+      const rest = args.slice(2);
+      const positional = rest.filter((arg) => !arg.startsWith("-"));
+      const write = rest.includes("--write");
+      if (rest.some((arg) => arg.startsWith("-") && arg !== "--write")) {
+        throw new Error(`Unknown seed option: ${rest.find((arg) => arg.startsWith("-") && arg !== "--write")}`);
+      }
+      if (write && subcommand !== "migrate") throw new Error("--write is only valid for seed migrate");
+      const run = subcommand === "validate" ? runSeedValidate
+        : subcommand === "migrate" ? runSeedMigrate
+          : runSeedRatify;
+      await run({ repo: positional[0], write });
       return;
     }
     process.stderr.write(`Unknown seed subcommand: ${subcommand ?? "(none)"}\n\n${usage()}`);
@@ -214,6 +229,40 @@ async function main() {
 
   if (command === "check") {
     await runCheck(parseSemanticOptions(args.slice(1), { json: true }));
+    return;
+  }
+
+  if (command === "build") {
+    const subcommand = args[1];
+    const opts = { include: [], exclude: [] };
+    const rest = args.slice(2);
+    for (let i = 0; i < rest.length; i++) {
+      const arg = rest[i];
+      if (arg === "--brief" && rest[i + 1]) opts.brief = rest[++i];
+      else if (arg === "--mode" && rest[i + 1]) opts.mode = rest[++i];
+      else if (arg === "--json") opts.json = true;
+      else if (arg === "--no-cache") opts.cache = false;
+      else if (arg === "--parser" && rest[i + 1]) opts.parser = rest[++i];
+      else if (!arg.startsWith("-")) opts.repo = arg;
+      else throw new Error(`Unknown build option: ${arg}`);
+    }
+    const run = subcommand === "begin" ? runBuildBegin : subcommand === "close" ? runBuildClose : subcommand === "status" ? runBuildStatus : null;
+    if (!run) throw new Error(`Unknown build subcommand: ${subcommand ?? "(none)"}`);
+    await run(opts);
+    return;
+  }
+
+  if (command === "progression") {
+    const opts = {};
+    const rest = args.slice(1);
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === "--from" && rest[i + 1]) opts.from = rest[++i];
+      else if (rest[i] === "--to" && rest[i + 1]) opts.to = rest[++i];
+      else if (rest[i] === "--json") opts.json = true;
+      else if (!rest[i].startsWith("-")) opts.repo = rest[i];
+      else throw new Error(`Unknown progression option: ${rest[i]}`);
+    }
+    await runProgression(opts);
     return;
   }
 

@@ -29,6 +29,11 @@ function targetName(target, nameOf) {
   return target?.concept !== undefined ? nameOf(target.concept) : String(target?.literal);
 }
 
+function requirementText(commitment, nameOf) {
+  const relation = seedRelationText(commitment.relation);
+  return `${commitment.expectation === "absent" ? "must not " : ""}${relation} ${targetName(commitment.target, nameOf)}`;
+}
+
 export function specSections(seed, review) {
   const nameOf = (id) => seed.concepts.find((concept) => concept.id === id)?.name ?? id;
   const verdicts = verdictById(review);
@@ -48,7 +53,7 @@ export function specSections(seed, review) {
         .filter((commitment) => commitment.source === concept.id)
         .map((commitment) => ({
           id: commitment.id,
-          text: `${seedRelationText(commitment.relation)} ${targetName(commitment.target, nameOf)}`,
+          text: requirementText(commitment, nameOf),
           note: commitment.note ?? null,
           verdict: verdicts.get(commitment.id) ?? null,
         }))
@@ -151,7 +156,7 @@ export function countSpecMatches(seed, query) {
   if (!needle) return 0;
   const nameOf = (id) => seed.concepts.find((concept) => concept.id === id)?.name ?? id;
   return seed.commitments.filter((commitment) =>
-    `${nameOf(commitment.source)} ${seedRelationText(commitment.relation)} ${targetName(commitment.target, nameOf)}`
+    `${nameOf(commitment.source)} ${requirementText(commitment, nameOf)}`
       .toLowerCase().includes(needle)).length;
 }
 

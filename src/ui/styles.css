@@ -1901,3 +1901,21 @@ body {
   opacity: 0.66;
   white-space: nowrap;
 }
+
+.progression-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.progression-table th,
+.progression-table td {
+  padding: 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.progression-table th {
+  color: var(--text-muted);
+  font-weight: 600;
+}

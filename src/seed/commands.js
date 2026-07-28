@@ -3,6 +3,9 @@ import path from "node:path";
 import { renderBuildPacket } from "./handoff.js";
 import { SEED_FILE } from "./schema.js";
 import { ratifySeed, readSeed, seedPath } from "./store.js";
+import { migrateSeedToCurrent } from "./migrate.js";
+import { canonicalStringifySeed, canonicalizeSeed } from "./canonicalize.js";
+import { writeSeed } from "./store.js";
 import { SeedValidationError } from "./validate.js";
 
 // CLI runner for `varai seed validate`: reports every validation problem or
@@ -73,6 +76,26 @@ export async function runSeedRatify(options = {}) {
   const ratified = ratifySeed(repoPath, result.seed, { ratifiedAt: new Date().toISOString() });
   process.stdout.write(`Approved ${SEED_FILE}\n  fingerprint ${ratified.contentHash}\n`);
   return ratified;
+}
+
+// Seed format migration is explicit. Without --write it prints the exact draft
+// document for review; with --write it atomically writes an unapproved v2 Seed.
+export async function runSeedMigrate(options = {}) {
+  const repoPath = path.resolve(options.repo ?? ".");
+  const input = readSeed(repoPath);
+  if (!input) {
+    process.stderr.write(`No ${SEED_FILE} found at ${seedPath(repoPath)}\n`);
+    process.exitCode = 1;
+    return null;
+  }
+  const migrated = migrateSeedToCurrent(input.seed);
+  if (options.write) {
+    const result = writeSeed(repoPath, migrated);
+    process.stdout.write(`Migrated ${SEED_FILE} to format ${migrated.formatVersion} as an unapproved draft\n  fingerprint ${result.contentHash}\n`);
+    return { ...result, seed: migrated };
+  }
+  process.stdout.write(canonicalStringifySeed(canonicalizeSeed(migrated)));
+  return migrated;
 }
 
 // CLI runner for `varai handoff`: renders the vendor-neutral build packet for

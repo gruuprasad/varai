@@ -68,6 +68,32 @@ test("assistant receives only conversation and current seed — never repository
   assert.ok(!sent.includes("hunter2"), "repository file content never reaches the assistant");
 });
 
+test("authoring is multi-turn and survives a dashboard restart without approving a seed", async (t) => {
+  const repo = tempRepo();
+  const assistant = createFakeAssistant((input) => ({
+    draft: slotkeeperDraft(),
+    questions: input.conversation.length < 3 ? ["Which member may book?"] : [],
+    unsupported: [],
+  }));
+  const first = await startStudio(repo, { assistant });
+  t.after(() => first.server.close());
+
+  assert.equal((await first.post("/api/seed/draft", { message: "members book slots" })).status, 200);
+  assert.equal((await first.post("/api/seed/draft", { message: "a member books one" })).status, 200);
+  assert.equal(assistant.calls.length, 2);
+  assert.equal(assistant.calls[1].conversation.length, 3, "the next turn includes the first human and assistant turns");
+  assert.equal(assistant.calls[1].draft.system.id, "slotkeeper", "the reviewed proposal is supplied as working context");
+  assert.ok(fs.existsSync(path.join(repo, ".varai", "authoring-v1", "session.json")));
+  assert.ok(!fs.existsSync(path.join(repo, SEED_FILE)), "working state is not an approved seed");
+
+  await first.server.close();
+  const restarted = await startStudio(repo, { assistant });
+  t.after(() => restarted.server.close());
+  const status = await (await restarted.api("/api/seed")).json();
+  assert.equal(status.draft.draft.system.id, "slotkeeper");
+  assert.equal(status.authoring.conversation.length, 4);
+});
+
 test("no assistant call happens without an explicit POST", async (t) => {
   const repo = tempRepo();
   const assistant = createFakeAssistant();

@@ -37,6 +37,7 @@ test("the adapter sends only conversation and current seed, with credentials in 
   assert.ok(sent.includes("behavior.book-slot"), "current seed content is included");
   assert.ok(!sent.includes("sekrit"), "the credential never enters the payload");
   assert.ok(!sent.includes("routes.py"), "no repository code is sent");
+  assert.ok(!sent.includes("performs"), "recorded-only relations are not advertised as checkable");
 });
 
 test("code fences are stripped and proposals are normalized", async () => {

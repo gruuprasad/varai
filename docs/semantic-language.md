@@ -548,6 +548,12 @@ that checks each commitment against canonical Claims and reports `holds`, `viola
 `cannot_verify`, or `not_checkable` with the binding state, evidence, and coverage behind each
 verdict.
 
+Each commitment can explicitly expect a claim to be `present` or `absent`.
+An absence is never inferred from a broad scan: it is a `holds` or `violated`
+result only when the responsible capability declares exact analyzed coverage for
+the resolved element or subsystem scope. Otherwise the result is
+`cannot_verify`.
+
 Reconciliation changes nothing about the Claim model: a seed can never raise the confidence of a
 Claim, a builder witness can never substitute for evidence, and a commitment without analyzable
 Claim semantics remains human context rather than becoming a silent absence claim. The System

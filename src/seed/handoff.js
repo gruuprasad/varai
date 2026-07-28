@@ -25,6 +25,10 @@ function formatTarget(target) {
   return JSON.stringify(target?.literal);
 }
 
+function expectationText(commitment) {
+  return commitment.expectation === "absent" ? "must not" : commitment.relation;
+}
+
 export function renderBuildPacket({ seed, brief } = {}) {
   if (seed?.ratification?.status !== "ratified") {
     throw new Error("This spec is not approved yet; approve it before creating a build packet.");
@@ -62,7 +66,7 @@ export function renderBuildPacket({ seed, brief } = {}) {
   lines.push("## Requirements");
   lines.push("");
   for (const commitment of [...seed.commitments].sort((a, b) => a.id.localeCompare(b.id))) {
-    lines.push(`- \`${commitment.id}\`: \`${commitment.source}\` **${commitment.relation}** \`${formatTarget(commitment.target)}\`${commitment.note ? ` — ${commitment.note}` : ""}`);
+    lines.push(`- \`${commitment.id}\`: \`${commitment.source}\` **${expectationText(commitment)}** \`${formatTarget(commitment.target)}\`${commitment.note ? ` — ${commitment.note}` : ""}`);
   }
   lines.push("");
   const checkable = SEED_RELATIONS.filter((relation) => !RECORDED_ONLY_RELATIONS.includes(relation));
@@ -78,11 +82,11 @@ export function renderBuildPacket({ seed, brief } = {}) {
   lines.push("## What you must deliver");
   lines.push("");
   lines.push("1. A runnable application with tests covering the requirements, in ordinary Git history.");
-  lines.push("2. A `varai.realization.json` file at the repository root linking every thing the spec");
-  lines.push("   names to the artifact you created for it. Link by stable public boundaries (route keys,");
+  lines.push("2. A `varai.realization.json` file at the repository root linking every thing named by a checkable requirement");
+  lines.push("   to the artifact you created for it. Link by stable public boundaries (route keys,");
   lines.push("   contract/model names); use source file + symbol only as a fallback. Source lines");
   lines.push("   alone are not accepted as identity.");
-  lines.push("3. Per requirement, name which link realizes its source.");
+  lines.push("3. Optional per-requirement source hints only when one thing maps to several artifacts.");
   lines.push("");
   lines.push("## Builder's map (varai.realization.json)");
   lines.push("");
