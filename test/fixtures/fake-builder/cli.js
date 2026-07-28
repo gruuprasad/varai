@@ -18,13 +18,24 @@ const packetPath = argValue("--packet") ?? process.argv.at(-1);
 const cwd = process.cwd();
 const self = fileURLToPath(import.meta.url);
 
+function looksLikeVaraiCheckout(dir) {
+  return fs.existsSync(path.join(dir, "src", "builder", "process-adapter.js"))
+    || fs.existsSync(path.join(dir, "src", "builder", "commands.js"));
+}
+
 function writeRealization() {
+  // Defense in depth: never drop realization into the Varai checkout itself
+  // unless the process adapter explicitly marked this as a fixture spawn.
+  if (looksLikeVaraiCheckout(cwd) && process.env.VARAI_FAKE_BUILDER !== "1") {
+    process.stderr.write("fake builder refusing to write realization into a Varai checkout\n");
+    return;
+  }
   let seedHash = "sha256:fake";
   try {
     const seed = JSON.parse(fs.readFileSync(path.join(cwd, "varai.seed.json"), "utf8"));
     seedHash = seed?.ratification?.contentHash ?? seedHash;
   } catch {
-    // fall through
+    // Temp fixture repos may omit seed; still write under the spawn cwd only.
   }
   fs.writeFileSync(
     path.join(cwd, "varai.realization.json"),
@@ -53,6 +64,7 @@ async function main() {
       detached: false,
       stdio: "ignore",
       shell: false,
+      env: process.env,
     });
     fs.writeFileSync(marker, String(child.pid));
     setInterval(() => {}, 60_000);

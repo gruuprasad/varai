@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import path from "node:path";
 
 // Process adapter: one explicitly configured local CLI. Executable and fixed
 // args come from local Varai config — never from a browser request body.
@@ -22,6 +23,17 @@ export function buildBuilderEnv(sourceEnv = {}, { envAllowlist = [] } = {}) {
     if (key.startsWith("LC_") && sourceEnv[key] != null) out[key] = sourceEnv[key];
   }
   return out;
+}
+
+/** Builder spawns must never inherit process.cwd() — require an absolute path. */
+export function requireAbsoluteCwd(cwd) {
+  if (typeof cwd !== "string" || !cwd.trim()) {
+    throw new Error("Builder process adapter requires an absolute cwd");
+  }
+  if (!path.isAbsolute(cwd)) {
+    throw new Error(`Builder process adapter requires an absolute cwd (got relative: ${cwd})`);
+  }
+  return path.resolve(cwd);
 }
 
 function truncateText(text, maxBytes) {
@@ -94,12 +106,17 @@ export function createProcessAdapter({
       if (child && !hasExited(child)) {
         throw new Error("Builder process is already running");
       }
+      const absoluteCwd = requireAbsoluteCwd(cwd);
       stopRequested = false;
-      const env = buildBuilderEnv(sourceEnv, { envAllowlist });
+      const env = {
+        ...buildBuilderEnv(sourceEnv, { envAllowlist }),
+        // Marks fixture builders as intentionally spawned under a controlled cwd.
+        VARAI_FAKE_BUILDER: "1",
+      };
       const argv = [...args, packetPath].filter((part) => part !== undefined && part !== null);
       // detached → new process group so stop can kill the whole tree.
       const spawned = spawn(executable, argv, {
-        cwd,
+        cwd: absoluteCwd,
         env,
         shell: false,
         signal,

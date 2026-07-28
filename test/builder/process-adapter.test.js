@@ -257,3 +257,38 @@ test("stop kills the whole process group including grandchildren", async () => {
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+test("start requires an absolute cwd and never falls back to process.cwd()", async () => {
+  const { access } = await import("node:fs/promises");
+  const worktreeLeak = path.resolve("varai.realization.json");
+  try { await rm(worktreeLeak, { force: true }); } catch { /* */ }
+
+  const adapter = createProcessAdapter({
+    id: "fake",
+    executable: process.execPath,
+    args: [fixtureCli, "--mode", "success", "--packet"],
+  });
+
+  await assert.rejects(
+    () => adapter.start({}),
+    /absolute cwd|cwd is required/i,
+  );
+  await assert.rejects(
+    () => adapter.start({ cwd: "relative/tmp" }),
+    /absolute cwd/i,
+  );
+  await assert.rejects(
+    () => adapter.start({ cwd: null }),
+    /absolute cwd|cwd is required/i,
+  );
+
+  // Must not have leaked a realization file into the caller's cwd/worktree.
+  let leaked = false;
+  try {
+    await access(worktreeLeak);
+    leaked = true;
+  } catch {
+    leaked = false;
+  }
+  assert.equal(leaked, false, "missing cwd must not write ./varai.realization.json");
+});
