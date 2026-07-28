@@ -5,7 +5,7 @@ Gate 8 adversarial proof for the product control room.
 - **POC path:** `/home/gp/dreamLand/jodulabs/varai-purchase-approvals-poc`
 - **POC HEAD:** `3957b29`
 - **Varai branch:** `feat/product-control-room-slice-1` (worktree)
-- **Varai HEAD:** `59bd02b` (trials in `bf01e37`)
+- **Varai HEAD:** *(see latest `fix(poc): harden trial honesty…` commit)*
 - **Harness:** `test/poc/purchase-approvals-trials.test.js`
 - **Human eval:** **pending** — see [purchase-approvals-human-eval.md](purchase-approvals-human-eval.md)
 - **Product release gate:** **not passed** (human evaluation required before go/no-go)
@@ -29,11 +29,11 @@ Gate 8 adversarial proof for the product control room.
 | 2 | Omitted audit | not ready | `needs_attention` | scenario failures on audit-recording journeys |
 | 3 | Inverted authorization | not ready | `needs_attention` | `scenario.non-owner-cannot-withdraw` failed |
 | 4 | State corruption after denial | not ready | `needs_attention` | `scenario.non-owner-cannot-withdraw` failed (follow-up state) |
-| 5 | Unexpected DELETE | not ready | `needs_attention` | `unaccounted-surface:` reason; surfaceProblems.unaccounted > 0 |
+| 5 | Unexpected DELETE | not ready; positives hold | `needs_attention` | `scenarios.failed === 0`, no requirement regressions, `unaccounted > 0` |
 | 6 | Coverage poisoning | not ready | `needs_attention` | coverageRegressions with `transition: degraded` |
 | 7 | Pure refactor | still ready | `ready` | helpers relocated; no scenario/surface/requirement regression |
-| 8 | Product change (threshold) | progression exists | progression with seedDiff | `context.manager-limit` → 20000; blueprint before/after; two ready sessions |
-| 9 | Outside-session edit | unattested | `provenanceHint.state = unattested` | post-ready edit via `recordBuildIntervention` |
+| 8 | Product change (programmatic Seed draft+ratify) | progression exists | progression with seedDiff | threshold → 20000; chat Change deferred to human eval |
+| 9 | Outside-session edit | unattested | `provenanceHint.state = unattested` | real file edit + watcher-style `recordBuildIntervention` → `runBuildStatus` |
 
 ## How to reproduce
 
@@ -42,9 +42,14 @@ cd /home/gp/dreamLand/jodulabs/varai/.worktrees/feat/product-control-room-slice-
 test -d /home/gp/dreamLand/jodulabs/varai-purchase-approvals-poc
 export PATH="$HOME/.local/bin:$PATH"
 node --test test/poc/*.test.js
+# or: node scripts/poc-trials.js   # fails hard if POC missing
 ```
 
 Optional: `VARAI_POC_PATH=/absolute/path/to/poc`.
+
+Without a sibling POC, `npm test` / `node --test test/poc/*.test.js` **skips** the nine
+adversarial trials (harness unit tests still run). `scripts/poc-trials.js` remains
+the explicit Gate 8 runner and exits non-zero if the POC is absent.
 
 ## Notes
 
@@ -53,3 +58,9 @@ Optional: `VARAI_POC_PATH=/absolute/path/to/poc`.
   `include` is `backend` only.
 - Manager limit defaults to 10000 (`context.manager-limit` / `PURCHASE_MANAGER_LIMIT`).
 - Trials clone the POC into temp dirs; the sibling repo stays the green baseline.
+- POC discovery: `VARAI_POC_PATH`, else sibling of git main checkout (`--git-common-dir`),
+  else walk-up from the worktree looking for `varai-purchase-approvals-poc` next to `varai/`.
+- Trial 9 does not claim filesystem-alone detection: the product marks post-ready
+  edits unattested via watcher → `recordBuildIntervention` (same path exercised here).
+- Trial 8 proves Seed/implementation progression with programmatic draft+ratify;
+  multi-turn chat Change is left to human evaluation.

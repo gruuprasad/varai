@@ -6,13 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const VARAI_ROOT = path.resolve(here, "../..");
-
-// Sibling of the Varai repo root (next to varai-slotkeeper-pilot), not inside fixtures.
-// From this worktree: ../../../.. = jodulabs/. Env VARAI_POC_PATH overrides.
-export const DEFAULT_POC_PATH = path.resolve(
-  process.env.VARAI_POC_PATH
-    ?? path.join(VARAI_ROOT, "../../../..", "varai-purchase-approvals-poc"),
-);
+const POC_DIRNAME = "varai-purchase-approvals-poc";
 
 export const POC_ENV = {
   ...process.env,
@@ -23,12 +17,78 @@ export const POC_ENV = {
   VARAI_POC_FINANCE_TOKEN: "finance-1-token",
 };
 
-export function assertPocExists(pocPath = DEFAULT_POC_PATH) {
-  if (!fs.existsSync(pocPath)) {
-    throw new Error(`Purchase-approvals POC missing at ${pocPath}`);
+export function looksLikePoc(pocPath) {
+  return Boolean(pocPath)
+    && fs.existsSync(pocPath)
+    && fs.existsSync(path.join(pocPath, "varai.seed.json"));
+}
+
+function gitMainRepoRoot(startDir) {
+  try {
+    const common = execFileSync("git", ["rev-parse", "--git-common-dir"], {
+      cwd: startDir,
+      encoding: "utf8",
+    }).trim();
+    const absCommon = path.isAbsolute(common) ? common : path.resolve(startDir, common);
+    // common-dir is typically <main-checkout>/.git (or that path as a file in worktrees).
+    return path.basename(absCommon) === ".git" ? path.dirname(absCommon) : absCommon;
+  } catch {
+    return null;
   }
-  if (!fs.existsSync(path.join(pocPath, "varai.seed.json"))) {
-    throw new Error(`POC at ${pocPath} has no varai.seed.json`);
+}
+
+/**
+ * Resolve the sibling purchase-approvals POC.
+ * Order: VARAI_POC_PATH → sibling of git main checkout → walk-up from startDir.
+ */
+export function resolvePocPath({
+  env = process.env,
+  startDir = VARAI_ROOT,
+  gitCommonDir,
+} = {}) {
+  if (env.VARAI_POC_PATH) return path.resolve(env.VARAI_POC_PATH);
+
+  if (gitCommonDir !== null) {
+    const mainRoot = gitCommonDir === undefined
+      ? gitMainRepoRoot(startDir)
+      : (path.basename(path.resolve(gitCommonDir)) === ".git"
+        ? path.dirname(path.resolve(gitCommonDir))
+        : path.resolve(gitCommonDir));
+    if (mainRoot) {
+      const sibling = path.join(path.dirname(mainRoot), POC_DIRNAME);
+      if (looksLikePoc(sibling)) return sibling;
+    }
+  }
+
+  let dir = path.resolve(startDir);
+  for (let i = 0; i < 10; i++) {
+    if (path.basename(dir) === "varai") {
+      const nextToVarai = path.join(path.dirname(dir), POC_DIRNAME);
+      if (looksLikePoc(nextToVarai)) return nextToVarai;
+    }
+    const sibling = path.join(path.dirname(dir), POC_DIRNAME);
+    if (looksLikePoc(sibling)) return sibling;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  // Stable fallback for error messages when discovery fails.
+  const mainRoot = gitMainRepoRoot(startDir);
+  if (mainRoot) return path.join(path.dirname(mainRoot), POC_DIRNAME);
+  return path.join(path.dirname(startDir), POC_DIRNAME);
+}
+
+/** Resolved default; recomputed so VARAI_POC_PATH is respected at import time. */
+export const DEFAULT_POC_PATH = resolvePocPath();
+
+export function pocAvailable(pocPath = resolvePocPath()) {
+  return looksLikePoc(pocPath);
+}
+
+export function assertPocExists(pocPath = resolvePocPath()) {
+  if (!looksLikePoc(pocPath)) {
+    throw new Error(`Purchase-approvals POC missing at ${pocPath}`);
   }
   return pocPath;
 }

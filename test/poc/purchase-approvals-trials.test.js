@@ -17,12 +17,18 @@ import {
   mutateOmitAudit,
   mutatePureRefactor,
   mutateUnexpectedDelete,
+  pocAvailable,
   raiseManagerThreshold,
+  resolvePocPath,
   syncSeedHash,
 } from "./purchase-approvals-harness.js";
 
 // build close → verify scenarios inherits process.env (no per-call env override).
 Object.assign(process.env, POC_ENV);
+
+const POC_PATH = resolvePocPath();
+const POC_READY = pocAvailable(POC_PATH);
+const skipReason = POC_READY ? false : `POC missing at ${POC_PATH} (set VARAI_POC_PATH or create sibling)`;
 
 async function closeBuilt(repo) {
   return runBuildClose({
@@ -43,7 +49,11 @@ function assertGate(session, expected, label) {
   assert.equal(session.gate?.state, expected, `${label}: gate=${session.gate?.state} reasons=${JSON.stringify(session.gate?.reasons)}`);
 }
 
-test("trial 1 green build → ready", async () => {
+function readJsonSeed(repoPath) {
+  return JSON.parse(fs.readFileSync(path.join(repoPath, "varai.seed.json"), "utf8"));
+}
+
+test("trial 1 green build → ready", { skip: skipReason }, async () => {
   const repo = clonePoc("green");
   try {
     await begin(repo);
@@ -58,7 +68,7 @@ test("trial 1 green build → ready", async () => {
   }
 });
 
-test("trial 2 omitted audit → not ready", async () => {
+test("trial 2 omitted audit → not ready", { skip: skipReason }, async () => {
   const repo = clonePoc("omit-audit");
   try {
     mutateOmitAudit(repo);
@@ -74,7 +84,7 @@ test("trial 2 omitted audit → not ready", async () => {
   }
 });
 
-test("trial 3 inverted authorization → scenario fails → not ready", async () => {
+test("trial 3 inverted authorization → scenario fails → not ready", { skip: skipReason }, async () => {
   const repo = clonePoc("invert-auth");
   try {
     mutateInvertAuth(repo);
@@ -91,7 +101,7 @@ test("trial 3 inverted authorization → scenario fails → not ready", async ()
   }
 });
 
-test("trial 4 state corruption after denial → follow-up fails → not ready", async () => {
+test("trial 4 state corruption after denial → follow-up fails → not ready", { skip: skipReason }, async () => {
   const repo = clonePoc("corrupt-deny");
   try {
     mutateCorruptDeny(repo);
@@ -108,27 +118,28 @@ test("trial 4 state corruption after denial → follow-up fails → not ready", 
   }
 });
 
-test("trial 5 unexpected DELETE → unaccounted surface → not ready", async () => {
+test("trial 5 unexpected DELETE → positives hold, unaccounted blocks ready", { skip: skipReason }, async () => {
   const repo = clonePoc("unexpected-delete");
   try {
     mutateUnexpectedDelete(repo);
     await begin(repo);
     const closed = await closeBuilt(repo);
     assertGate(closed.session, GATE_STATES.NEEDS_ATTENTION, "unexpected-delete");
+    // Positive product requirements still hold — only surface accounting blocks readiness.
+    assert.equal(closed.report.summary.scenarios.failed, 0);
+    assert.equal(closed.session.gate.scenarioProblems.length, 0);
+    assert.equal(closed.session.gate.requirementRegressions.length, 0);
     assert.ok(closed.session.gate.surfaceProblems.unaccounted > 0, "expected unaccounted surface");
     assert.ok(
       closed.session.gate.reasons.some((reason) => reason.startsWith("unaccounted-surface:")),
       JSON.stringify(closed.session.gate.reasons),
     );
-    // Positive scenarios may still hold — readiness still blocked by surface accounting.
-    assert.ok((closed.report.summary.scenarios?.failed ?? 0) === 0
-      || closed.session.gate.surfaceProblems.unaccounted > 0);
   } finally {
     fs.rmSync(repo, { recursive: true, force: true });
   }
 });
 
-test("trial 6 coverage poisoning → coverage regression → not ready", async () => {
+test("trial 6 coverage poisoning → coverage regression → not ready", { skip: skipReason }, async () => {
   const repo = clonePoc("coverage-poison");
   try {
     await begin(repo);
@@ -144,7 +155,7 @@ test("trial 6 coverage poisoning → coverage regression → not ready", async (
   }
 });
 
-test("trial 7 pure refactor → still ready / no product-rule regression", async () => {
+test("trial 7 pure refactor → still ready / no product-rule regression", { skip: skipReason }, async () => {
   const repo = clonePoc("pure-refactor");
   try {
     await begin(repo);
@@ -159,7 +170,7 @@ test("trial 7 pure refactor → still ready / no product-rule regression", async
   }
 });
 
-test("trial 8 product change (raise threshold) → progression exists", async () => {
+test("trial 8 product change via programmatic Seed draft+ratify (chat deferred to human eval) → progression exists", { skip: skipReason }, async () => {
   const repo = clonePoc("product-change");
   try {
     await begin(repo);
@@ -198,25 +209,31 @@ test("trial 8 product change (raise threshold) → progression exists", async ()
   }
 });
 
-test("trial 9 outside-session edit → provenance unattested", async () => {
+test("trial 9 outside-session edit: real file change + watcher-style recordBuildIntervention → status unattested", { skip: skipReason }, async () => {
+  // Product path: dashboard watcher calls recordBuildIntervention({ path }) on
+  // observed edits (src/server/index.js). Filesystem alone does not flip
+  // provenance — intervention recording is required.
   const repo = clonePoc("outside-edit");
   try {
     await begin(repo);
     const closed = await closeBuilt(repo);
     assertGate(closed.session, GATE_STATES.READY, "outside-edit-before");
 
-    const marker = path.join(repo, "backend/app/main.py");
+    const relPath = "backend/app/main.py";
+    const marker = path.join(repo, relPath);
+    const before = fs.readFileSync(marker, "utf8");
     fs.appendFileSync(marker, "\n# outside-session edit\n");
-    await recordBuildIntervention(repo, { path: "backend/app/main.py", reason: "manual_edit" });
+    const after = fs.readFileSync(marker, "utf8");
+    assert.notEqual(after, before, "implementation file must change on disk");
+
+    // Same call the watcher makes after detecting a relativePath change.
+    await recordBuildIntervention(repo, { path: relPath, reason: "manual_edit" });
 
     const status = await runBuildStatus({ repo, json: true, quiet: true });
     assert.equal(status.provenanceHint?.state, "unattested");
     assert.equal(status.provenanceHint?.sessionId, closed.session.id);
+    assert.equal(status.provenanceHint?.path, relPath);
   } finally {
     fs.rmSync(repo, { recursive: true, force: true });
   }
 });
-
-function readJsonSeed(repoPath) {
-  return JSON.parse(fs.readFileSync(path.join(repoPath, "varai.seed.json"), "utf8"));
-}
