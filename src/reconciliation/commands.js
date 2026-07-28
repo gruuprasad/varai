@@ -32,7 +32,9 @@ export async function runCheck(options = {}) {
     scanConfigHash: current.scanConfigHash,
     realization: realizationInput?.realization ?? null,
   });
-  const scenarioRun = options.scenarioRun ?? await loadLatestScenarioRun(repoPath);
+  const scenarioRun = options.scenarioRun ?? await loadLatestScenarioRun(repoPath, {
+    seedHash: seedInput.contentHash,
+  });
   const report = reconcile({
     model,
     seed: seedInput.seed,

@@ -96,3 +96,26 @@ test("rejects credential values embedded in headers (must use ${env:NAME})", () 
 test("validateRuntimeMap throws on invalid map", () => {
   assert.throws(() => validateRuntimeMap({ formatVersion: 99 }), /Invalid runtime/);
 });
+
+test("rejects non-loopback baseUrl hosts", () => {
+  const remote = checkRuntimeMap(validMap({ baseUrl: "http://evil.example:PORT" }));
+  assert.equal(remote.valid, false);
+  assert.ok(remote.problems.some((p) => p.code === "non-loopback-base-url"));
+
+  const ip = checkRuntimeMap(validMap({ baseUrl: "http://8.8.8.8:PORT" }));
+  assert.ok(ip.problems.some((p) => p.code === "non-loopback-base-url"));
+});
+
+test("accepts localhost as well as 127.0.0.1", () => {
+  const result = checkRuntimeMap(validMap({ baseUrl: "http://localhost:PORT" }));
+  assert.equal(result.valid, true, result.problems.map((p) => p.message).join("; "));
+});
+
+test("rejects protocol-relative and double-slash paths", () => {
+  assert.ok(checkRuntimeMap(validMap({ healthPath: "//evil.example/health" })).problems.some(
+    (p) => p.code === "invalid-path" || p.code === "invalid-runtime",
+  ));
+  assert.ok(checkRuntimeMap(validMap({
+    operations: [{ behavior: "behavior.submit-request", method: "POST", path: "//evil.example/x" }],
+  })).problems.some((p) => p.code === "invalid-path" || p.code === "invalid-operation"));
+});

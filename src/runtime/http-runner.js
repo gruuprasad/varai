@@ -3,8 +3,11 @@ import { spawn } from "node:child_process";
 import { accessSync, constants as fsConstants } from "node:fs";
 import path from "node:path";
 import { SCENARIO_CAPTURE_REF_PATTERN } from "../seed/scenarios.js";
-import { ENV_HEADER_TOKEN_PATTERN, PORT_PLACEHOLDER, RUNTIME_BOUNDS } from "./schema.js";
+import { CHILD_ENV_BASE_KEYS, ENV_HEADER_TOKEN_PATTERN, PORT_PLACEHOLDER, RUNTIME_BOUNDS } from "./schema.js";
+import { isLoopbackHostname, isSafeAbsolutePath } from "./validate.js";
 import { resolveScenarioPrincipals } from "./resolve.js";
+
+export { isLoopbackHostname, isSafeAbsolutePath };
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -31,7 +34,59 @@ function replacePort(value, port) {
   return value.split(PORT_PLACEHOLDER).join(String(port));
 }
 
-function resolveExecutableSync(executable, env = process.env) {
+export function assertLoopbackUrl(requestUrl, baseUrl) {
+  let request;
+  let base;
+  try {
+    request = new URL(requestUrl);
+    base = new URL(baseUrl);
+  } catch {
+    throw new Error("Request URL is not a valid absolute URL");
+  }
+  if (!isLoopbackHostname(request.hostname) || !isLoopbackHostname(base.hostname)) {
+    throw new Error(`Refusing non-loopback request host ${request.hostname}`);
+  }
+  if (request.origin !== base.origin) {
+    throw new Error(`Request origin ${request.origin} does not match loopback base ${base.origin}`);
+  }
+}
+
+export function buildChildEnv({ sourceEnv = {}, personas = [] } = {}) {
+  const allow = new Set(CHILD_ENV_BASE_KEYS);
+  for (const key of Object.keys(sourceEnv)) {
+    if (key.startsWith("UV_")) allow.add(key);
+  }
+  for (const persona of personas) {
+    if (typeof persona?.credentialEnv === "string" && persona.credentialEnv) {
+      allow.add(persona.credentialEnv);
+    }
+  }
+  const out = {};
+  for (const key of allow) {
+    if (sourceEnv[key] !== undefined && sourceEnv[key] !== null) out[key] = sourceEnv[key];
+  }
+  for (const persona of personas) {
+    const name = persona?.credentialEnv;
+    if (name && (out[name] === undefined || out[name] === "")) {
+      out[name] = `varai-fixture-${persona.id}-token`;
+    }
+  }
+  return out;
+}
+
+export async function stopChildProcess(child, { graceMs = 2000 } = {}) {
+  if (!child || child.exitCode != null || child.signalCode != null) return;
+  child.kill("SIGTERM");
+  await Promise.race([
+    new Promise((resolve) => child.once("exit", resolve)),
+    sleep(graceMs),
+  ]);
+  if (child.exitCode != null || child.signalCode != null) return;
+  child.kill("SIGKILL");
+  await new Promise((resolve) => child.once("exit", resolve));
+}
+
+function resolveExecutableSync(executable, env = {}) {
   if (path.isAbsolute(executable)) return executable;
   const pathEnv = env.PATH ?? "";
   for (const dir of pathEnv.split(path.delimiter).filter(Boolean)) {
@@ -43,7 +98,6 @@ function resolveExecutableSync(executable, env = process.env) {
       // continue
     }
   }
-  // Common local install location for uv when PATH is thin in tests.
   const fallback = path.join(env.HOME ?? "", ".local", "bin", executable);
   try {
     accessSync(fallback, fsConstants.X_OK);
@@ -139,6 +193,9 @@ export function resolveInputValue(value, captures) {
 }
 
 export function buildRequestFromStep({ operation, input, captures }) {
+  if (typeof operation.path !== "string" || !operation.path.startsWith("/") || operation.path.startsWith("//")) {
+    throw new Error(`Unsafe operation path ${operation.path}`);
+  }
   const resolvedInput = input === undefined ? undefined : resolveInputValue(input, captures);
   let routePath = operation.path;
   const usedKeys = new Set();
@@ -152,6 +209,9 @@ export function buildRequestFromStep({ operation, input, captures }) {
     usedKeys.add(String(name).replace(/_([a-z])/g, (_, c) => c.toUpperCase()));
     return encodeURIComponent(String(value));
   });
+  if (!isSafeAbsolutePath(routePath)) {
+    throw new Error(`Resolved path is not a safe absolute path: ${routePath}`);
+  }
   let body;
   let query;
   if (resolvedInput && typeof resolvedInput === "object" && !Array.isArray(resolvedInput)) {
@@ -170,45 +230,50 @@ export function buildRequestFromStep({ operation, input, captures }) {
   return { path: routePath, body, query };
 }
 
-function partialMatch(actual, expected, path = "$") {
+function partialMatch(actual, expected, pathLabel = "$") {
   if (expected === null || ["string", "number", "boolean"].includes(typeof expected)) {
     if (actual !== expected) {
-      return { ok: false, message: `body ${path} expected ${JSON.stringify(expected)} got ${JSON.stringify(actual)}` };
+      return { ok: false, message: `body ${pathLabel} expected ${JSON.stringify(expected)} got ${JSON.stringify(actual)}` };
     }
     return { ok: true };
   }
   if (Array.isArray(expected)) {
     if (!Array.isArray(actual)) {
-      return { ok: false, message: `body ${path} expected array` };
+      return { ok: false, message: `body ${pathLabel} expected array` };
     }
     if (actual.length < expected.length) {
-      return { ok: false, message: `body ${path} expected at least ${expected.length} items` };
+      return { ok: false, message: `body ${pathLabel} expected at least ${expected.length} items` };
     }
     for (let i = 0; i < expected.length; i++) {
-      const nested = partialMatch(actual[i], expected[i], `${path}[${i}]`);
+      const nested = partialMatch(actual[i], expected[i], `${pathLabel}[${i}]`);
       if (!nested.ok) return nested;
     }
     return { ok: true };
   }
   if (expected && typeof expected === "object") {
     if (!actual || typeof actual !== "object" || Array.isArray(actual)) {
-      return { ok: false, message: `body ${path} expected object` };
+      return { ok: false, message: `body ${pathLabel} expected object` };
     }
     for (const [key, value] of Object.entries(expected)) {
-      const nested = partialMatch(actual[key], value, `${path}.${key}`);
+      const nested = partialMatch(actual[key], value, `${pathLabel}.${key}`);
       if (!nested.ok) return nested;
     }
     return { ok: true };
   }
-  return { ok: false, message: `unsupported expect body at ${path}` };
+  return { ok: false, message: `unsupported expect body at ${pathLabel}` };
 }
 
 async function waitForHealth(baseUrl, healthPath, { timeoutMs, pollMs }) {
+  if (!isSafeAbsolutePath(healthPath)) {
+    throw new Error(`Unsafe healthPath ${healthPath}`);
+  }
   const deadline = Date.now() + timeoutMs;
   let lastError = null;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`${baseUrl}${healthPath}`, {
+      const healthUrl = new URL(healthPath, baseUrl).toString();
+      assertLoopbackUrl(healthUrl, baseUrl);
+      const response = await fetch(healthUrl, {
         method: "GET",
         redirect: "error",
         signal: AbortSignal.timeout(RUNTIME_BOUNDS.requestTimeoutMs),
@@ -256,23 +321,18 @@ export async function startAppProcess({ repoPath, runtime, port, env }) {
     if (stderr.length > RUNTIME_BOUNDS.maxBodyBytes) stderr = stderr.slice(-RUNTIME_BOUNDS.maxBodyBytes);
   });
   const baseUrl = replacePort(runtime.baseUrl, port);
+  assertLoopbackUrl(`${baseUrl}/`, baseUrl);
+  const stop = async () => stopChildProcess(child);
   try {
     await waitForHealth(baseUrl, runtime.healthPath, {
       timeoutMs: RUNTIME_BOUNDS.healthTimeoutMs,
       pollMs: RUNTIME_BOUNDS.healthPollMs,
     });
   } catch (err) {
-    child.kill("SIGTERM");
+    await stop();
     throw new Error(`${err.message}\nstdout: ${stdout}\nstderr: ${stderr}`);
   }
-  return { child, baseUrl, stdout, stderr, stop: async () => {
-    if (child.exitCode != null || child.signalCode != null) return;
-    child.kill("SIGTERM");
-    await Promise.race([
-      new Promise((resolve) => child.once("exit", resolve)),
-      sleep(2000).then(() => child.kill("SIGKILL")),
-    ]);
-  } };
+  return { child, baseUrl, stdout, stderr, stop };
 }
 
 export async function executeScenario({
@@ -372,6 +432,7 @@ export async function executeScenario({
     let body;
     let error = null;
     try {
+      assertLoopbackUrl(target.toString(), baseUrl);
       const response = await fetch(target, {
         method: operation.method,
         headers,
@@ -475,13 +536,14 @@ export async function runHttpScenarios({
   port = null,
 }) {
   const allocatedPort = port ?? await allocateEphemeralPort();
-  const childEnv = {
-    ...env,
-    PATH: env.PATH ?? process.env.PATH,
-    VARAI_POC_EMPLOYEE_1_TOKEN: env.VARAI_POC_EMPLOYEE_1_TOKEN ?? "fixture-employee-1-token",
-    VARAI_POC_EMPLOYEE_2_TOKEN: env.VARAI_POC_EMPLOYEE_2_TOKEN ?? "fixture-employee-2-token",
-  };
-  // Default fixture tokens when unset so local verify works without manual export.
+  const childEnv = buildChildEnv({
+    sourceEnv: {
+      ...env,
+      PATH: env.PATH ?? process.env.PATH,
+      HOME: env.HOME ?? process.env.HOME,
+    },
+    personas: runtime.personas,
+  });
   const secrets = collectSecretValues(runtime.personas, childEnv);
   const app = await startAppProcess({
     repoPath,

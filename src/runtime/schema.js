@@ -22,6 +22,7 @@ export const HTTP_METHOD_PATTERN = /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/;
 export const ENV_HEADER_REF_PATTERN = /^\$\{env:([A-Z][A-Z0-9_]*)\}$/;
 export const ENV_HEADER_TOKEN_PATTERN = /\$\{env:([A-Z][A-Z0-9_]*)\}/g;
 export const PORT_PLACEHOLDER = "PORT";
+export const LOOPBACK_HOSTS = Object.freeze(["127.0.0.1", "localhost"]);
 
 // Bounds applied by the HTTP runner (not authorable in the runtime map).
 export const RUNTIME_BOUNDS = Object.freeze({
@@ -33,6 +34,15 @@ export const RUNTIME_BOUNDS = Object.freeze({
   maxScenarioDurationMs: 60_000,
   maxTotalDurationMs: 120_000,
 });
+
+/**
+ * Child process env allowlist (better false-fail than leak host secrets):
+ * - PATH, HOME — locate uv / user-local bins
+ * - UV_* — uv toolchain
+ * - persona credentialEnv names — auth headers only by reference
+ * - VARAI_POC_FAULT — fixture adversarial modes in tests
+ */
+export const CHILD_ENV_BASE_KEYS = Object.freeze(["PATH", "HOME", "VARAI_POC_FAULT"]);
 
 export class RuntimeValidationError extends Error {
   constructor(problems) {

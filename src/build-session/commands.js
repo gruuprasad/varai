@@ -8,7 +8,7 @@ import { reconcile } from "../reconciliation/check.js";
 import { readRealization } from "../reconciliation/witness-store.js";
 import { renderBuildPacket } from "../seed/handoff.js";
 import { readSeed } from "../seed/store.js";
-import { loadLatestScenarioRun, runVerifyScenarios } from "../runtime/commands.js";
+import { runVerifyScenarios } from "../runtime/commands.js";
 import { evaluateBuildGate } from "./evaluate.js";
 import { isNonZeroExitGate } from "./state.js";
 import { createBuildSessionStore } from "./store.js";
@@ -102,6 +102,7 @@ export async function runBuildClose(options = {}) {
     } catch (err) {
       scenarioRun = {
         id: null,
+        seedHash: input.contentHash,
         scenarios: (input.seed.scenarios ?? []).map((scenario) => ({
           id: scenario.id,
           name: scenario.name,
@@ -110,9 +111,8 @@ export async function runBuildClose(options = {}) {
         })),
       };
     }
-  } else {
-    scenarioRun = await loadLatestScenarioRun(repoPath);
   }
+  // Empty-scenario seeds must not inherit unrelated historical scenario evidence.
 
   const startModel = await loadSnapshotModel(repoPath, session.start.snapshotId);
   const startReport = reconcile({

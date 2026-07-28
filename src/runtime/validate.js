@@ -2,7 +2,9 @@ import {
   ENV_HEADER_REF_PATTERN,
   ENV_HEADER_TOKEN_PATTERN,
   HTTP_METHOD_PATTERN,
+  LOOPBACK_HOSTS,
   PERSONA_ID_PATTERN,
+  PORT_PLACEHOLDER,
   RUNTIME_FIELDS,
   RUNTIME_FORMAT_VERSION,
   RUNTIME_OPERATION_FIELDS,
@@ -24,6 +26,35 @@ function unknownFields(value, allowed, label, problems) {
 
 const DISALLOWED_EXECUTABLES = new Set(["bash", "sh", "zsh", "fish", "cmd", "powershell", "pwsh"]);
 
+export function isSafeAbsolutePath(value) {
+  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//");
+}
+
+export function isLoopbackHostname(hostname) {
+  return LOOPBACK_HOSTS.includes(String(hostname ?? "").toLowerCase());
+}
+
+function validateLoopbackBaseUrl(baseUrl, problems) {
+  if (typeof baseUrl !== "string" || !/^https?:\/\//.test(baseUrl)) {
+    problems.push({ code: "invalid-runtime", message: "Runtime map baseUrl must be an http(s) URL" });
+    return;
+  }
+  let parsed;
+  try {
+    // Substitute PORT with a numeric placeholder so URL parsing succeeds for templates.
+    parsed = new URL(baseUrl.split(PORT_PLACEHOLDER).join("9"));
+  } catch {
+    problems.push({ code: "invalid-runtime", message: "Runtime map baseUrl must be a parseable URL" });
+    return;
+  }
+  if (!isLoopbackHostname(parsed.hostname)) {
+    problems.push({
+      code: "non-loopback-base-url",
+      message: `Runtime map baseUrl host must be 127.0.0.1 or localhost, got ${parsed.hostname}`,
+    });
+  }
+}
+
 function validateHeaderTemplates(headers, label, credentialEnv, problems) {
   if (headers === undefined) return;
   if (!isPlainObject(headers)) {
@@ -41,8 +72,6 @@ function validateHeaderTemplates(headers, label, credentialEnv, problems) {
     }
     const refs = [...template.matchAll(ENV_HEADER_TOKEN_PATTERN)].map((match) => match[1]);
     if (refs.length === 0) {
-      // Bare literal header values are allowed only when they contain no secret-looking
-      // tokens; Authorization-like values without ${env:...} are rejected.
       if (/bearer\s+\S+/i.test(template) || /token[=:\s]\S+/i.test(template)) {
         problems.push({
           code: "secret-in-map",
@@ -85,11 +114,12 @@ export function checkRuntimeMap(runtime, { expectedSeedHash } = {}) {
       message: `Runtime map seedHash ${runtime.seedHash} does not match approved Seed ${expectedSeedHash}`,
     });
   }
-  if (typeof runtime.baseUrl !== "string" || !/^https?:\/\//.test(runtime.baseUrl)) {
-    problems.push({ code: "invalid-runtime", message: "Runtime map baseUrl must be an http(s) URL" });
-  }
-  if (typeof runtime.healthPath !== "string" || !runtime.healthPath.startsWith("/")) {
-    problems.push({ code: "invalid-runtime", message: "Runtime map healthPath must be an absolute path" });
+  validateLoopbackBaseUrl(runtime.baseUrl, problems);
+  if (!isSafeAbsolutePath(runtime.healthPath)) {
+    problems.push({
+      code: "invalid-path",
+      message: "Runtime map healthPath must be a single absolute path starting with / (not //)",
+    });
   }
 
   if (!isPlainObject(runtime.start)) {
@@ -133,8 +163,11 @@ export function checkRuntimeMap(runtime, { expectedSeedHash } = {}) {
       if (typeof operation.method !== "string" || !HTTP_METHOD_PATTERN.test(operation.method)) {
         problems.push({ code: "invalid-operation", message: `Runtime operation ${operation.behavior} method must be an HTTP verb` });
       }
-      if (typeof operation.path !== "string" || !operation.path.startsWith("/")) {
-        problems.push({ code: "invalid-operation", message: `Runtime operation ${operation.behavior} path must be an absolute path` });
+      if (!isSafeAbsolutePath(operation.path)) {
+        problems.push({
+          code: "invalid-path",
+          message: `Runtime operation ${operation.behavior} path must be a single absolute path starting with / (not //)`,
+        });
       }
     }
   }

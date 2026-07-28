@@ -13,6 +13,10 @@ export function scenariosSummary(results = []) {
 
 export function attachScenariosSection(report, scenarioRun) {
   if (!scenarioRun) return report;
+  // Stale evidence for a different Seed must not decorate the current report.
+  if (scenarioRun.seedHash && report.seedHash && scenarioRun.seedHash !== report.seedHash) {
+    return report;
+  }
   const results = scenarioRun.scenarios ?? scenarioRun.results ?? [];
   return {
     ...report,

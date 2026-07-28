@@ -14,6 +14,14 @@ function runId({ seedHash, runtimeMapHash, scannedTreeHash, createdAt }) {
   return `verify:${semanticHash(canonicalStringify({ seedHash, runtimeMapHash, scannedTreeHash, createdAt })).slice(0, 20)}`;
 }
 
+/** Attach only evidence that matches the current Seed (and runtime map when known). */
+export function selectFreshScenarioRun(run, { seedHash, runtimeMapHash } = {}) {
+  if (!run || !seedHash) return null;
+  if (run.seedHash !== seedHash) return null;
+  if (runtimeMapHash && run.runtimeMapHash && run.runtimeMapHash !== runtimeMapHash) return null;
+  return run;
+}
+
 export async function runVerifyScenarios(options = {}) {
   const repoPath = path.resolve(options.repo ?? ".");
   const seedInput = readSeed(repoPath);
@@ -98,7 +106,8 @@ export async function runVerifyScenarios(options = {}) {
   return { run: runRecord, exitCode, summary };
 }
 
-export async function loadLatestScenarioRun(repoPath) {
+export async function loadLatestScenarioRun(repoPath, { seedHash, runtimeMapHash } = {}) {
   const store = createVerificationStore(repoPath);
-  return store.getLatest();
+  const run = await store.getLatest();
+  return selectFreshScenarioRun(run, { seedHash, runtimeMapHash });
 }
