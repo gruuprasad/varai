@@ -266,6 +266,44 @@ test("rejects duplicate scenario, step, and principal ids", () => {
   assert.ok(checkSeed(dupPrincipal).problems.some((p) => p.code === "duplicate-id" && /principal alias owner/.test(p.message)));
 });
 
+test("rejects non-slug capture names and duplicate captures within a scenario", () => {
+  const badCapture = v3Base({
+    scenarios: [validScenario({
+      steps: [{
+        id: "submit",
+        as: "owner",
+        invoke: "behavior.submit-request",
+        capture: "Request.ID",
+        expect: { status: 201 },
+      }],
+    })],
+  });
+  assert.ok(checkSeed(badCapture).problems.some((p) => p.code === "invalid-scenario" && /capture/.test(p.message)));
+
+  const dupCapture = v3Base({
+    scenarios: [validScenario({
+      steps: [
+        {
+          id: "submit",
+          as: "owner",
+          invoke: "behavior.submit-request",
+          capture: "request",
+          expect: { status: 201 },
+        },
+        {
+          id: "withdraw",
+          as: "owner",
+          invoke: "behavior.withdraw-request",
+          input: { requestId: "$request.id" },
+          capture: "request",
+          expect: { status: 200 },
+        },
+      ],
+    })],
+  });
+  assert.ok(checkSeed(dupCapture).problems.some((p) => p.code === "duplicate-id" && /capture/.test(p.message)));
+});
+
 test("rejects malformed $capture.path references in input at schema time", () => {
   const badRef = v3Base({
     scenarios: [validScenario({

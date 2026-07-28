@@ -121,6 +121,7 @@ export function validateScenarios(seed, conceptById, seenIds, problems) {
     }
 
     const stepIds = new Set();
+    const captureNames = new Set();
     if (!Array.isArray(scenario.steps)) {
       problems.push({ code: "invalid-collection", message: `Scenario ${scenario.id} steps must be an array` });
     } else if (scenario.steps.length === 0) {
@@ -154,8 +155,14 @@ export function validateScenarios(seed, conceptById, seenIds, problems) {
             validateCaptureRefs(step.input, `Scenario ${scenario.id} step ${step.id}`, problems);
           }
         }
-        if (step.capture !== undefined && (typeof step.capture !== "string" || !step.capture)) {
-          problems.push({ code: "invalid-scenario", message: `Scenario ${scenario.id} step ${step.id} capture must be a non-empty string` });
+        if (step.capture !== undefined) {
+          if (typeof step.capture !== "string" || !SCENARIO_STEP_ID_PATTERN.test(step.capture)) {
+            problems.push({ code: "invalid-scenario", message: `Scenario ${scenario.id} step ${step.id} capture ${JSON.stringify(step.capture)} must be a lower-kebab slug` });
+          } else if (captureNames.has(step.capture)) {
+            problems.push({ code: "duplicate-id", message: `Scenario ${scenario.id} has duplicate capture name ${step.capture}` });
+          } else {
+            captureNames.add(step.capture);
+          }
         }
         if (!isPlainObject(step.expect)) {
           problems.push({ code: "invalid-scenario", message: `Scenario ${scenario.id} step ${step.id} requires an expect object` });
