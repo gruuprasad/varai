@@ -74,12 +74,20 @@ checker semantics for), 0 ambiguous, 0 stale.
 The single `cannot_verify` is `commitment.book-slot-requires-availability` with
 `insufficient-coverage`.
 
-**Coverage baseline.** Slotkeeper's three real FastAPI operations
-(`GET /api/slots`, `POST /api/bookings`,
-`POST /api/bookings/{booking_id}/cancel`) carry **zero** `analyzed` coverage
-records. Every element-scoped `api.effect` and `api.failure` record for them is
-`partial` with the detail `unresolved function`, because framework mechanics in
-the handler signature and body are not yet distinguished from genuinely unknown
-calls. Absence therefore cannot be reported soundly on any of the three, and no
-`check` output includes a per-commitment coverage record. Closing that gap is
-the next analyzer front.
+**Coverage baseline, before the trace-completion fix.** Slotkeeper's three real
+FastAPI operations (`GET /api/slots`, `POST /api/bookings`,
+`POST /api/bookings/{booking_id}/cancel`) carried **zero** `analyzed` coverage
+records. Every element-scoped `api.effect` and `api.failure` record was `partial`
+with the detail `unresolved function`. The unresolved calls were
+`Depends(get_db)`, two `Header(default=None)` parameters, and the `Booking(...)`
+model constructor — framework mechanics and a declared model, not analyzer-opaque
+logic. Absence could not be reported soundly on any of the three.
+
+**After.** All six element-scoped `api.effect` / `api.failure` records on those
+three operations are `analyzed`. Every requirement verdict is unchanged — still
+12 `holds`, 1 `cannot_verify`, 0 `violated` — so the reach improved without
+introducing a single new positive claim.
+
+The remaining `cannot_verify`, `commitment.book-slot-requires-availability`,
+rests on `api.condition`, a different capability that is still subsystem-scoped
+`partial`. It is honestly unverifiable, not a coverage record this work missed.

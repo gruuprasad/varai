@@ -67,11 +67,12 @@ cannot prove, is [product-control-room.md](product-control-room.md).
 
 ## What's next
 
-- Improve FastAPI dependency tracing so more real operations reach exact
-  effect/failure coverage. The omission trial is now proven for a small route,
-  but on the Slotkeeper pilot all three real operations still record `partial`
-  effect/failure coverage — zero `analyzed` — so absence cannot be reported
-  there at all. The recorded baseline is in
+- Extend exact effect/failure coverage past the FastAPI slice. All three real
+  Slotkeeper operations now reach `analyzed` — a body trace no longer mistakes
+  signature mechanics (`Depends`, `Header`) or a declared model constructor for
+  an unresolved call — so omission is soundly reportable there. `api.condition`
+  and `api.input` remain subsystem-scoped `partial`, which is why one
+  requirement is still honestly `cannot_verify`. The before/after is in
   [product-loop-pilot.md](product-loop-pilot.md).
 - Make coverage degradation a build result rather than a neutral limitation. A
   builder that cannot satisfy a rule can otherwise make the code harder to

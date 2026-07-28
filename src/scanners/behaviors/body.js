@@ -1,7 +1,7 @@
 import { classifyAttributeEffect, classifyNamedEffect, isFileWriteName, operationAccess, operationEffectRelation } from "./effects.js";
 import { implementationPath } from "../lift/provenance.js";
 import { privateNodeId } from "../lift/implementation-graph.js";
-import { createValueFlow, callableTargets, bindingSignature, directDescendants } from "./value-flow.js";
+import { createValueFlow, callableTargets, bindingSignature, bodyDescendants } from "./value-flow.js";
 
 const STATUS_RE = /HTTP_(\d{3})\b/;
 const MAX_TRACE_DEPTH = 8;
@@ -30,7 +30,7 @@ async function walk(info, env, ctx, resolver, factIndex, acc, flow, graph, depth
 
   // A direct field assignment on a declaration-valued local is an entity
   // mutation even when no domain helper call wraps it (record.status = ...).
-  for (const assignment of directDescendants(fnNode, "assignment")) {
+  for (const assignment of bodyDescendants(fnNode, "assignment")) {
     const left = assignment.childForFieldName("left");
     if (left?.type !== "attribute") continue;
     const receiver = left.childForFieldName("object");
@@ -44,7 +44,7 @@ async function walk(info, env, ctx, resolver, factIndex, acc, flow, graph, depth
     }, evidence, path, file, resolver, acc, graph, currentId, depth);
   }
 
-  for (const raise of directDescendants(fnNode, "raise_statement")) {
+  for (const raise of bodyDescendants(fnNode, "raise_statement")) {
     const text = raise.text;
     const line = raise.startPosition.row + 1;
     const named = text.match(STATUS_RE);
@@ -60,7 +60,7 @@ async function walk(info, env, ctx, resolver, factIndex, acc, flow, graph, depth
     }
   }
 
-  for (const call of directDescendants(fnNode, "call")) {
+  for (const call of bodyDescendants(fnNode, "call")) {
     const callee = call.childForFieldName("function");
     if (!callee) continue;
     const line = call.startPosition.row + 1;
@@ -198,7 +198,7 @@ async function walk(info, env, ctx, resolver, factIndex, acc, flow, graph, depth
         });
       }
     } else if (depth === 0 && !isFileWriteName(name) && !KNOWN_NOISE.has(name)
-               && !factIndex.schemaNames.has(name) && !/Response$/.test(name)) {
+               && !isDeclaredConstructor(name, factIndex) && !/Response$/.test(name)) {
       acc.untraced.push({
         call: name,
         reason: "unresolved function",
@@ -207,6 +207,16 @@ async function walk(info, env, ctx, resolver, factIndex, acc, flow, graph, depth
       });
     }
   }
+}
+
+// Constructing a declared schema or ORM model is understood construction, not an
+// unresolved call: the declaration is already in the model and the constructor
+// runs no analyzer-opaque logic. Recognition is deliberately tied to a
+// registered declaration rather than to a name shape — a global list of
+// plausible-looking constructor names would quietly license false absence
+// verdicts for whatever else happened to match.
+function isDeclaredConstructor(name, factIndex) {
+  return factIndex.schemaNames.has(name) || factIndex.modelNames.has(name);
 }
 
 function isStableApplicationBoundary(info, subject) {

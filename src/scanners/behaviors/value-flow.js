@@ -90,6 +90,16 @@ export function directDescendants(fnNode, type) {
   return fnNode.descendantsOfType(type).filter((node) => sameSyntaxNode(nearestFunction(node), fnNode));
 }
 
+// The same, restricted to what the function actually does. A parameter list is
+// framework mechanics — `Depends(get_db)`, `Header(default=None)`, annotation
+// constructors — and reading it as body calls makes every real FastAPI route
+// look like it calls something the analyzer cannot resolve.
+export function bodyDescendants(fnNode, type) {
+  const body = fnNode?.childForFieldName?.("body");
+  if (!body) return [];
+  return body.descendantsOfType(type).filter((node) => sameSyntaxNode(nearestFunction(node), fnNode));
+}
+
 function sameSyntaxNode(left, right) {
   if (left === right) return true;
   if (!left || !right || left.type !== right.type) return false;
