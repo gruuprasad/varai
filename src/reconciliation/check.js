@@ -143,7 +143,12 @@ function checkCommitment(model, commitment, context) {
     : uniqueSorted([...sourceElementIds]);
   const relevant = (model.coverage ?? [])
     .filter((record) => capabilities.includes(record.capability) && scopeIds.includes(record.scopeId))
-    .map((record) => ({ capability: record.capability, scopeId: record.scopeId, state: record.state }))
+    .map((record) => ({
+      capability: record.capability,
+      scopeId: record.scopeId,
+      state: record.state,
+      ...(record.analyzerVersion != null ? { analyzerVersion: record.analyzerVersion } : {}),
+    }))
     .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   result.coverage = relevant;
   const analyzedScopes = new Set(relevant.filter((record) => record.state === "analyzed").map((record) => record.scopeId));
