@@ -62,6 +62,27 @@ function tempRepo() {
   return root;
 }
 
+function stubAnalyze(repo) {
+  return async () => ({
+    scan: {
+      summary: null,
+      model: {
+        schemaVersion: 2,
+        system: { id: "demo", key: "demo", name: "Demo" },
+        coverage: [],
+        elements: [],
+        claims: [],
+        subsystems: [],
+        diagnostics: [],
+      },
+    },
+    git: { head: "x", clean: false, semanticStoreRoot: path.join(repo, ".varai", "semantic") },
+    scannedTreeHash: "a",
+    implementationTreeHash: "b",
+    scanConfigHash: "c",
+  });
+}
+
 async function start(repo, { assistant = null } = {}) {
   const server = await startServer({
     repoPath: repo,
@@ -69,13 +90,7 @@ async function start(repo, { assistant = null } = {}) {
     open: false,
     seedAssistant: assistant,
     scanOptions: { jobs: 1, cache: false },
-    analyze: async () => ({
-      scan: { summary: null, model: { coverage: [], elements: [], claims: [], subsystems: [] } },
-      git: { head: "x", clean: true, semanticStoreRoot: repo },
-      scannedTreeHash: "a",
-      implementationTreeHash: "b",
-      scanConfigHash: "c",
-    }),
+    analyze: stubAnalyze(repo),
   });
   return {
     server,
@@ -131,4 +146,47 @@ test("control-room change section exposes unresolved queue and blocks approval w
   assert.equal(body.change.unresolved.length, 2);
   assert.equal(body.change.approvalAllowed, false);
   assert.match(body.change.approvalBlockedReason, /unresolved/i);
+});
+
+test("seed with model and no prior build does not invent an unattested regression decision", async (t) => {
+  const repo = tempRepo();
+  const { server, api } = await start(repo);
+  t.after(() => server.close());
+
+  const body = await (await api("/api/control-room")).json();
+  assert.ok(!body.verification.decisions.some((d) => d.kind === "unattested"),
+    `unexpected unattested decisions: ${JSON.stringify(body.verification.decisions)}`);
+  assert.doesNotMatch(JSON.stringify(body.verification), /Repository changed after ready/);
+});
+
+test("removing an unresolved item records an auditable draft context note and diff", async (t) => {
+  const repo = tempRepo();
+  const approved = JSON.parse(fs.readFileSync(path.join(repo, "varai.seed.json"), "utf8"));
+  const draft = { ...v3Seed(), context: [] };
+  writeAuthoringSession(repo, {
+    baseSeedHash: seedContentHash(approved),
+    conversation: [],
+    review: {
+      draft,
+      questions: ["Who may withdraw?"],
+      unsupported: [],
+      problems: [],
+      diff: diffSeeds(approved, draft),
+      contentHash: seedContentHash(draft),
+      source: "assistant",
+    },
+  });
+  const { server, post } = await start(repo);
+  t.after(() => server.close());
+
+  const response = await post("/api/seed/draft/resolve", {
+    action: "remove",
+    kind: "question",
+    index: 0,
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.questions.length, 0);
+  assert.ok(body.draft.context.some((entry) => /removed unresolved|Who may withdraw/i.test(entry.text)));
+  assert.ok(body.diff.context.added.some((entry) => /removed|withdraw/i.test(entry.id + entry.text)));
 });

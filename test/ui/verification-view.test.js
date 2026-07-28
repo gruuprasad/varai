@@ -78,3 +78,45 @@ test("empty verification state is not ready", () => {
   assert.match(html, /No verification|approve a Seed|run a build/i);
   assert.doesNotMatch(html, new RegExp(READY_CHROME_CLASS));
 });
+
+test("gate ready with decisions still omits every ready chrome including lowercase labels", () => {
+  const html = renderVerification({
+    phase: "ready",
+    gate: {
+      state: "ready",
+      reasons: [],
+      coverageRegressions: [],
+      requirementRegressions: [],
+      surfaceProblems: { missing: 0, unaccounted: 0, ambiguous: 0, stale: 0 },
+      scenarioProblems: [],
+    },
+    decisions: [{ kind: "unattested", id: "repo", label: "stale", evidenceIds: ["provenance"] }],
+  });
+  assert.doesNotMatch(html, new RegExp(READY_CHROME_CLASS));
+  assert.doesNotMatch(html, /aria-label\s*=\s*["'][^"']*ready[^"']*["']/i);
+  assert.doesNotMatch(html, />\s*Ready\s*</);
+  assert.doesNotMatch(html, />\s*ready\s*</);
+});
+
+test("verification lists evidence focus controls for each decision id", () => {
+  const html = renderVerification(baseVerification());
+  assert.match(html, /evidence-focus/);
+  assert.match(html, /data-evidence-target="scenario\.happy"/);
+  assert.match(html, /data-evidence-target="commitment\.x"/);
+  assert.doesNotMatch(html, /Architecture &amp; evidence drill-down/);
+});
+
+test("verification escapes XSS in decision labels", () => {
+  const html = renderVerification({
+    phase: "needs_attention",
+    gate: { state: "needs_attention", reasons: [], coverageRegressions: [], requirementRegressions: [], surfaceProblems: { missing: 0, unaccounted: 0, ambiguous: 0, stale: 0 }, scenarioProblems: [] },
+    decisions: [{
+      kind: "missing_behavior",
+      id: "commitment.x",
+      label: `<img src=x onerror="alert(1)">`,
+      evidenceIds: ["commitment.x"],
+    }],
+  });
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.match(html, /&lt;img src=x/);
+});

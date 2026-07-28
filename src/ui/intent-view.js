@@ -75,19 +75,26 @@ export function renderUnresolvedQueue(draftState) {
   return `<section class="unresolved-queue" aria-label="Unresolved queue">` +
     `<h4>Unresolved (${items.length})</h4>` +
     `<p class="intent-note">Approval stays disabled until each item is answered, converted to context, or removed via a reviewed proposal.</p>` +
-    `<ul class="unresolved-list">` + items.map((item) =>
-      `<li class="unresolved-item unresolved-${esc(item.kind)}" data-kind="${esc(item.kind)}" data-index="${item.index}">` +
-      `<span class="unresolved-kind">${esc(item.kind)}</span> ` +
-      `<span class="unresolved-text">${esc(item.text)}</span>` +
-      `<div class="unresolved-actions">` +
-      `<button type="button" class="btn-quiet unresolved-answer" data-kind="${esc(item.kind)}" data-index="${item.index}" ` +
-      `aria-label="Answer: ${esc(item.text)}">Answer</button>` +
-      `<button type="button" class="btn-quiet unresolved-to-context" data-kind="${esc(item.kind)}" data-index="${item.index}" ` +
-      `aria-label="Convert to context: ${esc(item.text)}">Convert to context</button>` +
-      `<button type="button" class="btn-quiet unresolved-remove" data-kind="${esc(item.kind)}" data-index="${item.index}" ` +
-      `aria-label="Remove via proposal: ${esc(item.text)}">Remove</button>` +
-      `</div></li>`
-    ).join("") + `</ul></section>`;
+    `<ul class="unresolved-list">` + items.map((item) => {
+      const inputId = `unresolved-answer-${esc(item.kind)}-${item.index}`;
+      return `<li class="unresolved-item unresolved-${esc(item.kind)}" data-kind="${esc(item.kind)}" data-index="${item.index}">` +
+        `<span class="unresolved-kind">${esc(item.kind)}</span> ` +
+        `<span class="unresolved-text">${esc(item.text)}</span>` +
+        `<div class="unresolved-answer-block">` +
+        `<label class="compose-label" for="${inputId}">Answer</label>` +
+        `<textarea id="${inputId}" class="unresolved-answer-input" rows="2" ` +
+        `data-kind="${esc(item.kind)}" data-index="${item.index}" ` +
+        `aria-label="Answer for: ${esc(item.text)}"></textarea>` +
+        `<button type="button" class="btn-quiet unresolved-answer-submit" data-kind="${esc(item.kind)}" data-index="${item.index}" ` +
+        `aria-label="Submit answer: ${esc(item.text)}" data-input-id="${inputId}">Submit answer</button>` +
+        `</div>` +
+        `<div class="unresolved-actions">` +
+        `<button type="button" class="btn-quiet unresolved-to-context" data-kind="${esc(item.kind)}" data-index="${item.index}" ` +
+        `aria-label="Convert to context: ${esc(item.text)}">Convert to context</button>` +
+        `<button type="button" class="btn-quiet unresolved-remove" data-kind="${esc(item.kind)}" data-index="${item.index}" ` +
+        `aria-label="Remove via proposal: ${esc(item.text)}">Remove</button>` +
+        `</div></li>`;
+    }).join("") + `</ul></section>`;
 }
 
 export function renderProblems(problems) {

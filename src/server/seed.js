@@ -233,7 +233,15 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
       if (kind === "question") questions.splice(index, 1);
       else unsupported.splice(index, 1);
     } else {
-      // remove via reviewed proposal — drop from queue only; draft unchanged
+      // remove via reviewed proposal: drop from queue and leave an auditable
+      // context note so the draft diff shows the removal decision.
+      const slug = String(itemText).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "item";
+      const contextId = `context.removed-unresolved-${slug}`;
+      const note = `Removed unresolved ${kind} via reviewed proposal: ${itemText}`;
+      draft = {
+        ...draft,
+        context: [...(draft.context ?? []).filter((entry) => entry.id !== contextId), { id: contextId, text: note }],
+      };
       if (kind === "question") questions.splice(index, 1);
       else unsupported.splice(index, 1);
     }
@@ -249,9 +257,12 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
       contentHash: problems.length ? null : seedContentHash({ context: [], ...draft }),
       source: session.review.source ?? "assistant",
     };
+    const conversation = action === "remove"
+      ? [...(session.conversation ?? []), { role: "user", content: `Remove unresolved (${kind}): ${itemText}` }]
+      : (session.conversation ?? []);
     const next = writeAuthoringSession(repoPath, {
       baseSeedHash: session.baseSeedHash,
-      conversation: session.conversation ?? [],
+      conversation,
       review,
     });
     send(res, 200, { ...review, authoring: { ...next, stale: false } });

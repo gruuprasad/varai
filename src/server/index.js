@@ -96,6 +96,7 @@ export async function startServer({
   for (const key of Object.keys(scanOptions)) if (scanOptions[key] === undefined) delete scanOptions[key];
 
   let latestScan = null;
+  let latestScanMeta = null;
   let latestDiff = null;
   let scanning = false;
   let sseClients = new Set();
@@ -121,6 +122,11 @@ export async function startServer({
         ...current.scan,
         displayLanguage: displayLanguage(),
         projections: serializeProjections(current.scan.model),
+      };
+      latestScanMeta = {
+        scannedTreeHash: current.scannedTreeHash,
+        scanConfigHash: current.scanConfigHash,
+        implementationTreeHash: current.implementationTreeHash,
       };
       const store = createSnapshotStore(current.git.semanticStoreRoot);
       let ref = await store.getCommitRef(current.git.head);
@@ -172,7 +178,19 @@ export async function startServer({
   const reconciliationHandler = createReconciliationHandler({ repoPath: absRepo, getModel: seedGetModel });
   const evolutionHandler = createEvolutionHandler({ repoPath: absRepo });
   const builderHandlers = createBuilderHandlers({ repoPath: absRepo, port, broadcast });
-  const controlRoomHandlers = createControlRoomHandlers({ repoPath: absRepo, getModel: seedGetModel });
+  const controlRoomHandlers = createControlRoomHandlers({
+    repoPath: absRepo,
+    getModel: seedGetModel,
+    getScanMeta: async () => {
+      if (latestScanMeta) return latestScanMeta;
+      const current = await runAnalyze();
+      return {
+        scannedTreeHash: current.scannedTreeHash,
+        scanConfigHash: current.scanConfigHash,
+        implementationTreeHash: current.implementationTreeHash,
+      };
+    },
+  });
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);

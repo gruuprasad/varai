@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { renderBuild } from "../../src/ui/build-view.js";
+import { renderBuild, safePreviewHref } from "../../src/ui/build-view.js";
 
 test("empty build view shows no active session", () => {
   const html = renderBuild({ session: null, live: { running: false }, events: [], adapters: ["fake"] });
@@ -44,4 +44,47 @@ test("build view never offers semantic Seed editing controls", () => {
     adapters: [],
   });
   assert.doesNotMatch(html, /id="intent-message"|id="intent-proposal"|Approve this draft/);
+});
+
+test("previewUrl only allows http and https hrefs", () => {
+  assert.equal(safePreviewHref("http://127.0.0.1:5173"), "http://127.0.0.1:5173");
+  assert.equal(safePreviewHref("https://example.test/app"), "https://example.test/app");
+  assert.equal(safePreviewHref("javascript:alert(1)"), null);
+  assert.equal(safePreviewHref("data:text/html,hi"), null);
+  const html = renderBuild({
+    session: {
+      id: "build:1",
+      seedHash: "sha256:abc",
+      lifecycleState: "building",
+      builder: null,
+      interventions: [],
+      previewUrl: "javascript:alert(1)",
+      changedFiles: [],
+    },
+    live: { running: false },
+    events: [],
+    adapters: [],
+  });
+  assert.doesNotMatch(html, /href="javascript:/);
+  assert.doesNotMatch(html, /href='javascript:/);
+});
+
+test("build view escapes XSS in event text and paths", () => {
+  const html = renderBuild({
+    session: {
+      id: "build:1",
+      seedHash: "sha256:abc",
+      lifecycleState: "building",
+      builder: { adapterId: "fake" },
+      interventions: [{ path: `<img src=x onerror=alert(1)>` }],
+      changedFiles: [`<script>x</script>`],
+      previewUrl: "http://127.0.0.1:1",
+    },
+    live: { running: false },
+    events: [{ type: "log", text: `<img src=x onerror=alert(1)>` }],
+    adapters: [],
+  });
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.doesNotMatch(html, /<script>x/);
+  assert.match(html, /&lt;img src=x|&lt;script&gt;/);
 });

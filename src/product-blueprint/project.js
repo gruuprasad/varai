@@ -86,11 +86,12 @@ export function projectBlueprint({ seed = null, report = null } = {}) {
   const annotate = (items) => items.map((item) => {
     const related = commitments.filter((c) =>
       c.source === item.id || c.target?.concept === item.id);
+    const relatedIds = related.flatMap((c) => [c.id, ...(c.claimIds ?? []), ...(c.reasons ?? [])]).map(String);
     return {
       ...item,
       observation: conceptObservation(item.id, commitments),
       commitmentIds: related.map((c) => c.id),
-      evidenceIds: related.flatMap((c) => c.claimIds ?? c.reasons ?? []).map(String),
+      evidenceIds: [...new Set([item.id, ...relatedIds])],
     };
   });
 

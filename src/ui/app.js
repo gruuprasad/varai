@@ -1,12 +1,10 @@
 import { archUnitsNotice, renderArchUnitsOutline } from "./arch-units-view.js";
 import {
-  renderQuestions,
   renderReviewActions,
   renderSeedDiff,
   renderSeedStatus,
   renderDraftStructure,
   renderProblems,
-  renderUnsupported,
   renderUnresolvedQueue,
 } from "./intent-view.js";
 import { renderBlueprint } from "./blueprint-view.js";
@@ -410,8 +408,6 @@ function renderIntent() {
     renderPanes(`<div class="spec-doc"><section class="spec-review">` +
       `<h3 class="group-heading">Draft under review (${esc(draft.source)})</h3>` +
       renderUnresolvedQueue(draft) +
-      renderQuestions(draft.questions) +
-      renderUnsupported(draft.unsupported) +
       renderProblems(draft.problems) +
       renderSeedDiff(draft.diff) +
       renderDraftStructure(draft.draft) +
@@ -492,9 +488,14 @@ function bindComposer(draft) {
 }
 
 function bindUnresolved(draft) {
-  document.querySelectorAll(".unresolved-answer").forEach((button) => button.addEventListener("click", async () => {
-    const answer = window.prompt("Your answer:");
-    if (answer == null || !answer.trim()) return;
+  document.querySelectorAll(".unresolved-answer-submit").forEach((button) => button.addEventListener("click", async () => {
+    const input = document.getElementById(button.dataset.inputId)
+      ?? document.querySelector(`.unresolved-answer-input[data-kind="${button.dataset.kind}"][data-index="${button.dataset.index}"]`);
+    const answer = input?.value?.trim() ?? "";
+    if (!answer) {
+      input?.focus();
+      return;
+    }
     await postResolve({
       action: "answer",
       kind: button.dataset.kind,
@@ -529,10 +530,25 @@ async function postResolve(body) {
   render();
 }
 
+function bindEvidenceFocus() {
+  document.querySelectorAll(".evidence-focus").forEach((button) => button.addEventListener("click", () => {
+    const id = button.dataset.evidenceTarget;
+    if (!id) return;
+    const target = document.getElementById(`evidence-${id}`)
+      ?? document.querySelector(`[data-evidence-id="${CSS.escape(id)}"]`);
+    if (!target) return;
+    target.classList.add("evidence-focused");
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (typeof target.focus === "function") target.focus({ preventScroll: true });
+    setTimeout(() => target.classList.remove("evidence-focused"), 1600);
+  }));
+}
+
 function renderBlueprintView() {
   hideSearch();
   const blueprint = controlRoomData?.blueprint ?? { empty: true };
   renderPanes(renderBlueprint(blueprint), "", { inlineExpand: true });
+  bindEvidenceFocus();
 }
 
 function renderBuildView() {
@@ -546,6 +562,7 @@ function renderVerifyView() {
   hideSearch();
   const verification = controlRoomData?.verification ?? { phase: "empty", gate: null, decisions: [] };
   renderPanes(renderVerification(verification), "", { inlineExpand: true });
+  bindEvidenceFocus();
 }
 
 function bindBuildControls() {

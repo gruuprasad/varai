@@ -54,3 +54,30 @@ test("blueprint renders actors, behaviors, surfaces, scenarios with observation 
   assert.match(html, /data-evidence-id="scenario\.happy"/);
   assert.match(html, /data-evidence-id="DELETE \/x"/);
 });
+
+test("unknown and red observation chips always carry a stable evidence id", () => {
+  const html = renderBlueprint({
+    ...populated,
+    actors: [{ id: "actor.orphan", name: "Orphan", observation: "unverifiable", commitmentIds: [], evidenceIds: ["actor.orphan"] }],
+    resources: [{ id: "resource.request", name: "Request", observation: "unknown", commitmentIds: [], evidenceIds: ["resource.request"] }],
+  });
+  assert.match(html, /observation-unverifiable[^>]*data-evidence-id="actor\.orphan"/);
+  assert.match(html, /data-evidence-id="resource\.request"/);
+});
+
+test("blueprint escapes XSS in names", () => {
+  const html = renderBlueprint({
+    empty: false,
+    system: { id: "x", name: `<script>alert(1)</script>` },
+    actors: [{ id: "actor.a", name: `<img src=x onerror=alert(1)>`, observation: "missing", evidenceIds: ["actor.a"] }],
+    behaviors: [],
+    resources: [],
+    surfaces: [],
+    scenarios: [],
+    unaccounted: [],
+    ambiguous: [],
+  });
+  assert.doesNotMatch(html, /<script>alert/);
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.match(html, /&lt;script&gt;|&lt;img src=x/);
+});

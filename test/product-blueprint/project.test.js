@@ -94,3 +94,11 @@ test("without a report, Seed items stay observation-unknown rather than falsely 
   assert.ok(blueprint.surfaces.every((item) => item.observation === "unverifiable" || item.observation === null));
   assert.ok(blueprint.behaviors.every((item) => item.observation == null || item.observation === "unverifiable"));
 });
+
+test("every projected concept and surface carries a stable evidence id even without report matches", () => {
+  const blueprint = projectBlueprint({ seed: seedV3() });
+  for (const item of [...blueprint.actors, ...blueprint.behaviors, ...blueprint.resources, ...blueprint.surfaces, ...blueprint.scenarios]) {
+    assert.ok(item.evidenceIds?.length, `${item.id} must have evidenceIds`);
+    assert.ok(item.evidenceIds.includes(item.id), `${item.id} evidence must include its own id`);
+  }
+});

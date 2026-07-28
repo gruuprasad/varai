@@ -1,5 +1,6 @@
-// Verification control room: decisions first, evidence as drill-down.
-// Ready chrome is structurally impossible unless gate.state === "ready".
+// Verification control room: decisions first, evidence as focus targets.
+// Ready chrome is structurally impossible unless gate.state === "ready"
+// AND there are zero decisions.
 
 export const READY_CHROME_CLASS = "gate-ready";
 export const READY_BADGE_TEXT = "Ready";
@@ -23,6 +24,17 @@ function isReady(verification) {
   return verification?.gate?.state === "ready" && !(verification.decisions?.length);
 }
 
+function evidenceFocusButtons(ids = []) {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return "";
+  return `<span class="evidence-focus-group">` +
+    unique.map((id) =>
+      `<button type="button" class="evidence-focus btn-quiet" data-evidence-target="${esc(id)}" ` +
+      `aria-label="Focus evidence ${esc(id)}">${esc(id)}</button>`
+    ).join(" ") +
+    `</span>`;
+}
+
 export function renderVerification(verification) {
   if (!verification || verification.phase === "empty" || (!verification.gate && !verification.decisions?.length)) {
     return `<div class="verification verification-empty"><h2>Verify</h2>` +
@@ -30,15 +42,18 @@ export function renderVerification(verification) {
   }
 
   const ready = isReady(verification);
-  const state = verification.gate?.state ?? verification.phase ?? "unknown";
+  // When decisions exist, never emit ready wording — even if gate.state says ready.
+  const state = ready
+    ? READY_BADGE_TEXT
+    : (verification.decisions?.length
+      ? "needs_attention"
+      : (verification.gate?.state === "ready" ? "needs_attention" : (verification.gate?.state ?? verification.phase ?? "unknown")));
+  const badgeLabel = state;
+  const badgeClass = ready ? "ratified" : "draft";
 
-  // Ready chrome only when the gate itself is ready. Class + badge + aria are
-  // the contract tests assert against; never emit them for failing gates.
   let html = `<div class="verification${ready ? ` ${READY_CHROME_CLASS}` : " gate-blocked"}">` +
     `<header class="verification-head"><h2>Verify ` +
-    (ready
-      ? `<span class="seed-badge ratified" aria-label="${READY_BADGE_TEXT}">${READY_BADGE_TEXT}</span>`
-      : `<span class="seed-badge draft" aria-label="${esc(state)}">${esc(state)}</span>`) +
+    `<span class="seed-badge ${badgeClass}" aria-label="${esc(badgeLabel)}">${esc(badgeLabel)}</span>` +
     `</h2></header>`;
 
   const decisions = verification.decisions ?? [];
@@ -46,10 +61,13 @@ export function renderVerification(verification) {
     html += `<section class="verification-decisions"><h3>Decisions</h3><ul class="decision-list">`;
     for (const decision of decisions) {
       const title = DECISION_LABELS[decision.kind] ?? decision.kind;
-      html += `<li class="decision decision-${esc(decision.kind)}" ${evidenceAttrs(decision.evidenceIds)}>` +
+      const ids = decision.evidenceIds?.length ? decision.evidenceIds : [decision.id];
+      html += `<li class="decision decision-${esc(decision.kind)}" id="evidence-${esc(decision.id)}" ${evidenceAttrs(ids)} tabindex="-1">` +
         `<strong>${esc(title)}</strong> ` +
         `<span class="decision-label">${esc(decision.label ?? decision.id)}</span> ` +
-        `<code>${esc(decision.id)}</code></li>`;
+        `<code>${esc(decision.id)}</code> ` +
+        evidenceFocusButtons(ids) +
+        `</li>`;
     }
     html += `</ul></section>`;
   } else if (ready) {
@@ -62,9 +80,7 @@ export function renderVerification(verification) {
       `</ul></details>`;
   }
 
-  html += `<details class="verification-drilldown"><summary>Architecture &amp; evidence drill-down</summary>` +
-    `<p class="empty-copy">Open Architecture for surface → API → resource projections, or expand a decision to follow its evidence ids.</p>` +
-    `</details>`;
+  html += `<p class="verification-evidence-help empty-copy">Use an evidence id button to focus the matching decision or blueprint item in this control room.</p>`;
 
   return `${html}</div>`;
 }

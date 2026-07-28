@@ -89,14 +89,15 @@ async function start(repo, assistant) {
         summary: null,
         model: {
           schemaVersion: 2,
+          system: { id: "demo", key: "demo", name: "Demo" },
           coverage: [],
           elements: [],
           claims: [],
           subsystems: [],
-          system: { id: "demo", key: "demo", name: "Demo" },
+          diagnostics: [],
         },
       },
-      git: { head: "x", clean: true, semanticStoreRoot: path.join(repo, ".varai", "semantic") },
+      git: { head: "x", clean: false, semanticStoreRoot: path.join(repo, ".varai", "semantic") },
       scannedTreeHash: "a",
       implementationTreeHash: "b",
       scanConfigHash: "c",
@@ -141,7 +142,7 @@ test("POC loop: draft → resolve unresolved → approve → fake build → veri
   const reviewHtml = renderReviewActions(drafted) + renderUnresolvedQueue(drafted);
   assert.match(reviewHtml, /disabled/);
   assert.match(reviewHtml, /aria-describedby="intent-approve-blocked"/);
-  assert.match(reviewHtml, /unresolved-answer/);
+  assert.match(reviewHtml, /unresolved-answer-submit|unresolved-answer-input/);
 
   // Control-room change projection agrees
   let room = await (await api("/api/control-room")).json();

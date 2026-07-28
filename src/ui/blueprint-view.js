@@ -3,9 +3,14 @@
 
 const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
-function chip(observation) {
-  if (!observation) return `<span class="observation-chip observation-unknown">unknown</span>`;
-  return `<span class="observation-chip observation-${esc(observation)}">${esc(observation)}</span>`;
+const ATTENTION = new Set(["missing", "unaccounted", "ambiguous", "unverifiable", "unknown"]);
+
+function chip(observation, evidenceIds = []) {
+  const obs = observation || "unknown";
+  const primary = evidenceIds[0];
+  const attrs = primary ? ` data-evidence-id="${esc(primary)}"` : "";
+  const attention = ATTENTION.has(obs) ? " observation-attention" : "";
+  return `<span class="observation-chip observation-${esc(obs)}${attention}"${attrs}>${esc(obs)}</span>`;
 }
 
 function evidenceAttrs(ids = []) {
@@ -28,21 +33,21 @@ export function renderBlueprint(blueprint) {
     `<p class="empty-copy">Seed projection with live observation overlay. Nothing here is a second architecture graph.</p></header>`;
 
   html += renderGroup("Actors", blueprint.actors, (item) =>
-    `<li class="blueprint-item" ${evidenceAttrs(item.evidenceIds)}>${chip(item.observation)} ` +
+    `<li class="blueprint-item" id="evidence-${esc(item.id)}" ${evidenceAttrs(item.evidenceIds)} tabindex="-1">${chip(item.observation, item.evidenceIds)} ` +
     `<strong>${esc(item.name)}</strong> <code>${esc(item.id)}</code></li>`);
 
   html += renderGroup("Behaviors", blueprint.behaviors, (item) =>
-    `<li class="blueprint-item" ${evidenceAttrs(item.evidenceIds)}>${chip(item.observation)} ` +
+    `<li class="blueprint-item" id="evidence-${esc(item.id)}" ${evidenceAttrs(item.evidenceIds)} tabindex="-1">${chip(item.observation, item.evidenceIds)} ` +
     `<strong>${esc(item.name)}</strong> <code>${esc(item.id)}</code></li>`);
 
   html += renderGroup("Expected surfaces", blueprint.surfaces, (item) =>
-    `<li class="blueprint-item" ${evidenceAttrs(item.evidenceIds)}>${chip(item.observation)} ` +
+    `<li class="blueprint-item" id="evidence-${esc(item.id)}" ${evidenceAttrs(item.evidenceIds)} tabindex="-1">${chip(item.observation, item.evidenceIds)} ` +
     `<strong>${esc(item.name)}</strong> ` +
     (item.channel ? `<span class="surface-meta">${esc(item.channel)} · ${esc(item.access)}</span> ` : "") +
     `<code>${esc(item.id)}</code></li>`);
 
   html += renderGroup("Scenario journeys", blueprint.scenarios, (item) =>
-    `<li class="blueprint-item" ${evidenceAttrs(item.evidenceIds)}>${chip(item.observation)} ` +
+    `<li class="blueprint-item" id="evidence-${esc(item.id)}" ${evidenceAttrs(item.evidenceIds)} tabindex="-1">${chip(item.observation, item.evidenceIds)} ` +
     `<strong>${esc(item.name)}</strong> <code>${esc(item.id)}</code>` +
     (item.steps?.length
       ? `<ol class="scenario-steps">${item.steps.map((step) =>
@@ -51,15 +56,15 @@ export function renderBlueprint(blueprint) {
     `</li>`);
 
   html += renderGroup("Resources", blueprint.resources, (item) =>
-    `<li class="blueprint-item" ${evidenceAttrs(item.evidenceIds)}>${chip(item.observation)} ` +
+    `<li class="blueprint-item" id="evidence-${esc(item.id)}" ${evidenceAttrs(item.evidenceIds)} tabindex="-1">${chip(item.observation, item.evidenceIds)} ` +
     `<strong>${esc(item.name)}</strong> <code>${esc(item.id)}</code></li>`);
 
   html += renderGroup("Unaccounted surfaces", blueprint.unaccounted, (item) =>
-    `<li class="blueprint-item" ${evidenceAttrs(item.evidenceIds)}>${chip(item.observation)} ` +
+    `<li class="blueprint-item" id="evidence-${esc(item.key ?? item.elementId)}" ${evidenceAttrs(item.evidenceIds)} tabindex="-1">${chip(item.observation, item.evidenceIds)} ` +
     `<strong>${esc(item.name)}</strong></li>`);
 
   html += renderGroup("Ambiguous bindings", blueprint.ambiguous, (item) =>
-    `<li class="blueprint-item" ${evidenceAttrs(item.evidenceIds)}>${chip(item.observation)} ` +
+    `<li class="blueprint-item" id="evidence-${esc(item.surfaceId)}" ${evidenceAttrs(item.evidenceIds)} tabindex="-1">${chip(item.observation, item.evidenceIds)} ` +
     `<code>${esc(item.surfaceId)}</code></li>`);
 
   return `${html}</div>`;

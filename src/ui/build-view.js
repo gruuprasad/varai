@@ -7,6 +7,19 @@ export function shortHash(hash) {
   return hash ? String(hash).replace(/^sha256:/, "").slice(0, 12) : "—";
 }
 
+/** Only http(s) preview links are safe to render as hrefs. */
+export function safePreviewHref(url) {
+  if (typeof url !== "string" || !url.trim()) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    // Prefer the caller string when it already parses; avoid inventing a trailing slash.
+    return url.trim();
+  } catch {
+    return null;
+  }
+}
+
 export function renderBuild({ session = null, live = { running: false }, events = [], adapters = [] } = {}) {
   if (!session) {
     const adapterOptions = adapters.length
@@ -33,8 +46,11 @@ export function renderBuild({ session = null, live = { running: false }, events 
       (running ? ` <span class="seed-badge draft">running</span>` : "") + `</p>`;
   }
 
-  if (session.previewUrl) {
-    html += `<p class="build-preview">Preview <a href="${esc(session.previewUrl)}" rel="noreferrer">${esc(session.previewUrl)}</a></p>`;
+  const preview = safePreviewHref(session.previewUrl);
+  if (preview) {
+    html += `<p class="build-preview">Preview <a href="${esc(preview)}" rel="noreferrer noopener">${esc(preview)}</a></p>`;
+  } else if (session.previewUrl) {
+    html += `<p class="build-preview build-preview-blocked">Preview link blocked (only http/https allowed).</p>`;
   }
 
   const files = session.changedFiles ?? [];

@@ -1,6 +1,6 @@
 import { projectBlueprint } from "../product-blueprint/project.js";
 import { createBuilderStore } from "../builder/store.js";
-import { runBuildStatus } from "../build-session/commands.js";
+import { findBuildProvenance, runBuildStatus } from "../build-session/commands.js";
 import { createBuildSessionStore } from "../build-session/store.js";
 import { getLiveBuilderRun } from "../builder/runtime.js";
 import { loadRepoConfig } from "../scanners/config.js";
@@ -48,11 +48,24 @@ function buildChangeProjection({ seedInput, authoring }) {
   };
 }
 
-function decisionFromGate(gate, report) {
-  const decisions = [];
-  if (!gate) return decisions;
+/** Unattested is only a regression when a prior ready/recorded build exists. */
+export function shouldSurfaceUnattested(provenance, sessions = []) {
+  if (!provenance) return false;
+  if (provenance.state === "stale") return true;
+  if (provenance.state !== "unattested") return false;
+  // Never-built repos get unattested with null sessionId — not a regression.
+  return sessions.some((session) =>
+    session.gate?.state === "ready"
+    || session.lifecycleState === "ready"
+    || session.unattested === true
+    || Boolean(session.provenanceHint?.state === "unattested"));
+}
 
-  for (const item of gate.requirementRegressions ?? []) {
+function decisionFromGate(gate, report, { sessions = [] } = {}) {
+  const decisions = [];
+  if (!gate && !report) return decisions;
+
+  for (const item of gate?.requirementRegressions ?? []) {
     decisions.push({
       kind: "missing_behavior",
       id: item.id,
@@ -70,7 +83,7 @@ function decisionFromGate(gate, report) {
       });
     }
   }
-  for (const item of gate.scenarioProblems ?? []) {
+  for (const item of gate?.scenarioProblems ?? []) {
     decisions.push({
       kind: "failed_scenario",
       id: item.id,
@@ -95,7 +108,7 @@ function decisionFromGate(gate, report) {
       evidenceIds: [id],
     });
   }
-  for (const item of gate.coverageRegressions ?? []) {
+  for (const item of gate?.coverageRegressions ?? []) {
     decisions.push({
       kind: "coverage_degradation",
       id: `${item.capability}:${item.scopeId}`,
@@ -111,12 +124,14 @@ function decisionFromGate(gate, report) {
       evidenceIds: [item.surfaceId, item.bindingId, item.reason].filter(Boolean),
     });
   }
-  if (report?.provenance?.state === "unattested") {
+  if (shouldSurfaceUnattested(report?.provenance, sessions)) {
     decisions.push({
       kind: "unattested",
-      id: "repo",
-      label: "Repository changed after ready",
-      evidenceIds: ["provenance"],
+      id: report.provenance.sessionId ?? "repo",
+      label: report.provenance.state === "stale"
+        ? "Recorded build no longer matches the repository"
+        : "Repository changed after ready",
+      evidenceIds: ["provenance", report.provenance.sessionId].filter(Boolean),
     });
   }
   return decisions;
@@ -134,7 +149,12 @@ function derivePhase({ seedInput, authoring, buildStatus, gate }) {
   return BUILD_STATES.DRAFT;
 }
 
-export async function loadControlRoom({ repoPath, model = null } = {}) {
+export async function loadControlRoom({
+  repoPath,
+  model = null,
+  scannedTreeHash = null,
+  scanConfigHash = null,
+} = {}) {
   let seedInput = null;
   try {
     seedInput = readSeed(repoPath);
@@ -157,13 +177,25 @@ export async function loadControlRoom({ repoPath, model = null } = {}) {
     ? readRealization(repoPath, { seed: seedInput.seed })?.realization ?? null
     : null;
 
+  const sessionStore = createBuildSessionStore(repoPath);
+  const listedSessions = await sessionStore.listSessions();
+
+  const provenance = seedInput?.seed
+    ? await findBuildProvenance(repoPath, {
+      seedHash: seedInput.contentHash,
+      scannedTreeHash,
+      scanConfigHash,
+      realization,
+    })
+    : { state: "unattested", sessionId: null };
+
   let report = null;
   if (seedInput?.seed && model) {
     report = reconcile({
       model,
       seed: seedInput.seed,
       realization,
-      provenance: { state: "unattested", sessionId: null },
+      provenance,
     });
   }
 
@@ -179,7 +211,6 @@ export async function loadControlRoom({ repoPath, model = null } = {}) {
     live: live ? { sessionId: live.sessionId, running: true } : { running: false },
   };
 
-  const sessionStore = createBuildSessionStore(repoPath);
   const active = status.active ? await sessionStore.getSession(status.active.id).catch(() => null) : null;
   const latestCompleted = (status.sessions ?? []).find((session) => session.completedAt) ?? null;
   const focusSession = active
@@ -198,6 +229,7 @@ export async function loadControlRoom({ repoPath, model = null } = {}) {
     ? await sessionStore.getObject(focusSession.completion.reportHash).catch(() => report)
     : report;
 
+  const decisionSessions = focusSession ? [focusSession, ...listedSessions] : listedSessions;
   const decisions = decisionFromGate(gate ?? {
     state: report && (report.summary?.violated || report.surfaces?.missing?.length || report.surfaces?.unaccounted?.length)
       ? "needs_attention"
@@ -209,9 +241,8 @@ export async function loadControlRoom({ repoPath, model = null } = {}) {
       .filter((item) => item.result === "failed" || item.result === "could_not_run")
       .map((item) => ({ id: item.id, result: item.result, reasons: item.reasons ?? [] })),
     surfaceProblems: null,
-  }, completionReport);
+  }, completionReport, { sessions: decisionSessions });
 
-  // Synthesize a gate-shaped object for verify UI when we only have live report issues.
   let verificationGate = gate;
   if (!verificationGate && decisions.length) {
     verificationGate = {
@@ -234,7 +265,6 @@ export async function loadControlRoom({ repoPath, model = null } = {}) {
   }
 
   const phase = derivePhase({ seedInput, authoring, buildStatus: status, gate: verificationGate });
-
   const change = buildChangeProjection({ seedInput, authoring });
 
   return {
@@ -266,16 +296,23 @@ export async function loadControlRoom({ repoPath, model = null } = {}) {
       gate: verificationGate,
       decisions,
       reportSummary: completionReport?.summary ?? null,
+      provenance,
     },
   };
 }
 
-export function createControlRoomHandlers({ repoPath, getModel }) {
+export function createControlRoomHandlers({ repoPath, getModel, getScanMeta }) {
   return {
     async handle(req, res, url) {
       if (req.method !== "GET" || url.pathname !== "/api/control-room") return false;
       const model = typeof getModel === "function" ? await getModel() : null;
-      const payload = await loadControlRoom({ repoPath, model });
+      const meta = typeof getScanMeta === "function" ? await getScanMeta() : null;
+      const payload = await loadControlRoom({
+        repoPath,
+        model,
+        scannedTreeHash: meta?.scannedTreeHash ?? null,
+        scanConfigHash: meta?.scanConfigHash ?? null,
+      });
       send(res, 200, payload);
       return true;
     },

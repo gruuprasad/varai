@@ -56,10 +56,22 @@ test("unresolved questions block approval with an accessible reason and queue ac
 
   const queue = renderUnresolvedQueue(state);
   assert.match(queue, /Unresolved \(2\)/);
-  assert.match(queue, /unresolved-answer/);
+  assert.match(queue, /unresolved-answer-input|unresolved-answer-submit/);
   assert.match(queue, /unresolved-to-context/);
   assert.match(queue, /unresolved-remove/);
-  assert.match(queue, /aria-label="Answer:/);
+  assert.match(queue, /for="unresolved-answer-/);
+  assert.match(queue, /aria-label="Submit answer:/);
+});
+
+test("unresolved queue is the sole surface for questions and unsupported items", () => {
+  const state = draftState();
+  const queue = renderUnresolvedQueue(state);
+  assert.match(queue, /Should cancellations notify an admin\?/);
+  assert.match(queue, /Booking must be atomic/);
+  // Standalone sections remain available for other callers, but the queue
+  // already contains the text — Change view must not stack both.
+  assert.ok(renderQuestions(state.questions).includes("Should cancellations"));
+  assert.ok(renderUnsupported(state.unsupported).includes("Booking must be atomic"));
 });
 
 test("unsupported prose stays visible instead of disappearing", () => {
