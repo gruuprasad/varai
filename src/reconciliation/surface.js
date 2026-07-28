@@ -97,12 +97,32 @@ export function accountSurfaces({
         ambiguous.push({
           surfaceId: surface.id,
           bindingId: record.id,
-          elementIds: [...record.elementIds],
+          elementIds: [...(record.elementIds ?? [])],
           reason: record.reason ?? "selector-ambiguous",
         });
       }
       continue;
     }
+
+    // Fail closed: a surface with both clean and stale bindings is not accounted.
+    if (staleRecords.length && resolved.length) {
+      for (const record of staleRecords) {
+        stale.push({
+          surfaceId: surface.id,
+          bindingId: record.id,
+          reason: record.reason ?? "artifact-not-found",
+        });
+      }
+      // Occupy every Element the mixed bindings pointed at so they are not
+      // also reported as unaccounted.
+      for (const elementId of new Set(records.flatMap((record) => record.elementIds ?? []))) {
+        const owners = claimedElementIds.get(elementId) ?? [];
+        if (!owners.includes(surface.id)) owners.push(surface.id);
+        claimedElementIds.set(elementId, owners);
+      }
+      continue;
+    }
+
     if (staleRecords.length && !resolved.length) {
       for (const record of staleRecords) {
         stale.push({
@@ -173,14 +193,15 @@ export function accountSurfaces({
     }
   }
 
-  const claimed = new Set(accounted.map((item) => item.elementId));
-  // Also treat ambiguous/stale claims as occupying the element for unaccounted
-  // purposes only when the element was uniquely selected — collided elements
-  // are ambiguous, not unaccounted.
+  // Occupied = accounted + every Element an ambiguous claim selected + any
+  // Element held by a mixed/failed-closed claim via claimedElementIds.
+  // Ambiguous ≠ unaccounted.
+  const claimed = new Set([
+    ...accounted.map((item) => item.elementId),
+    ...claimedElementIds.keys(),
+  ]);
   for (const item of ambiguous) {
-    if (item.reason === "surface-collision" && item.elementIds?.length === 1) {
-      claimed.add(item.elementIds[0]);
-    }
+    for (const elementId of item.elementIds ?? []) claimed.add(elementId);
   }
 
   const unaccounted = publicSurfaceElements(model)

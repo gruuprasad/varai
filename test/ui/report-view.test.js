@@ -38,6 +38,22 @@ test("a requirement reads as an English sentence and the headline excludes unche
   assert.match(headlineSentence(review), /1 of 3 requirements are confirmed/);
 });
 
+test("headline names stale surfaces when that is the only surface problem", () => {
+  const text = headlineSentence({
+    summary: { holds: 2, violated: 0, cannotVerify: 0, notCheckable: 0 },
+    surfaces: {
+      state: "closed",
+      missing: [],
+      unaccounted: [],
+      ambiguous: [],
+      stale: [{ surfaceId: "surface.submit-api", reason: "artifact-not-found" }],
+    },
+    groups: [],
+  });
+  assert.match(text, /stale/i);
+  assert.match(text, /Public surfaces/);
+});
+
 test("findCard locates a requirement by commitment id across groups", () => {
   assert.equal(findCard(review, "c.holds")?.verdict, "holds");
   assert.equal(findCard(review, "missing-id"), null);

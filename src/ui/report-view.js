@@ -48,11 +48,13 @@ export function headlineSentence(review) {
     const missing = surfaces.missing?.length ?? 0;
     const unaccounted = surfaces.unaccounted?.length ?? 0;
     const ambiguous = surfaces.ambiguous?.length ?? 0;
-    if (missing || unaccounted || ambiguous) {
+    const stale = surfaces.stale?.length ?? 0;
+    if (missing || unaccounted || ambiguous || stale) {
       const bits = [];
       if (missing) bits.push(`${missing} expected surface${missing === 1 ? "" : "s"} missing`);
       if (unaccounted) bits.push(`${unaccounted} unaccounted`);
       if (ambiguous) bits.push(`${ambiguous} ambiguous`);
+      if (stale) bits.push(`${stale} stale`);
       parts.push(`Public surfaces: ${bits.join(", ")}.`);
     }
   }

@@ -189,23 +189,29 @@ test("adversary 4: renaming/moving a handler without changing the public key kee
     artifact: { lens: "api", kind: "operation", key: DELETE },
   }]);
 
+  const beforeEl = before.elements.find((el) => el.key === DELETE);
+  const afterEl = after.elements.find((el) => el.key === DELETE);
+  assert.ok(beforeEl, "before model must expose the DELETE public key");
+  assert.ok(afterEl, "after model must expose the DELETE public key");
+  assert.equal(beforeEl.key, DELETE);
+  assert.equal(afterEl.key, DELETE);
+  assert.notEqual(beforeEl.evidence[0].file, afterEl.evidence[0].file, "handler file moved");
+  assert.notEqual(beforeEl.evidence[0].symbol, afterEl.evidence[0].symbol, "handler symbol renamed");
+
   const beforeResolution = resolveSurfaceBindings(before, realization, seedHash);
   const afterResolution = resolveSurfaceBindings(after, realization, seedHash);
-  assert.equal(beforeResolution.get("surface-binding.delete-request-api").state, "resolved");
-  assert.equal(afterResolution.get("surface-binding.delete-request-api").state, "resolved");
-  assert.equal(
-    beforeResolution.get("surface-binding.delete-request-api").elementIds[0],
-    after.elements.find((el) => el.key === DELETE) && afterResolution.get("surface-binding.delete-request-api").elementIds[0]
-      ? afterResolution.get("surface-binding.delete-request-api").elementIds[0]
-      : beforeResolution.get("surface-binding.delete-request-api").elementIds[0],
-  );
-  // Public key identity is stable across rename — same key resolves both models.
-  assert.equal(
-    before.elements.find((el) => el.key === DELETE).key,
-    after.elements.find((el) => el.key === DELETE).key,
-  );
+  const beforeRecord = beforeResolution.get("surface-binding.delete-request-api");
+  const afterRecord = afterResolution.get("surface-binding.delete-request-api");
+  assert.equal(beforeRecord.state, "resolved");
+  assert.equal(afterRecord.state, "resolved");
+  assert.deepEqual(beforeRecord.elementIds, [beforeEl.id]);
+  assert.deepEqual(afterRecord.elementIds, [afterEl.id]);
+  // Element ids may differ across models; the public artifact key is what survives.
+  assert.equal(beforeEl.key, afterEl.key);
+
   const afterReport = reconcile({ model: after, seed: s, realization });
   assert.equal(afterReport.surfaces.accounted.length, 1);
+  assert.equal(afterReport.surfaces.accounted[0].key, DELETE);
   assert.equal(afterReport.surfaces.stale.length, 0);
   assert.equal(afterReport.surfaces.missing.length, 0);
 });

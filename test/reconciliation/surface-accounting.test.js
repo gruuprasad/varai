@@ -217,3 +217,66 @@ test("reconcile attaches a top-level surfaces section", () => {
   assert.ok(report.summary.surfaces);
   assert.equal(report.summary.surfaces.unaccounted, report.surfaces.unaccounted.length);
 });
+
+test("elements claimed by an ambiguous selector are occupied, not also unaccounted", () => {
+  const model = apiModel(["POST /api/requests"]);
+  const seed = v3Seed([{
+    id: "surface.submit-api",
+    name: "Submit request API",
+    behavior: "behavior.submit",
+    channel: "api",
+    access: "authenticated",
+  }]);
+  const seedHash = seedContentHash(seed);
+  const op = model.elements.find((el) => el.key === "POST /api/requests");
+  const widened = structuredClone(model);
+  widened.elements.push({ ...op, id: "element:duplicate-public-op" });
+  const wit = realization(seedHash, [
+    surfaceBinding("surface-binding.submit-api", "surface.submit-api", {
+      lens: "api", kind: "operation", key: "POST /api/requests",
+    }),
+  ]);
+  const surfaces = accountSurfaces({ model: widened, seed, realization: wit });
+  assert.ok(surfaces.ambiguous.length >= 1);
+  assert.equal(surfaces.accounted.length, 0);
+  assert.equal(
+    surfaces.unaccounted.filter((item) => item.key === "POST /api/requests").length,
+    0,
+    "ambiguous claim occupies the public Element; it must not also be unaccounted",
+  );
+  // Only the synthetic duplicate id is also claimed via the same ambiguous selector.
+  assert.equal(
+    surfaces.unaccounted.filter((item) => item.elementId === "element:duplicate-public-op").length,
+    0,
+  );
+});
+
+test("mixed stale and resolved bindings on one surface fail closed", () => {
+  const model = apiModel(["POST /api/requests"]);
+  const seed = v3Seed([{
+    id: "surface.submit-api",
+    name: "Submit request API",
+    behavior: "behavior.submit",
+    channel: "api",
+    access: "authenticated",
+  }]);
+  const seedHash = seedContentHash(seed);
+  const op = model.elements.find((el) => el.key === "POST /api/requests");
+  const wit = realization(seedHash, [
+    surfaceBinding("surface-binding.submit-good", "surface.submit-api", {
+      lens: "api", kind: "operation", key: "POST /api/requests",
+    }),
+    surfaceBinding("surface-binding.submit-stale", "surface.submit-api", {
+      lens: "api", kind: "operation", key: "POST /gone",
+    }),
+  ]);
+  const surfaces = accountSurfaces({ model, seed, realization: wit });
+  assert.equal(surfaces.accounted.length, 0, "mixed bindings must not cleanly account the surface");
+  assert.ok(
+    surfaces.stale.some((item) => item.surfaceId === "surface.submit-api")
+      || surfaces.ambiguous.some((item) => item.surfaceId === "surface.submit-api"),
+    "surface must be stale or ambiguous when any binding is unclean",
+  );
+  // The resolved target stays occupied by the unclean surface claim, not unaccounted.
+  assert.ok(surfaces.unaccounted.every((item) => item.elementId !== op.id));
+});
