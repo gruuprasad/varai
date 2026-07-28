@@ -248,7 +248,8 @@ async function main() {
     }
     const run = subcommand === "begin" ? runBuildBegin : subcommand === "close" ? runBuildClose : subcommand === "status" ? runBuildStatus : null;
     if (!run) throw new Error(`Unknown build subcommand: ${subcommand ?? "(none)"}`);
-    await run(opts);
+    const result = await run(opts);
+    if (subcommand === "close" && result?.exitCode) process.exitCode = result.exitCode;
     return;
   }
 

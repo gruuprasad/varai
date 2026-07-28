@@ -243,8 +243,15 @@ function renderProgression() {
     renderPanes(`<div class="report"><h2>Build progression</h2><p class="empty-copy">Complete two build sessions to compare how each requirement progressed.</p></div>`, "", { inlineExpand: true });
     return;
   }
-  const rows = progression.requirements.map((item) => `<tr><td>${esc(item.id)}</td><td>${esc(item.seed)}</td><td>${esc(item.implementation)}</td><td>${esc(item.binding)}</td><td>${esc(item.verdict.from ?? "—")} → ${esc(item.verdict.to ?? "—")}</td></tr>`).join("");
-  renderPanes(`<div class="report"><h2>Build progression</h2><p class="empty-copy">${esc(progression.from.id)} → ${esc(progression.to.id)}</p><table class="progression-table"><thead><tr><th>Requirement</th><th>Spec</th><th>Evidence</th><th>Binding</th><th>Verdict</th></tr></thead><tbody>${rows}</tbody></table></div>`, "", { inlineExpand: true });
+  const coverageLabel = (value) => value === "degraded" ? "degraded (regression)" : (value ?? "—");
+  const verdictLabel = (item) => {
+    const base = `${item.verdict.from ?? "—"} → ${item.verdict.to ?? "—"}`;
+    return item.requirementRegression ? `${base} (regression)` : base;
+  };
+  const rows = progression.requirements.map((item) =>
+    `<tr><td>${esc(item.id)}</td><td>${esc(item.seed)}</td><td>${esc(item.implementation)}</td><td>${esc(item.binding)}</td><td class="${item.coverage === "degraded" ? "regression" : ""}">${esc(coverageLabel(item.coverage))}</td><td class="${item.requirementRegression ? "regression" : ""}">${esc(verdictLabel(item))}</td></tr>`
+  ).join("");
+  renderPanes(`<div class="report"><h2>Build progression</h2><p class="empty-copy">${esc(progression.from.id)} → ${esc(progression.to.id)}</p><table class="progression-table"><thead><tr><th>Requirement</th><th>Spec</th><th>Evidence</th><th>Binding</th><th>Coverage</th><th>Verdict</th></tr></thead><tbody>${rows}</tbody></table></div>`, "", { inlineExpand: true });
 }
 
 function navItem(view, fallbackIcon, name, count) {

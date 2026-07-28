@@ -3,10 +3,13 @@ import path from "node:path";
 import { canonicalStringify } from "../system-model/canonicalize.js";
 import { semanticHash } from "../system-model/identity.js";
 import { analyzeCurrent, persistCurrentModel } from "../snapshots/snapshot.js";
+import { createSnapshotStore } from "../snapshots/store.js";
 import { reconcile } from "../reconciliation/check.js";
 import { readRealization } from "../reconciliation/witness-store.js";
 import { renderBuildPacket } from "../seed/handoff.js";
 import { readSeed } from "../seed/store.js";
+import { evaluateBuildGate } from "./evaluate.js";
+import { isNonZeroExitGate } from "./state.js";
 import { createBuildSessionStore } from "./store.js";
 
 function sessionId({ seedHash, packetHash, start }) {
@@ -22,7 +25,14 @@ function statusSummary(session) {
     mode: session.completion?.mode ?? null,
     startTree: session.start.implementationTreeHash,
     endTree: session.completion?.implementationTreeHash ?? null,
+    gate: session.gate ?? null,
   };
+}
+
+async function loadSnapshotModel(repoPath, snapshotId) {
+  const store = createSnapshotStore(repoPath);
+  const manifest = await store.getSnapshot(snapshotId);
+  return store.getObject(manifest.modelObjectHash);
 }
 
 export async function runBuildBegin(options = {}) {
@@ -78,6 +88,13 @@ export async function runBuildClose(options = {}) {
   if (!realization) throw new Error("Build close requires varai.realization.json");
   const snapshot = await persistCurrentModel(repoPath, current);
   const realizationObjectHash = await store.putObject(realization);
+  const startModel = await loadSnapshotModel(repoPath, session.start.snapshotId);
+  const startReport = reconcile({
+    model: startModel,
+    seed: input.seed,
+    realization,
+    provenance: { state: "recorded_build", sessionId: session.id },
+  });
   const report = reconcile({
     model: snapshot.model,
     seed: input.seed,
@@ -86,6 +103,12 @@ export async function runBuildClose(options = {}) {
       state: options.mode === "carry-forward" ? "recorded_carry_forward" : "recorded_build",
       sessionId: session.id,
     },
+  });
+  const gate = evaluateBuildGate({
+    startModel,
+    completionModel: snapshot.model,
+    startReport,
+    completionReport: report,
   });
   const reportHash = await store.putObject(report);
   const completed = {
@@ -100,13 +123,37 @@ export async function runBuildClose(options = {}) {
       realizationObjectHash,
       reportHash,
     },
+    gate,
     completedAt: new Date().toISOString(),
   };
   await store.putSession(completed);
   await store.clearActive();
-  if (options.json) process.stdout.write(`${JSON.stringify({ session: statusSummary(completed), report }, null, 2)}\n`);
-  else process.stdout.write(`Build session ${completed.id} closed as ${options.mode}.\n`);
-  return { session: completed, report };
+  const exitCode = isNonZeroExitGate(gate.state) ? 1 : 0;
+  if (options.json) process.stdout.write(`${JSON.stringify({ session: statusSummary(completed), report, exitCode }, null, 2)}\n`);
+  else {
+    process.stdout.write(`Build session ${completed.id} closed as ${options.mode}.\n`);
+    process.stdout.write(`Gate ${gate.state}` +
+      (gate.reasons.length ? ` (${gate.reasons.length} reason${gate.reasons.length === 1 ? "" : "s"})` : "") +
+      `.\n`);
+  }
+  return { session: completed, report, exitCode };
+}
+
+function formatStatusText(result) {
+  const lines = [];
+  if (result.active) {
+    lines.push(`Active ${result.active.id}`);
+  } else {
+    lines.push("No active build session");
+  }
+  for (const session of result.sessions) {
+    const gate = session.gate;
+    const gateText = gate
+      ? ` gate ${gate.state} (${gate.reasons?.length ?? 0} reasons, ${gate.coverageRegressions?.length ?? 0} coverage regressions, ${gate.requirementRegressions?.length ?? 0} requirement regressions)`
+      : " gate —";
+    lines.push(`${session.id}${session.completedAt ? " completed" : " open"}${gateText}`);
+  }
+  return `${lines.join("\n")}\n`;
 }
 
 export async function runBuildStatus(options = {}) {
@@ -115,7 +162,7 @@ export async function runBuildStatus(options = {}) {
   const active = await store.getActive();
   const sessions = await store.listSessions();
   const result = { active: active ? statusSummary(await store.getSession(active.id)) : null, sessions: sessions.map(statusSummary) };
-  process.stdout.write(`${options.json ? JSON.stringify(result, null, 2) : JSON.stringify(result)}\n`);
+  process.stdout.write(options.json ? `${JSON.stringify(result, null, 2)}\n` : formatStatusText(result));
   return result;
 }
 

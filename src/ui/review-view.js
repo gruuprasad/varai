@@ -127,5 +127,7 @@ export function renderCoverageLimitations(review) {
       ? ` <span class="coverage-chip cov-${esc(item.coverage[0].state)}">${esc(item.coverage[0].capability)} ${esc(item.coverage[0].state)}</span>`
       : "") +
     `</li>`).join("");
-  return `<section class="coverage-limitations"><h3>What Varai could not determine</h3><ul>${items}</ul></section>`;
+  return `<section class="coverage-limitations"><h3>What Varai could not determine</h3>` +
+    `<p class="empty-copy">These are check-time limits. Coverage moving backwards across a build is a regression, shown on Progression — not calm health.</p>` +
+    `<ul>${items}</ul></section>`;
 }

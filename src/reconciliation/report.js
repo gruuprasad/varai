@@ -48,7 +48,11 @@ export function renderCheckText(report, { model } = {}) {
       lines.push(`    path through the code: ${item.implementationPath.map(formatEvidence).join("; ")}`);
     }
     if (item.coverage.length) {
-      lines.push(`    how much I could analyze: ${item.coverage.map((record) => `${record.capability} ${record.state}`).join("; ")}`);
+      lines.push(`    how much I could analyze: ${item.coverage.map((record) => {
+        const label = record.state === "analyzed" ? "analyzed"
+          : `${record.state} (not health — reduced analyzability)`;
+        return `${record.capability} ${label}`;
+      }).join("; ")}`);
     }
     lines.push("");
   }

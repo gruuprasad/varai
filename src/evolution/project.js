@@ -1,6 +1,11 @@
 import path from "node:path";
 import { createBuildSessionStore } from "../build-session/store.js";
 import { diffSeeds } from "../seed/diff.js";
+import {
+  classifyRequirementCoverage,
+  classifyVerdictKind,
+  isRequirementRegression,
+} from "./report.js";
 
 function byId(items = []) { return new Map(items.map((item) => [item.id, item])); }
 function state(before, after) {
@@ -41,8 +46,8 @@ export async function projectProgression(repoPath, { from, to } = {}) {
   const ids = [...new Set([...beforeCommitments.keys(), ...afterCommitments.keys()])].sort();
   return {
     formatVersion: 1,
-    from: { id: beforeSession.id, completedAt: beforeSession.completedAt, mode: beforeSession.completion.mode },
-    to: { id: afterSession.id, completedAt: afterSession.completedAt, mode: afterSession.completion.mode },
+    from: { id: beforeSession.id, completedAt: beforeSession.completedAt, mode: beforeSession.completion.mode, gate: beforeSession.gate ?? null },
+    to: { id: afterSession.id, completedAt: afterSession.completedAt, mode: afterSession.completion.mode, gate: afterSession.gate ?? null },
     seedDiff,
     requirements: ids.map((id) => {
       const before = beforeCommitments.get(id);
@@ -51,13 +56,18 @@ export async function projectProgression(repoPath, { from, to } = {}) {
       const newResult = afterResults.get(id);
       const oldBinding = bindingState(oldResult);
       const newBinding = bindingState(newResult);
+      const verdictFrom = oldResult?.verdict ?? null;
+      const verdictTo = newResult?.verdict ?? null;
+      const verdictKind = classifyVerdictKind(verdictFrom, verdictTo);
       return {
         id,
         seed: state(before, after),
         implementation: evidenceState(oldResult, newResult),
         binding: oldBinding === newBinding ? "unchanged" : !oldBinding ? "added" : !newBinding ? "removed" : "retargeted",
-        coverage: JSON.stringify(oldResult?.coverage ?? []) === JSON.stringify(newResult?.coverage ?? []) ? "unchanged" : "changed",
-        verdict: { from: oldResult?.verdict ?? null, to: newResult?.verdict ?? null },
+        coverage: classifyRequirementCoverage(oldResult?.coverage ?? [], newResult?.coverage ?? []),
+        verdict: { from: verdictFrom, to: verdictTo },
+        verdictKind,
+        requirementRegression: isRequirementRegression(verdictKind),
       };
     }),
   };

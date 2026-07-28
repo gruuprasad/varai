@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { runBuildBegin, runBuildClose } from "../../src/build-session/commands.js";
+import { GATE_STATES } from "../../src/build-session/state.js";
 import { ratifySeed } from "../../src/seed/store.js";
 import { slotkeeperDraft } from "../seed/fixtures.js";
 
@@ -34,6 +35,11 @@ test("a carry-forward build records matching source snapshots and provenance", a
     assert.equal(closed.session.completion.mode, "carry-forward");
     assert.equal(closed.report.provenance.state, "recorded_carry_forward");
     assert.equal(closed.session.start.implementationTreeHash, closed.session.completion.implementationTreeHash);
+    assert.ok(closed.session.gate);
+    assert.equal(closed.session.gate.state, GATE_STATES.READY);
+    assert.deepEqual(closed.session.gate.coverageRegressions, []);
+    assert.deepEqual(closed.session.gate.requirementRegressions, []);
+    assert.equal(closed.exitCode ?? 0, 0);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

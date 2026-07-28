@@ -1919,3 +1919,8 @@ body {
   color: var(--text-muted);
   font-weight: 600;
 }
+
+.progression-table td.regression {
+  color: var(--danger, #a33);
+  font-weight: 600;
+}

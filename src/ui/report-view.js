@@ -134,7 +134,7 @@ export function renderReport(review, { expandedId } = {}) {
       `<ul>${review.context.map((entry) => `<li>${esc(entry.text)}</li>`).join("")}</ul></details>`;
   }
   if (review.coverageLimitations?.length) {
-    html += `<details class="report-limits"><summary>Limits of this check (${review.coverageLimitations.length})</summary>` +
+    html += `<details class="report-limits"><summary>Check limits (${review.coverageLimitations.length}) — not the same as a coverage regression across builds</summary>` +
       `<ul>${review.coverageLimitations.map((item) =>
         `<li>${esc(item.id.replace(/^commitment\./, ""))} — ${esc(item.reasons.map((code) => reasonLabel(code)).join("; "))}</li>`).join("")}</ul></details>`;
   }

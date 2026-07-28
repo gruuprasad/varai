@@ -13,7 +13,11 @@ export async function runProgression(options = {}) {
   else {
     process.stdout.write(`Progression ${result.from.id} → ${result.to.id}\n`);
     for (const item of result.requirements) {
-      process.stdout.write(`${item.id}: seed ${item.seed}; implementation ${item.implementation}; binding ${item.binding}; verdict ${item.verdict.from ?? "—"} → ${item.verdict.to ?? "—"}\n`);
+      const coverageLabel = item.coverage === "degraded" ? "degraded (regression)" : item.coverage;
+      const verdictLabel = item.requirementRegression
+        ? `${item.verdict.from ?? "—"} → ${item.verdict.to ?? "—"} (regression)`
+        : `${item.verdict.from ?? "—"} → ${item.verdict.to ?? "—"}`;
+      process.stdout.write(`${item.id}: seed ${item.seed}; implementation ${item.implementation}; binding ${item.binding}; coverage ${coverageLabel}; verdict ${verdictLabel}\n`);
     }
   }
   return result;
