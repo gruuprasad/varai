@@ -178,3 +178,82 @@ test("child process receives filtered environment only", async () => {
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+test("buildBuilderEnv honors optional envAllowlist names without leaking others", () => {
+  const env = buildBuilderEnv({
+    PATH: "/bin",
+    HOME: "/home/dev",
+    MY_BUILDER_TOKEN: "ok",
+    AWS_SECRET_ACCESS_KEY: "nope",
+  }, { envAllowlist: ["MY_BUILDER_TOKEN"] });
+  assert.equal(env.MY_BUILDER_TOKEN, "ok");
+  assert.equal(env.AWS_SECRET_ACCESS_KEY, undefined);
+});
+
+test("stop() returns promptly even if the child ignores SIGKILL wait bound", async () => {
+  const cwd = await tempCwd();
+  try {
+    const adapter = createProcessAdapter({
+      id: "fake",
+      executable: process.execPath,
+      args: [fixtureCli, "--mode", "hang", "--packet"],
+      stopGraceMs: 50,
+      stopKillWaitMs: 50,
+    });
+    const started = adapter.start({
+      cwd,
+      packetPath: path.join(cwd, "packet.md"),
+      onEvent() {},
+    });
+    await new Promise((r) => setTimeout(r, 80));
+    const t0 = Date.now();
+    await adapter.stop();
+    assert.ok(Date.now() - t0 < 2000, "stop must not hang forever after SIGKILL");
+    await started;
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("stop kills the whole process group including grandchildren", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const cwd = await tempCwd();
+  try {
+    const adapter = createProcessAdapter({
+      id: "fake",
+      executable: process.execPath,
+      args: [fixtureCli, "--mode", "spawn-tree", "--packet"],
+      stopGraceMs: 200,
+      stopKillWaitMs: 200,
+    });
+    const started = adapter.start({
+      cwd,
+      packetPath: path.join(cwd, "packet.md"),
+      onEvent() {},
+    });
+    const marker = path.join(cwd, "grandchild.pid");
+    let grandchildPid = null;
+    for (let i = 0; i < 40; i++) {
+      try {
+        grandchildPid = Number(await readFile(marker, "utf8"));
+        if (Number.isFinite(grandchildPid) && grandchildPid > 0) break;
+      } catch {
+        // not written yet
+      }
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    assert.ok(grandchildPid, "expected grandchild pid marker");
+    await adapter.stop();
+    await started;
+    await new Promise((r) => setTimeout(r, 100));
+    let alive = true;
+    try {
+      process.kill(grandchildPid, 0);
+    } catch {
+      alive = false;
+    }
+    assert.equal(alive, false, "grandchild must not remain after process-group stop");
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});

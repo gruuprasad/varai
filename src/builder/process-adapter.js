@@ -6,10 +6,16 @@ import { spawn } from "node:child_process";
 export const BUILDER_ENV_BASE_KEYS = Object.freeze(["PATH", "HOME", "TERM", "LANG", "LC_ALL"]);
 export const MAX_EVENT_BYTES = 64 * 1024;
 export const DEFAULT_MAX_EVENT_BYTES = 8 * 1024;
+export const DEFAULT_STOP_GRACE_MS = 2000;
+export const DEFAULT_STOP_KILL_WAIT_MS = 2000;
 
-export function buildBuilderEnv(sourceEnv = {}) {
+export function buildBuilderEnv(sourceEnv = {}, { envAllowlist = [] } = {}) {
+  const allow = new Set(BUILDER_ENV_BASE_KEYS);
+  for (const key of envAllowlist) {
+    if (typeof key === "string" && key) allow.add(key);
+  }
   const out = {};
-  for (const key of BUILDER_ENV_BASE_KEYS) {
+  for (const key of allow) {
     if (sourceEnv[key] !== undefined && sourceEnv[key] !== null) out[key] = sourceEnv[key];
   }
   for (const key of Object.keys(sourceEnv)) {
@@ -37,13 +43,37 @@ function emitChunk(onEvent, stream, chunk, maxEventBytes) {
   });
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function killProcessTree(child, signal) {
+  if (!child?.pid) return;
+  try {
+    // Negative PID targets the process group when the child is a group leader.
+    process.kill(-child.pid, signal);
+  } catch {
+    try {
+      child.kill(signal);
+    } catch {
+      // already gone
+    }
+  }
+}
+
+function hasExited(child) {
+  return !child || child.exitCode != null || child.signalCode != null;
+}
+
 export function createProcessAdapter({
   id,
   executable,
   args = [],
   sourceEnv = process.env,
+  envAllowlist = [],
   maxEventBytes = DEFAULT_MAX_EVENT_BYTES,
-  stopGraceMs = 2000,
+  stopGraceMs = DEFAULT_STOP_GRACE_MS,
+  stopKillWaitMs = DEFAULT_STOP_KILL_WAIT_MS,
 } = {}) {
   if (!id) throw new Error("Process adapter requires id");
   if (!executable || typeof executable !== "string") throw new Error("Process adapter requires executable");
@@ -58,19 +88,22 @@ export function createProcessAdapter({
     id,
     executable,
     args: [...args],
+    envAllowlist: [...envAllowlist],
     maxEventBytes,
     async start({ cwd, packetPath, signal, onEvent } = {}) {
-      if (child && child.exitCode == null && child.signalCode == null) {
+      if (child && !hasExited(child)) {
         throw new Error("Builder process is already running");
       }
       stopRequested = false;
-      const env = buildBuilderEnv(sourceEnv);
+      const env = buildBuilderEnv(sourceEnv, { envAllowlist });
       const argv = [...args, packetPath].filter((part) => part !== undefined && part !== null);
+      // detached → new process group so stop can kill the whole tree.
       const spawned = spawn(executable, argv, {
         cwd,
         env,
         shell: false,
         signal,
+        detached: true,
         stdio: ["pipe", "pipe", "pipe"],
       });
       child = spawned;
@@ -100,24 +133,29 @@ export function createProcessAdapter({
       return result;
     },
     async send({ message } = {}) {
-      if (!child || child.killed || child.exitCode != null) {
+      if (!child || child.killed || hasExited(child)) {
         throw new Error("No running builder process to receive a message");
       }
       const line = typeof message === "string" ? message : JSON.stringify(message);
       child.stdin.write(`${line}\n`);
     },
     async stop() {
-      if (!child || child.exitCode != null || child.signalCode != null) return;
+      if (hasExited(child)) return;
       stopRequested = true;
-      child.kill("SIGTERM");
+      const target = child;
+      killProcessTree(target, "SIGTERM");
       await Promise.race([
-        new Promise((resolve) => child.once("exit", resolve)),
-        new Promise((resolve) => setTimeout(resolve, stopGraceMs)),
+        new Promise((resolve) => target.once("exit", resolve)),
+        sleep(stopGraceMs),
       ]);
-      if (child && child.exitCode == null && child.signalCode == null) {
-        child.kill("SIGKILL");
-        await new Promise((resolve) => child.once("exit", resolve));
+      if (!hasExited(target)) {
+        killProcessTree(target, "SIGKILL");
+        await Promise.race([
+          new Promise((resolve) => target.once("exit", resolve)),
+          sleep(stopKillWaitMs),
+        ]);
       }
+      // Bound wait: never hang forever even if the OS retains a zombie briefly.
     },
   };
 

@@ -129,7 +129,7 @@ test("manual edits during an active session are recorded as interventions", asyn
     }
     assert.ok(sessionId);
     await writeFile(path.join(root, "app.py"), "def app():\n    return 99\n");
-    await recordBuildIntervention(root, { path: "app.py", reason: "manual_edit" });
+    await recordBuildIntervention(root, { path: "app.py", reason: "manual_edit", source: "human" });
     await runBuildStop({ repo: root, json: true });
     const result = await runPromise;
     assert.ok((result.session.interventions ?? []).some((item) => item.path === "app.py"));
@@ -208,6 +208,173 @@ test("registered fake adapter works through the same session API", async () => {
 
     const result = await runBuildRun({ repo: root, adapter: "inline-fake", json: true, cache: false });
     assert.equal(result.session.gate.state, GATE_STATES.READY);
+  } finally {
+    clearAdapters();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("early stop before spawn cancels the run and never starts the hang child", async () => {
+  clearAdapters();
+  const root = await mkdtemp(path.join(tmpdir(), "varai-builder-early-stop-"));
+  try {
+    await writeFile(path.join(root, "app.py"), "def app():\n    return 1\n");
+    execFileSync("git", ["init", "-q", root]);
+    execFileSync("git", ["-C", root, "config", "user.email", "test@example.com"]);
+    execFileSync("git", ["-C", root, "config", "user.name", "Test"]);
+    execFileSync("git", ["-C", root, "add", "."]);
+    execFileSync("git", ["-C", root, "commit", "-qm", "base"]);
+    ratifySeed(root, slotkeeperDraft(), { ratifiedAt: "2026-07-28T00:00:00.000Z" });
+
+    let startEntered = false;
+    registerAdapter({
+      id: "gateable",
+      async start() {
+        startEntered = true;
+        await new Promise((r) => setTimeout(r, 5000));
+        return { exitCode: 0, signal: null, shell: false };
+      },
+      async send() {},
+      async stop() {},
+    });
+
+    const runPromise = runBuildRun({ repo: root, adapter: "gateable", json: true, cache: false, quiet: true });
+    // Poll tightly once the cancelable live handle exists; stop as soon as the
+    // session is active so spawn is skipped.
+    for (let i = 0; i < 200; i++) {
+      const { getLiveBuilderRun } = await import("../../src/builder/runtime.js");
+      if (getLiveBuilderRun(root) && await createBuildSessionStore(root).getActive()) break;
+      await new Promise((r) => setImmediate(r));
+    }
+    assert.ok(await createBuildSessionStore(root).getActive(), "session must become active/stoppable");
+    const stopped = await runBuildStop({ repo: root, json: true, quiet: true });
+    assert.equal(stopped.cancelRequested || stopped.stopped, true);
+    const result = await runPromise;
+    assert.equal(startEntered, false, "adapter.start must not run after early stop");
+    assert.ok(
+      result.canceled
+        || result.session?.lifecycleState === BUILD_STATES.BUILD_FAILED
+        || result.session?.builder?.canceled,
+      "early stop must cancel the run",
+    );
+  } finally {
+    clearAdapters();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("builder-written realization while live is not recorded as human intervention", async () => {
+  const root = await repoWithConfig(["--mode", "hang"]);
+  try {
+    const runPromise = runBuildRun({ repo: root, adapter: "fake", json: true, cache: false, quiet: true });
+    for (let i = 0; i < 50; i++) {
+      if (await createBuildSessionStore(root).getActive()) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    // Simulate watcher seeing realization write while builder is live.
+    await recordBuildIntervention(root, { path: "varai.realization.json", reason: "manual_edit" });
+    const mid = await createBuildSessionStore(root).getSession((await createBuildSessionStore(root).getActive()).id);
+    assert.ok(!(mid.interventions ?? []).some((item) => item.path === "varai.realization.json"),
+      "builder writes must not appear as human interventions");
+    await runBuildStop({ repo: root, json: true, quiet: true });
+    await runPromise;
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("explicit human intervention while live is still recorded", async () => {
+  const root = await repoWithConfig(["--mode", "hang"]);
+  try {
+    const runPromise = runBuildRun({ repo: root, adapter: "fake", json: true, cache: false, quiet: true });
+    for (let i = 0; i < 50; i++) {
+      if (await createBuildSessionStore(root).getActive()) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    await writeFile(path.join(root, "app.py"), "def app():\n    return 7\n");
+    await recordBuildIntervention(root, { path: "app.py", reason: "manual_edit", source: "human" });
+    await runBuildStop({ repo: root, json: true, quiet: true });
+    const result = await runPromise;
+    assert.ok((result.session.interventions ?? []).some((item) => item.path === "app.py" && item.source === "human"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("orphan recovery persists running:false so a new build run is not blocked", async () => {
+  const root = await repoWithConfig(["--mode", "success"]);
+  try {
+    const { runBuildBegin } = await import("../../src/build-session/commands.js");
+    const started = await runBuildBegin({ repo: root, json: true, quiet: true, cache: false });
+    const store = createBuildSessionStore(root);
+    const session = await store.getSession(started.session.id);
+    session.lifecycleState = BUILD_STATES.BUILDING;
+    session.builder = { adapterId: "fake", running: true, orphaned: false };
+    await store.putSession(session);
+
+    const status = await runBuildStatus({ repo: root, json: true, quiet: true });
+    assert.equal(status.active.builder.running, false);
+    assert.equal(status.active.builder.orphaned, true);
+
+    const healed = await store.getSession(session.id);
+    assert.equal(healed.builder.running, false, "disk state must be healed");
+    assert.equal(healed.builder.orphaned, true);
+
+    const result = await runBuildRun({ repo: root, adapter: "fake", json: true, cache: false, quiet: true });
+    assert.ok(result.session.completedAt);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("post-completion edit marks provenance unattested", async () => {
+  const root = await repoWithConfig(["--mode", "success"]);
+  try {
+    const result = await runBuildRun({ repo: root, adapter: "fake", json: true, cache: false, quiet: true });
+    assert.ok(result.session.completedAt);
+    await writeFile(path.join(root, "app.py"), "def app():\n    return 42\n");
+    await recordBuildIntervention(root, { path: "app.py", reason: "manual_edit" });
+    const status = await runBuildStatus({ repo: root, json: true, quiet: true });
+    assert.equal(status.provenanceHint?.state, "unattested");
+    assert.equal(status.provenanceHint?.sessionId, result.session.id);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("audit events are drained before verification completes", async () => {
+  clearAdapters();
+  const root = await mkdtemp(path.join(tmpdir(), "varai-builder-drain-"));
+  try {
+    await writeFile(path.join(root, "app.py"), "def app():\n    return 1\n");
+    execFileSync("git", ["init", "-q", root]);
+    execFileSync("git", ["-C", root, "config", "user.email", "test@example.com"]);
+    execFileSync("git", ["-C", root, "config", "user.name", "Test"]);
+    execFileSync("git", ["-C", root, "add", "."]);
+    execFileSync("git", ["-C", root, "commit", "-qm", "base"]);
+    ratifySeed(root, slotkeeperDraft(), { ratifiedAt: "2026-07-28T00:00:00.000Z" });
+
+    registerAdapter({
+      id: "chatty",
+      async start({ cwd, onEvent }) {
+        const seed = readSeed(cwd);
+        for (let i = 0; i < 20; i++) {
+          onEvent?.({ type: "output", stream: "stdout", text: `line-${i}\n`, truncated: false, at: new Date().toISOString() });
+        }
+        await writeFile(
+          path.join(cwd, "varai.realization.json"),
+          JSON.stringify({ formatVersion: 1, seedHash: seed.contentHash, bindings: [], witnesses: [] }),
+        );
+        return { exitCode: 0, signal: null, shell: false };
+      },
+      async send() {},
+      async stop() {},
+    });
+
+    const result = await runBuildRun({ repo: root, adapter: "chatty", json: true, cache: false, quiet: true });
+    const events = await createBuilderStore(root).listEvents(result.session.id);
+    const lines = events.filter((e) => e.stream === "stdout" && String(e.text).includes("line-"));
+    assert.ok(lines.length >= 20, "all stdout events must be persisted before verify finishes");
   } finally {
     clearAdapters();
     await rm(root, { recursive: true, force: true });

@@ -22,7 +22,7 @@ function send(res, status, data) {
 
 function rejectExecutablePayload(body) {
   if (!body || typeof body !== "object") return;
-  for (const key of ["executable", "command", "cmd", "shell", "argv0"]) {
+  for (const key of ["executable", "command", "cmd", "shell", "argv0", "envAllowlist"]) {
     if (body[key] !== undefined) {
       const err = new Error("Browser requests may not supply a builder executable");
       err.statusCode = 400;

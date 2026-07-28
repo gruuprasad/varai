@@ -213,19 +213,30 @@ export async function runBuildStatus(options = {}) {
   const store = createBuildSessionStore(repoPath);
   const active = await store.getActive();
   const sessions = await store.listSessions();
-  const activeSession = active ? await store.getSession(active.id) : null;
+  let activeSession = active ? await store.getSession(active.id) : null;
   let activeSummary = activeSession ? statusSummary(activeSession) : null;
   if (activeSummary?.builder) {
     const { getLiveBuilderRun } = await import("../builder/runtime.js");
     const live = getLiveBuilderRun(repoPath);
     if (!live) {
+      const healedBuilder = {
+        ...activeSummary.builder,
+        running: false,
+        orphaned: activeSummary.builder.orphaned || Boolean(activeSummary.builder.running),
+      };
+      // Persist heal so a subsequent build run is not blocked by stale running:true.
+      if (activeSession.builder?.running || !activeSession.builder?.orphaned) {
+        activeSession = await setBuildLifecycle(repoPath, activeSession.id, {
+          builder: {
+            ...(activeSession.builder ?? {}),
+            ...healedBuilder,
+            note: activeSession.builder?.note ?? "process not attached after restart",
+          },
+        });
+      }
       activeSummary = {
-        ...activeSummary,
-        builder: {
-          ...activeSummary.builder,
-          running: false,
-          orphaned: activeSummary.builder.orphaned || Boolean(activeSummary.builder.running),
-        },
+        ...statusSummary(activeSession),
+        builder: healedBuilder,
       };
     }
   }
@@ -234,7 +245,7 @@ export async function runBuildStatus(options = {}) {
     ?? (latestCompleted?.unattested ? { state: "unattested", sessionId: latestCompleted.id } : null);
   const result = {
     active: activeSummary,
-    sessions: sessions.map(statusSummary),
+    sessions: (await store.listSessions()).map(statusSummary),
     provenanceHint,
   };
   writeOutput(options, result, formatStatusText(result));

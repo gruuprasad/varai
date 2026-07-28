@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // Deterministic fake builder subprocess for Gate 6 tests. Never calls a provider.
 
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
+import { fileURLToPath } from "node:url";
+import { setTimeout as sleep } from "node:timers/promises";
 
 function argValue(name) {
   const idx = process.argv.indexOf(name);
@@ -13,6 +16,7 @@ function argValue(name) {
 const mode = argValue("--mode") ?? "success";
 const packetPath = argValue("--packet") ?? process.argv.at(-1);
 const cwd = process.cwd();
+const self = fileURLToPath(import.meta.url);
 
 function writeRealization() {
   let seedHash = "sha256:fake";
@@ -28,35 +32,66 @@ function writeRealization() {
   );
 }
 
-if (mode === "echo-env") {
-  process.stdout.write(`${JSON.stringify(Object.keys(process.env).sort())}\n`);
-  process.exit(0);
-}
+async function main() {
+  if (mode === "echo-env") {
+    process.stdout.write(`${JSON.stringify(Object.keys(process.env).sort())}\n`);
+    process.exit(0);
+  }
 
-if (mode === "hang") {
-  setInterval(() => {}, 60_000);
-  // keep alive; stop via signal
-} else if (mode === "fail") {
-  process.stderr.write("fake builder failed on purpose\n");
-  process.exit(2);
-} else if (mode === "noisy") {
-  const chunk = "x".repeat(8 * 1024);
-  for (let i = 0; i < 40; i++) process.stdout.write(`${chunk}\n`);
-  writeRealization();
-  process.exit(0);
-} else if (mode === "gate-hack") {
-  writeRealization();
-  process.stdout.write(`${JSON.stringify({ gate: { state: "ready" }, verdict: "holds" })}\n`);
-  process.exit(0);
-} else if (mode === "interactive") {
-  writeRealization();
-  const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
-  rl.on("line", (line) => {
-    process.stdout.write(`ack:${line}\n`);
-  });
-  // exit when stdin closes
-  rl.on("close", () => process.exit(0));
-} else {
+  if (mode === "slow-hang") {
+    // Delay before hanging so early stop can cancel before long-lived work.
+    await sleep(400);
+    setInterval(() => {}, 60_000);
+    return;
+  }
+
+  if (mode === "spawn-tree") {
+    const marker = path.join(cwd, "grandchild.pid");
+    // Stay in the parent's process group so adapter stop can kill the tree.
+    const child = spawn(process.execPath, [self, "--mode", "hang"], {
+      cwd,
+      detached: false,
+      stdio: "ignore",
+      shell: false,
+    });
+    fs.writeFileSync(marker, String(child.pid));
+    setInterval(() => {}, 60_000);
+    return;
+  }
+
+  if (mode === "hang") {
+    setInterval(() => {}, 60_000);
+    return;
+  }
+
+  if (mode === "fail") {
+    process.stderr.write("fake builder failed on purpose\n");
+    process.exit(2);
+  }
+
+  if (mode === "noisy") {
+    const chunk = "x".repeat(8 * 1024);
+    for (let i = 0; i < 40; i++) process.stdout.write(`${chunk}\n`);
+    writeRealization();
+    process.exit(0);
+  }
+
+  if (mode === "gate-hack") {
+    writeRealization();
+    process.stdout.write(`${JSON.stringify({ gate: { state: "ready" }, verdict: "holds" })}\n`);
+    process.exit(0);
+  }
+
+  if (mode === "interactive") {
+    writeRealization();
+    const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+    rl.on("line", (line) => {
+      process.stdout.write(`ack:${line}\n`);
+    });
+    rl.on("close", () => process.exit(0));
+    return;
+  }
+
   // success
   if (packetPath && fs.existsSync(packetPath)) {
     process.stdout.write(`packet:${path.basename(packetPath)}\n`);
@@ -64,3 +99,5 @@ if (mode === "hang") {
   writeRealization();
   process.exit(0);
 }
+
+await main();

@@ -26,11 +26,17 @@ function validateBuilders(builders) {
         (!Array.isArray(entry.args) || entry.args.some((item) => typeof item !== "string"))) {
       throw new ConfigError(`builders.${id}.args`, "expected an array of strings");
     }
-    const unknown = Object.keys(entry).filter((key) => !["executable", "args"].includes(key));
+    if (entry.envAllowlist !== undefined) {
+      if (!Array.isArray(entry.envAllowlist) || entry.envAllowlist.some((item) => typeof item !== "string" || !item)) {
+        throw new ConfigError(`builders.${id}.envAllowlist`, "expected an array of non-empty strings (env names only)");
+      }
+    }
+    const unknown = Object.keys(entry).filter((key) => !["executable", "args", "envAllowlist"].includes(key));
     if (unknown.length) throw new ConfigError(`builders.${id}.${unknown[0]}`, "unknown field");
     out[id] = {
       executable: entry.executable,
       ...(entry.args ? { args: [...entry.args] } : { args: [] }),
+      ...(entry.envAllowlist ? { envAllowlist: [...entry.envAllowlist] } : {}),
     };
   }
   return out;

@@ -50,3 +50,28 @@ test("rejects builder entries without executable", async () => {
   }));
   await assert.rejects(() => loadRepoConfig(dir), /builders\.fake\.executable/);
 });
+
+test("loads optional builder envAllowlist as names only", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-cfg-"));
+  await writeFile(join(dir, "varai.config.json"), JSON.stringify({
+    builders: {
+      fake: {
+        executable: "/usr/bin/node",
+        args: ["fake.js"],
+        envAllowlist: ["MY_BUILDER_TOKEN", "OTHER_OK"],
+      },
+    },
+  }));
+  const cfg = await loadRepoConfig(dir);
+  assert.deepEqual(cfg.builders.fake.envAllowlist, ["MY_BUILDER_TOKEN", "OTHER_OK"]);
+});
+
+test("rejects non-string envAllowlist entries", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-cfg-"));
+  await writeFile(join(dir, "varai.config.json"), JSON.stringify({
+    builders: {
+      fake: { executable: "/usr/bin/node", envAllowlist: [1] },
+    },
+  }));
+  await assert.rejects(() => loadRepoConfig(dir), /envAllowlist/);
+});
