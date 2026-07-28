@@ -3,6 +3,7 @@
 // no LLM manufactures prose.
 
 import { verdictLabel, bindingStateLabel, reasonLabel } from "../reporters/display-language.js";
+import { renderSurfacesSection } from "./surface-report.js";
 
 function formatTarget(target) {
   if (target?.concept !== undefined) return target.concept;
@@ -61,6 +62,11 @@ export function renderCheckText(report, { model } = {}) {
     lines.push(`note (not checked)  ${entry.id}: ${entry.text}`);
   }
   if (report.context?.length) lines.push("");
+
+  if (report.surfaces) {
+    lines.push(renderSurfacesSection(report.surfaces, { model }).trimEnd());
+    lines.push("");
+  }
 
   const { summary } = report;
   lines.push([

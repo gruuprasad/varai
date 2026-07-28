@@ -10,7 +10,7 @@ import {
 } from "./intent-view.js";
 import { renderReport } from "./report-view.js";
 import {
-  countSpecMatches, renderSpecDoc, renderSpecEvidence, renderSpecHeader, renderSpecNotes, requirementVisible,
+  countSpecMatches, renderSpecDoc, renderSpecEvidence, renderSpecHeader, renderSpecNotes, renderSpecSurfaces, requirementVisible,
 } from "./spec-view.js";
 import { renderViewSplit } from "./view-split.js";
 
@@ -423,6 +423,7 @@ function renderIntent() {
   const documentHtml =
     renderSpecHeader(seedData, reconciliationData?.report?.summary) +
     renderSpecDoc(seed, review, { query, expandedId }) +
+    renderSpecSurfaces(seed, review) +
     renderSpecNotes(seed.context) +
     composerMarkup(assistant);
 

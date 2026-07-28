@@ -134,10 +134,38 @@ export function buildReviewProjection({ report, model, seed }) {
     realization: report.realization,
     summary: report.summary,
     context: report.context ?? [],
+    surfaces: projectSurfaces(report.surfaces, elementById, seed),
     groups,
     coverageLimitations: cards
       .filter((card) => card.verdict === "cannot_verify")
       .map((card) => ({ id: card.id, reasons: card.reasons, coverage: card.coverage })),
+  };
+}
+
+function projectSurfaces(surfaces, elementById, seed) {
+  if (!surfaces) return null;
+  const surfaceName = new Map((seed?.surfaces ?? []).map((surface) => [surface.id, surface.name]));
+  const decorate = (item) => {
+    const element = item.elementId ? elementById.get(item.elementId) : null;
+    return {
+      ...item,
+      surfaceName: item.surfaceId ? surfaceName.get(item.surfaceId) ?? item.surfaceId : null,
+      elementName: element?.name ?? item.name ?? item.key ?? null,
+      elementKind: element?.kind ?? item.kind ?? null,
+    };
+  };
+  return {
+    state: surfaces.state,
+    reason: surfaces.reason ?? null,
+    expected: (surfaces.expected ?? []).map((item) => ({
+      ...item,
+      name: item.name ?? surfaceName.get(item.id) ?? item.id,
+    })),
+    accounted: (surfaces.accounted ?? []).map(decorate),
+    missing: (surfaces.missing ?? []).map(decorate),
+    unaccounted: (surfaces.unaccounted ?? []).map(decorate),
+    ambiguous: (surfaces.ambiguous ?? []).map(decorate),
+    stale: (surfaces.stale ?? []).map(decorate),
   };
 }
 

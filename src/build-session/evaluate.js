@@ -91,6 +91,15 @@ export function compareRequirementVerdicts(startReport, completionReport) {
   return regressions;
 }
 
+function surfaceProblemCounts(surfaces) {
+  return {
+    missing: surfaces?.missing?.length ?? 0,
+    unaccounted: surfaces?.unaccounted?.length ?? 0,
+    ambiguous: surfaces?.ambiguous?.length ?? 0,
+    stale: surfaces?.stale?.length ?? 0,
+  };
+}
+
 export function evaluateBuildGate({
   startModel,
   completionModel,
@@ -108,6 +117,7 @@ export function evaluateBuildGate({
       transition: item.transition,
     }));
   const requirementRegressions = compareRequirementVerdicts(startReport, completionReport);
+  const surfaceProblems = surfaceProblemCounts(completionReport?.surfaces);
   const reasons = [];
 
   for (const item of coverageRegressions) {
@@ -119,12 +129,31 @@ export function evaluateBuildGate({
   for (const item of requirementRegressions) {
     reasons.push(`requirement-regression:${item.kind}:${item.id}`);
   }
+  for (const item of completionReport?.surfaces?.missing ?? []) {
+    reasons.push(`missing-surface:${item.surfaceId}`);
+  }
+  for (const item of completionReport?.surfaces?.unaccounted ?? []) {
+    reasons.push(`unaccounted-surface:${item.key ?? item.elementId}`);
+  }
+  for (const item of completionReport?.surfaces?.ambiguous ?? []) {
+    reasons.push(`ambiguous-surface:${item.surfaceId ?? item.bindingId}`);
+  }
+  for (const item of completionReport?.surfaces?.stale ?? []) {
+    reasons.push(`stale-surface:${item.surfaceId}`);
+  }
 
-  const blocksReady = coverageRegressions.length > 0 || requirementRegressions.length > 0;
+  const surfaceBlocks = surfaceProblems.missing > 0
+    || surfaceProblems.unaccounted > 0
+    || surfaceProblems.ambiguous > 0
+    || surfaceProblems.stale > 0;
+  const blocksReady = coverageRegressions.length > 0
+    || requirementRegressions.length > 0
+    || surfaceBlocks;
   return {
     state: blocksReady ? GATE_STATES.NEEDS_ATTENTION : GATE_STATES.READY,
     reasons,
     coverageRegressions,
     requirementRegressions,
+    surfaceProblems,
   };
 }

@@ -43,7 +43,52 @@ export function headlineSentence(review) {
   if (violated) parts.push(`${violated} ${violated === 1 ? "is" : "are"} missing.`);
   if (cannotVerify) parts.push(`${cannotVerify} couldn't be checked.`);
   if (notCheckable) parts.push(`${notCheckable} ${notCheckable === 1 ? "is" : "are"} noted but not the kind of rule varai can check.`);
+  const surfaces = review.surfaces;
+  if (surfaces?.state === "closed") {
+    const missing = surfaces.missing?.length ?? 0;
+    const unaccounted = surfaces.unaccounted?.length ?? 0;
+    const ambiguous = surfaces.ambiguous?.length ?? 0;
+    if (missing || unaccounted || ambiguous) {
+      const bits = [];
+      if (missing) bits.push(`${missing} expected surface${missing === 1 ? "" : "s"} missing`);
+      if (unaccounted) bits.push(`${unaccounted} unaccounted`);
+      if (ambiguous) bits.push(`${ambiguous} ambiguous`);
+      parts.push(`Public surfaces: ${bits.join(", ")}.`);
+    }
+  }
   return parts.join(" ");
+}
+
+function renderSurfacesAccounting(surfaces) {
+  if (!surfaces || surfaces.state === "cannot_account") {
+    return surfaces?.state === "cannot_account"
+      ? `<details class="report-surfaces"><summary>Public surfaces — not claimed for this spec</summary>` +
+        `<p class="empty-copy">This spec has no closed surface set, so completeness is not claimed.</p></details>`
+      : "";
+  }
+  const rows = [];
+  for (const item of surfaces.missing ?? []) {
+    rows.push(`<li class="surface-missing"><strong>missing</strong> ${esc(item.surfaceName ?? item.surfaceId)}</li>`);
+  }
+  for (const item of surfaces.unaccounted ?? []) {
+    rows.push(`<li class="surface-unaccounted"><strong>unaccounted</strong> ${esc(item.elementName ?? item.key ?? item.elementId)}</li>`);
+  }
+  for (const item of surfaces.ambiguous ?? []) {
+    rows.push(`<li class="surface-ambiguous"><strong>ambiguous</strong> ${esc(item.surfaceName ?? item.surfaceId ?? item.bindingId)}</li>`);
+  }
+  for (const item of surfaces.stale ?? []) {
+    rows.push(`<li class="surface-stale"><strong>stale</strong> ${esc(item.surfaceName ?? item.surfaceId)}</li>`);
+  }
+  if (!rows.length && !(surfaces.expected?.length)) {
+    return `<details class="report-surfaces"><summary>Public surfaces — none expected</summary>` +
+      `<p class="empty-copy">No expected surfaces; no public entry points observed.</p></details>`;
+  }
+  if (!rows.length) {
+    return `<details class="report-surfaces"><summary>Public surfaces — ${surfaces.accounted?.length ?? 0} accounted</summary>` +
+      `<p class="empty-copy">Every expected surface maps to one public entry point.</p></details>`;
+  }
+  return `<details class="report-surfaces" open><summary>Public surfaces — attention needed</summary>` +
+    `<ul>${rows.join("")}</ul></details>`;
 }
 
 function evidenceByFile(steps) {
@@ -119,7 +164,9 @@ export function renderReport(review, { expandedId } = {}) {
     `<p class="headline">${headlineSentence(review)}</p></section>`;
 
   const buckets = bucketCards(review);
-  if (!buckets.length) return html + `<p class="empty-copy">No requirements match this search.</p>`;
+  if (!buckets.length) {
+    return html + renderSurfacesAccounting(review.surfaces) + `<p class="empty-copy">No requirements match this search.</p>`;
+  }
 
   for (const bucket of buckets) {
     html += `<section class="req-bucket bucket-${esc(bucket.verdict)}">` +
@@ -128,6 +175,8 @@ export function renderReport(review, { expandedId } = {}) {
       bucket.cards.map((card) => renderRow(card, card.id === expandedId)).join("") +
       `</section>`;
   }
+
+  html += renderSurfacesAccounting(review.surfaces);
 
   if (review.context?.length) {
     html += `<details class="report-notes"><summary>Notes from your spec (${review.context.length})</summary>` +

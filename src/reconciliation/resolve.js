@@ -91,3 +91,67 @@ export function resolveBindings(model, realization, currentSeedHash) {
   }
   return result;
 }
+
+// resolveSurfaceBindings mirrors resolveBindings for realization surfaceBindings.
+// Concept bindings never participate; surface approval is a separate pointer.
+// Returns a Map from surface-binding id to
+//   { id, surface, state, reason, elementIds }
+export function resolveSurfaceBindings(model, realization, currentSeedHash) {
+  const lensOf = lensBySubsystemId(model);
+  const hashMatches = realization.seedHash === currentSeedHash;
+  const result = new Map();
+  const bindings = [...(realization.surfaceBindings ?? [])].sort(byId);
+  for (const binding of bindings) {
+    if (!hashMatches) {
+      result.set(binding.id, {
+        id: binding.id, surface: binding.surface,
+        state: "stale", reason: "seed-hash-mismatch", elementIds: [],
+      });
+      continue;
+    }
+    const artifact = binding.artifact ?? {};
+    const elementIds = (model.elements ?? [])
+      .filter((element) => matchesSelector(element, artifact, lensOf))
+      .map((element) => element.id)
+      .sort();
+    if (elementIds.length === 0) {
+      result.set(binding.id, {
+        id: binding.id, surface: binding.surface,
+        state: "stale", reason: "artifact-not-found", elementIds,
+      });
+    } else if (elementIds.length === 1) {
+      result.set(binding.id, {
+        id: binding.id, surface: binding.surface,
+        state: "resolved", reason: null, elementIds,
+      });
+    } else {
+      result.set(binding.id, {
+        id: binding.id, surface: binding.surface,
+        state: "ambiguous", reason: "selector-ambiguous", elementIds,
+      });
+    }
+  }
+
+  // Two distinct surfaces resolving to the same Element make that Element's
+  // surface identity ambiguous — neither can be trusted as the sole claim.
+  const surfacesByElement = new Map();
+  for (const record of result.values()) {
+    if (record.state !== "resolved") continue;
+    for (const elementId of record.elementIds) {
+      const surfaces = surfacesByElement.get(elementId) ?? new Set();
+      surfaces.add(record.surface);
+      surfacesByElement.set(elementId, surfaces);
+    }
+  }
+  const collided = new Set(
+    [...surfacesByElement].filter(([, surfaces]) => surfaces.size > 1).map(([elementId]) => elementId));
+  if (collided.size) {
+    for (const record of result.values()) {
+      if (record.state === "resolved" && record.elementIds.some((id) => collided.has(id))) {
+        record.state = "ambiguous";
+        record.reason = "surface-collision";
+      }
+    }
+  }
+  return result;
+}

@@ -135,14 +135,22 @@ export function renderSpecHeader(seedData, summary) {
 
   const counts = `${seed.commitments.length} ${seed.commitments.length === 1 ? "requirement" : "requirements"} ` +
     `about ${seed.concepts.length} ${seed.concepts.length === 1 ? "thing" : "things"}.`;
+  const surfaceCount = Array.isArray(seed.surfaces) ? seed.surfaces.length : null;
+  const surfaceBit = surfaceCount == null
+    ? ""
+    : ` ${surfaceCount} ${surfaceCount === 1 ? "surface" : "surfaces"}.`;
   const tally = summary
-    ? `<p class="spec-tally">${counts} ` +
+    ? `<p class="spec-tally">${counts}${surfaceBit} ` +
       `<span class="verdict-holds">${summary.holds} confirmed</span> · ` +
       `<span class="verdict-violated">${summary.violated} missing</span> · ` +
       `<span class="verdict-cannot_verify">${summary.cannotVerify} couldn't tell</span> · ` +
       `<span class="verdict-not_checkable">${summary.notCheckable} noted</span>` +
+      (summary.surfaces && summary.surfaces.state === "closed"
+        ? ` · <span class="surface-tally">${summary.surfaces.unaccounted} unaccounted` +
+          `${summary.surfaces.missing ? `, ${summary.surfaces.missing} surfaces missing` : ""}</span>`
+        : "") +
       `<button class="spec-goto-report" data-goto-report type="button">See the report →</button></p>`
-    : `<p class="spec-tally">${counts}</p>`;
+    : `<p class="spec-tally">${counts}${surfaceBit}</p>`;
 
   return `<header class="spec-head">` +
     `<h2>${esc(seed.system?.name ?? "Untitled system")}` +
@@ -164,6 +172,31 @@ export function renderSpecNotes(context) {
   if (!context?.length) return "";
   return `<section class="spec-notes"><h3>Notes — recorded, not checked</h3><ul>` +
     context.map((entry) => `<li>${esc(entry.text)}</li>`).join("") + `</ul></section>`;
+}
+
+export function renderSpecSurfaces(seed, review) {
+  if (!Array.isArray(seed?.surfaces)) return "";
+  const surfaces = review?.surfaces;
+  const byId = new Map((surfaces?.missing ?? []).map((item) => [item.surfaceId, "missing"]));
+  for (const item of surfaces?.ambiguous ?? []) byId.set(item.surfaceId, "ambiguous");
+  for (const item of surfaces?.stale ?? []) byId.set(item.surfaceId, "stale");
+  for (const item of surfaces?.accounted ?? []) byId.set(item.surfaceId, "accounted");
+  const unaccounted = surfaces?.unaccounted?.length ?? 0;
+  const rows = [...seed.surfaces]
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map((surface) => {
+      const state = byId.get(surface.id) ?? (surfaces?.state === "closed" ? "missing" : "unchecked");
+      return `<li><strong>${esc(surface.name)}</strong> ` +
+        `<span class="role-chip">${esc(surface.channel)}</span> ` +
+        `<span class="role-chip">${esc(surface.access)}</span> ` +
+        `<span class="surface-state surface-${esc(state)}">${esc(state)}</span></li>`;
+    });
+  const extra = unaccounted
+    ? `<p class="spec-refs">${unaccounted} observed public ${unaccounted === 1 ? "entry point is" : "entry points are"} unaccounted — see the report.</p>`
+    : "";
+  return `<section class="spec-surfaces"><h3>Expected surfaces</h3>` +
+    (rows.length ? `<ul>${rows.join("")}</ul>` : `<p class="spec-refs">None declared — any public entry point is unaccounted.</p>`) +
+    extra + `</section>`;
 }
 
 export function renderSpecEvidence(review, expandedId) {

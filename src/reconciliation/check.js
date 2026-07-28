@@ -1,6 +1,7 @@
 import { seedContentHash } from "../seed/identity.js";
 import { literalMatches, partitionClaims, relationContract } from "./relations.js";
-import { resolveBindings } from "./resolve.js";
+import { resolveBindings, resolveSurfaceBindings } from "./resolve.js";
+import { accountSurfaces, surfacesSummary } from "./surface.js";
 
 // Reconciliation is a pure, deterministic projection over
 //   ratified seed + realization witness + canonical System Model + coverage.
@@ -172,6 +173,9 @@ export function reconcile({ model, seed, realization = null, provenance = null }
   const resolution = realization
     ? resolveBindings(model, realization, currentSeedHash)
     : new Map();
+  const surfaceResolution = realization
+    ? resolveSurfaceBindings(model, realization, currentSeedHash)
+    : new Map();
 
   const context = {
     bindingsByConcept: new Map(),
@@ -194,6 +198,13 @@ export function reconcile({ model, seed, realization = null, provenance = null }
   const count = (verdict) => commitments.filter((item) => item.verdict === verdict).length;
   const bindingCount = (state) => commitments.filter((item) => item.bindingState === state).length;
 
+  const surfaces = accountSurfaces({
+    model,
+    seed,
+    realization,
+    surfaceResolution,
+  });
+
   return {
     formatVersion: 1,
     system: model.system ? { id: model.system.id, key: model.system.key, name: model.system.name } : null,
@@ -209,6 +220,7 @@ export function reconcile({ model, seed, realization = null, provenance = null }
       : { present: false, seedHash: null, stale: false, builder: null },
     provenance: provenance ?? { state: "unattested", sessionId: null },
     commitments,
+    surfaces,
     context: [...(seed.context ?? [])].sort(byId).map((entry) => ({ id: entry.id, text: entry.text })),
     summary: {
       total: commitments.length,
@@ -222,6 +234,7 @@ export function reconcile({ model, seed, realization = null, provenance = null }
         ambiguous: bindingCount("ambiguous"),
         stale: bindingCount("stale"),
       },
+      surfaces: surfacesSummary(surfaces),
     },
   };
 }
