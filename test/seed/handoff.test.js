@@ -92,3 +92,10 @@ test("handoff lists performs as recorded intent, not a checkable relation", () =
   assert.ok(packet.includes("recorded as intent") && packet.includes("performs"),
     "packet names performs as recorded-only intent");
 });
+
+test("handoff documents realization v2 surfaceBindings", () => {
+  const packet = renderBuildPacket({ seed: ratifiedSeed() });
+  assert.ok(packet.includes('"formatVersion": 2'), "builder map uses realization format 2");
+  assert.ok(packet.includes("surfaceBindings"), "builder map documents surfaceBindings");
+  assert.ok(packet.includes("surface-binding."), "surface binding id pattern is shown");
+});

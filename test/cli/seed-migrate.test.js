@@ -10,12 +10,18 @@ function cli(...args) {
   return execFileSync(process.execPath, ["./bin/varai.js", ...args], { encoding: "utf8" });
 }
 
-test("seed migrate prints a v2 draft without writing unless requested", () => {
+test("seed migrate prints a v3 draft without writing unless requested", () => {
   const repo = mkdtempSync(path.join(tmpdir(), "varai-seed-migrate-"));
   writeFileSync(path.join(repo, "varai.seed.json"), JSON.stringify(slotkeeperDraft()));
   const printed = JSON.parse(cli("seed", "migrate", repo));
-  assert.equal(printed.formatVersion, 2);
+  assert.equal(printed.formatVersion, 3);
+  assert.deepEqual(printed.surfaces, []);
+  assert.deepEqual(printed.scenarios, []);
+  assert.deepEqual(printed.ratification, { status: "draft" });
   assert.equal(JSON.parse(readFileSync(path.join(repo, "varai.seed.json"), "utf8")).formatVersion, 1);
   cli("seed", "migrate", repo, "--write");
-  assert.equal(JSON.parse(readFileSync(path.join(repo, "varai.seed.json"), "utf8")).formatVersion, 2);
+  const written = JSON.parse(readFileSync(path.join(repo, "varai.seed.json"), "utf8"));
+  assert.equal(written.formatVersion, 3);
+  assert.deepEqual(written.surfaces, []);
+  assert.deepEqual(written.scenarios, []);
 });

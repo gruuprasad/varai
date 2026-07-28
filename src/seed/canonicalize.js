@@ -13,6 +13,10 @@ export function canonicalizeSeed(seed) {
     system: seed.system,
     concepts: sortById(seed.concepts ?? []),
     commitments: sortById(seed.commitments ?? []),
+    ...(seed.formatVersion >= 3 ? {
+      surfaces: sortById(seed.surfaces ?? []),
+      scenarios: sortById(seed.scenarios ?? []),
+    } : {}),
     context: sortById(seed.context ?? []),
     ...(seed.ratification ? { ratification: seed.ratification } : {}),
   });

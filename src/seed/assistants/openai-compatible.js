@@ -1,5 +1,5 @@
 import { normalizeProposal } from "../assistant.js";
-import { CONCEPT_ROLES, RECORDED_ONLY_RELATIONS, SEED_RELATIONS } from "../schema.js";
+import { CONCEPT_ROLES, RECORDED_ONLY_RELATIONS, SEED_RELATIONS, SURFACE_ACCESS, SURFACE_CHANNELS } from "../schema.js";
 
 // One real SeedAssistant adapter: any OpenAI-compatible chat-completions
 // endpoint. Configured through explicit endpoint/model and an environment-
@@ -9,7 +9,7 @@ import { CONCEPT_ROLES, RECORDED_ONLY_RELATIONS, SEED_RELATIONS } from "../schem
 const SYSTEM_PROMPT = `You draft Varai seed proposals. A seed is human-ratified source intent for a software system.
 Reply with ONLY a JSON object of the form:
 {
-  "draft": { "formatVersion": 2, "system": {"id": ..., "name": ...}, "concepts": [...], "commitments": [...], "context": [...] } | null,
+  "draft": { "formatVersion": 3, "system": {"id": ..., "name": ...}, "concepts": [...], "commitments": [...], "surfaces": [...], "scenarios": [...], "context": [...] } | null,
   "questions": ["clarifying question for the human", ...],
   "unsupported": ["human statements you could not express in the vocabulary", ...]
 }
@@ -17,6 +17,8 @@ Rules:
 - Concept roles: ${CONCEPT_ROLES.join(", ")}. Concept ids look like "behavior.book-slot".
 - Checkable relations: ${SEED_RELATIONS.filter((relation) => !RECORDED_ONLY_RELATIONS.includes(relation)).join(", ")}. Commitment targets are {"concept": "<id>"} or {"literal": "<scalar>"}.
 - Commitment ids look like "commitment.booking-creates-booking". Every commitment has "expectation": "present" or "absent".
+- Surfaces (ids like "surface.withdraw-request-api") name one externally reachable way into the system: behavior concept, channel (${SURFACE_CHANNELS.join("|")}), access (${SURFACE_ACCESS.join("|")}). No HTTP paths, files, symbols, or framework names in surfaces.
+- Scenarios (ids like "scenario.owner-can-withdraw") are bounded ordered examples: principals bound to actor concepts, sequential steps that invoke behaviors, scalar/JSON input, capture, and expect.status / optional expect.body. Scenarios may be an empty array when the human has not authored examples yet.
 - Keep stable ids when renaming; never invent a relation outside the list.
 - Prefer a small set of meaningful commitments. Put anything uncheckable in "unsupported", never in commitments.`;
 

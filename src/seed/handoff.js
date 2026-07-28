@@ -1,18 +1,25 @@
 import { seedContentHash } from "./identity.js";
-import { RECORDED_ONLY_RELATIONS, SEED_RELATIONS } from "./schema.js";
+import { RECORDED_ONLY_RELATIONS, SEED_RELATIONS, SURFACE_ACCESS, SURFACE_CHANNELS } from "./schema.js";
 
 // Vendor-neutral build packet (ADR 0005): a plain Markdown document the user
 // pastes into any coding agent. It carries only ratified seed content — never
 // unratified drafts — and it is deterministic for a given seed.
 
 const WITNESS_EXAMPLE = `{
-  "formatVersion": 1,
+  "formatVersion": 2,
   "seedHash": "<the ratified seed hash above>",
   "bindings": [
     {
       "id": "binding.<name>",
       "concept": "<seed concept id>",
       "artifact": { "lens": "<api|ui|data|...>", "kind": "<element kind>", "key": "<stable public key>" }
+    }
+  ],
+  "surfaceBindings": [
+    {
+      "id": "surface-binding.<name>",
+      "surface": "<seed surface id>",
+      "artifact": { "lens": "<api|ui|...>", "kind": "<element kind>", "key": "<stable public key>" }
     }
   ],
   "witnesses": [
@@ -63,6 +70,17 @@ export function renderBuildPacket({ seed, brief } = {}) {
     lines.push(`- \`${concept.id}\` (${concept.role}): ${concept.name}${concept.summary ? ` — ${concept.summary}` : ""}`);
   }
   lines.push("");
+  if (Array.isArray(seed.surfaces) && seed.surfaces.length) {
+    lines.push("## Expected surfaces");
+    lines.push("");
+    lines.push(`Channels: ${SURFACE_CHANNELS.join(", ")}. Access: ${SURFACE_ACCESS.join(", ")}.`);
+    lines.push("Surfaces name no HTTP path, file, symbol, or framework — bind those in surfaceBindings.");
+    lines.push("");
+    for (const surface of [...seed.surfaces].sort((a, b) => a.id.localeCompare(b.id))) {
+      lines.push(`- \`${surface.id}\`: ${surface.name} — \`${surface.behavior}\` via ${surface.channel} (${surface.access})`);
+    }
+    lines.push("");
+  }
   lines.push("## Requirements");
   lines.push("");
   for (const commitment of [...seed.commitments].sort((a, b) => a.id.localeCompare(b.id))) {
@@ -86,7 +104,9 @@ export function renderBuildPacket({ seed, brief } = {}) {
   lines.push("   to the artifact you created for it. Link by stable public boundaries (route keys,");
   lines.push("   contract/model names); use source file + symbol only as a fallback. Source lines");
   lines.push("   alone are not accepted as identity.");
-  lines.push("3. Optional per-requirement source hints only when one thing maps to several artifacts.");
+  lines.push("3. For each expected surface, a `surfaceBindings` entry pointing at the exact public artifact");
+  lines.push("   that realizes it. Concept bindings and surface bindings are separate; neither is a verdict.");
+  lines.push("4. Optional per-requirement source hints only when one thing maps to several artifacts.");
   lines.push("");
   lines.push("## Builder's map (varai.realization.json)");
   lines.push("");
