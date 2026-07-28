@@ -271,13 +271,41 @@ test("builder-written realization while live is not recorded as human interventi
       if (await createBuildSessionStore(root).getActive()) break;
       await new Promise((r) => setTimeout(r, 50));
     }
-    // Simulate watcher seeing realization write while builder is live.
-    await recordBuildIntervention(root, { path: "varai.realization.json", reason: "manual_edit" });
+    // Known builder-owned artifact (or explicit source) — not a human intervention.
+    await recordBuildIntervention(root, {
+      path: "varai.realization.json",
+      reason: "manual_edit",
+      source: "builder",
+    });
     const mid = await createBuildSessionStore(root).getSession((await createBuildSessionStore(root).getActive()).id);
     assert.ok(!(mid.interventions ?? []).some((item) => item.path === "varai.realization.json"),
       "builder writes must not appear as human interventions");
     await runBuildStop({ repo: root, json: true, quiet: true });
     await runPromise;
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("watcher-style edit during live build is recorded as human intervention", async () => {
+  const root = await repoWithConfig(["--mode", "hang"]);
+  try {
+    const runPromise = runBuildRun({ repo: root, adapter: "fake", json: true, cache: false, quiet: true });
+    for (let i = 0; i < 50; i++) {
+      if (await createBuildSessionStore(root).getActive()) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    await writeFile(path.join(root, "app.py"), "def app():\n    return 3\n");
+    // Mirror src/server/index.js watcher: no source tag.
+    await recordBuildIntervention(root, { path: "app.py", reason: "manual_edit" });
+    const mid = await createBuildSessionStore(root).getSession((await createBuildSessionStore(root).getActive()).id);
+    assert.ok(
+      (mid.interventions ?? []).some((item) => item.path === "app.py" && item.source === "human"),
+      "unsigned watcher edits must be human interventions, not swallowed as builder writes",
+    );
+    await runBuildStop({ repo: root, json: true, quiet: true });
+    const result = await runPromise;
+    assert.ok((result.session.interventions ?? []).some((item) => item.path === "app.py" && item.source === "human"));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -47,6 +47,26 @@ function seedChanged(repoPath, session) {
   return !input?.ratified || input.contentHash !== session.seedHash;
 }
 
+/** Paths the managed builder is expected to write; not human interventions. */
+const BUILDER_OWNED_BASENAMES = new Set([
+  "varai.realization.json",
+  "varai.runtime.json",
+]);
+
+function isBuilderOwnedPath(relPath) {
+  if (typeof relPath !== "string" || !relPath) return false;
+  return BUILDER_OWNED_BASENAMES.has(path.basename(relPath));
+}
+
+function resolveInterventionSource(source, relPath, live) {
+  if (source === "builder") return "builder";
+  if (source === "human") return "human";
+  // Unsigned watcher/file edits default to human. Only known builder-owned
+  // artifacts are treated as builder activity without an explicit tag.
+  if (live && isBuilderOwnedPath(relPath)) return "builder";
+  return "human";
+}
+
 export async function recordBuildIntervention(repoPath, {
   path: relPath,
   reason = "manual_edit",
@@ -55,36 +75,18 @@ export async function recordBuildIntervention(repoPath, {
   const store = createBuildSessionStore(repoPath);
   const live = getLiveBuilderRun(repoPath);
   const active = await store.getActive();
-
-  // While a live builder is attached, watcher/file noise defaults to builder
-  // activity — not human intervention — unless the caller tags source: "human".
-  if (active && live && source !== "human") {
-    const session = await store.getSession(active.id);
-    if (!session.completedAt) {
-      const builderStore = createBuilderStore(repoPath);
-      await builderStore.appendEvent(session.id, {
-        type: "builder_write",
-        path: relPath,
-        reason,
-        source: "builder",
-        at: new Date().toISOString(),
-      });
-      return session;
-    }
-  }
-
-  const attributed = source === "human" || source === "builder" ? source : "human";
+  const attributed = resolveInterventionSource(source, relPath, live);
 
   if (active) {
     const session = await store.getSession(active.id);
     if (!session.completedAt) {
-      if (attributed !== "human") {
+      if (attributed === "builder") {
         const builderStore = createBuilderStore(repoPath);
         await builderStore.appendEvent(session.id, {
           type: "builder_write",
           path: relPath,
           reason,
-          source: attributed,
+          source: "builder",
           at: new Date().toISOString(),
         });
         return session;
