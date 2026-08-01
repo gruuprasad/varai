@@ -1,0 +1,112 @@
+{
+  "formatVersion": 2,
+  "seedHash": "sha256:02dbf0b0f02eec2a7e846991ed5af460ce30c9b46a43411bb0f53a48b1695a89",
+  "builder": {
+    "tool": "fixture",
+    "version": "1"
+  },
+  "bindings": [
+    {
+      "id": "binding.submit",
+      "concept": "behavior.submit-request",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "POST /api/purchase-requests"
+      }
+    },
+    {
+      "id": "binding.withdraw",
+      "concept": "behavior.withdraw-request",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "POST /api/purchase-requests/{request_id}/withdraw"
+      }
+    },
+    {
+      "id": "binding.approve",
+      "concept": "behavior.approve-request",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "POST /api/purchase-requests/{request_id}/approve"
+      }
+    },
+    {
+      "id": "binding.get",
+      "concept": "behavior.get-request",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "GET /api/purchase-requests/{request_id}"
+      }
+    },
+    {
+      "id": "binding.request-entity",
+      "concept": "resource.purchase-request",
+      "artifact": {
+        "lens": "data",
+        "kind": "aggregate",
+        "key": "PurchaseRequest"
+      }
+    },
+    {
+      "id": "binding.submission-details",
+      "concept": "resource.submission-details",
+      "artifact": {
+        "lens": "data",
+        "kind": "contract",
+        "key": "SubmitRequest"
+      }
+    }
+  ],
+  "surfaceBindings": [
+    {
+      "id": "surface-binding.submit",
+      "surface": "surface.submit-api",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "POST /api/purchase-requests"
+      }
+    },
+    {
+      "id": "surface-binding.withdraw",
+      "surface": "surface.withdraw-api",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "POST /api/purchase-requests/{request_id}/withdraw"
+      }
+    },
+    {
+      "id": "surface-binding.approve",
+      "surface": "surface.approve-api",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "POST /api/purchase-requests/{request_id}/approve"
+      }
+    },
+    {
+      "id": "surface-binding.get",
+      "surface": "surface.get-api",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "GET /api/purchase-requests/{request_id}"
+      }
+    },
+    {
+      "id": "surface-binding.cancel",
+      "surface": "surface.cancel-api",
+      "artifact": {
+        "lens": "api",
+        "kind": "operation",
+        "key": "POST /api/purchase-requests/{request_id}/cancel"
+      }
+    }
+  ],
+  "witnesses": []
+}

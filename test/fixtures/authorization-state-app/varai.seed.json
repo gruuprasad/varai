@@ -1,0 +1,244 @@
+{
+  "commitments": [
+    {
+      "expectation": "present",
+      "id": "commitment.approve-changes-state",
+      "relation": "changes",
+      "source": "behavior.approve-request",
+      "target": {
+        "literal": "approved"
+      }
+    },
+    {
+      "expectation": "present",
+      "id": "commitment.approve-emits-external",
+      "relation": "emits",
+      "source": "behavior.approve-request",
+      "target": {
+        "literal": "external-http:post"
+      }
+    },
+    {
+      "expectation": "present",
+      "id": "commitment.approve-requires-manager",
+      "relation": "requires",
+      "source": "behavior.approve-request",
+      "target": {
+        "literal": "manager"
+      }
+    },
+    {
+      "expectation": "present",
+      "id": "commitment.submit-creates-request",
+      "relation": "creates",
+      "source": "behavior.submit-request",
+      "target": {
+        "concept": "resource.purchase-request"
+      }
+    },
+    {
+      "expectation": "present",
+      "id": "commitment.submit-emits-outbox",
+      "relation": "emits",
+      "source": "behavior.submit-request",
+      "target": {
+        "literal": "outbox"
+      }
+    },
+    {
+      "expectation": "present",
+      "id": "commitment.withdraw-changes-state",
+      "relation": "changes",
+      "source": "behavior.withdraw-request",
+      "target": {
+        "literal": "withdrawn"
+      }
+    },
+    {
+      "expectation": "present",
+      "id": "commitment.withdraw-fails-not-pending",
+      "relation": "fails_with",
+      "source": "behavior.withdraw-request",
+      "target": {
+        "literal": "409"
+      }
+    },
+    {
+      "expectation": "present",
+      "id": "commitment.withdraw-requires-auth",
+      "relation": "requires",
+      "source": "behavior.withdraw-request",
+      "target": {
+        "literal": "authenticated"
+      }
+    }
+  ],
+  "concepts": [
+    {
+      "id": "actor.employee",
+      "name": "Employee",
+      "role": "actor"
+    },
+    {
+      "id": "actor.manager",
+      "name": "Manager",
+      "role": "actor"
+    },
+    {
+      "id": "behavior.approve-request",
+      "name": "Approve a purchase request",
+      "role": "behavior"
+    },
+    {
+      "id": "behavior.cancel-request",
+      "name": "Cancel a purchase request",
+      "role": "behavior"
+    },
+    {
+      "id": "behavior.get-request",
+      "name": "Read a purchase request",
+      "role": "behavior"
+    },
+    {
+      "id": "behavior.submit-request",
+      "name": "Submit a purchase request",
+      "role": "behavior"
+    },
+    {
+      "id": "behavior.withdraw-request",
+      "name": "Withdraw a purchase request",
+      "role": "behavior"
+    },
+    {
+      "id": "condition.manager-role",
+      "name": "The person acting holds the manager role",
+      "role": "condition"
+    },
+    {
+      "id": "condition.requester-authenticated",
+      "name": "The person acting is authenticated",
+      "role": "condition"
+    },
+    {
+      "id": "resource.purchase-request",
+      "name": "Purchase request",
+      "role": "resource",
+      "stateModel": {
+        "initial": "pending",
+        "states": [
+          "approved",
+          "cancelled",
+          "pending",
+          "withdrawn"
+        ],
+        "transitions": [
+          {
+            "from": "pending",
+            "to": "approved",
+            "via": [
+              "behavior.approve-request"
+            ]
+          },
+          {
+            "from": "pending",
+            "to": "cancelled",
+            "via": [
+              "behavior.cancel-request"
+            ]
+          },
+          {
+            "from": "pending",
+            "to": "withdrawn",
+            "via": [
+              "behavior.withdraw-request"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fields": [
+        {
+          "name": "amount",
+          "required": true,
+          "type": "number"
+        },
+        {
+          "name": "description",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "id": "resource.submission-details",
+      "name": "Submission details",
+      "role": "resource"
+    }
+  ],
+  "context": [
+    {
+      "id": "context.guard-vocabulary",
+      "text": "Authorization conditions in this fixture use the guard vocabulary current_user (authenticated) and require_role(\"manager\") (manager)."
+    }
+  ],
+  "flows": [
+    {
+      "entry": "surface.submit-api",
+      "id": "flow.request-lifecycle",
+      "members": [
+        "behavior.submit-request",
+        "behavior.approve-request",
+        "behavior.withdraw-request",
+        "behavior.cancel-request"
+      ],
+      "name": "Request lifecycle"
+    }
+  ],
+  "formatVersion": 4,
+  "ratification": {
+    "contentHash": "sha256:02dbf0b0f02eec2a7e846991ed5af460ce30c9b46a43411bb0f53a48b1695a89",
+    "ratifiedAt": "2026-08-01T04:49:11.530Z",
+    "status": "ratified"
+  },
+  "scenarios": [],
+  "surfaces": [
+    {
+      "access": "authenticated",
+      "behavior": "behavior.approve-request",
+      "channel": "api",
+      "id": "surface.approve-api",
+      "name": "Approve via API"
+    },
+    {
+      "access": "authenticated",
+      "behavior": "behavior.cancel-request",
+      "channel": "api",
+      "id": "surface.cancel-api",
+      "name": "Cancel via API"
+    },
+    {
+      "access": "authenticated",
+      "behavior": "behavior.get-request",
+      "channel": "api",
+      "id": "surface.get-api",
+      "name": "Read via API"
+    },
+    {
+      "access": "authenticated",
+      "behavior": "behavior.submit-request",
+      "channel": "api",
+      "id": "surface.submit-api",
+      "name": "Submit via API"
+    },
+    {
+      "access": "authenticated",
+      "behavior": "behavior.withdraw-request",
+      "channel": "api",
+      "id": "surface.withdraw-api",
+      "name": "Withdraw via API"
+    }
+  ],
+  "system": {
+    "id": "authorization-state-app",
+    "name": "Authorization State App"
+  }
+}

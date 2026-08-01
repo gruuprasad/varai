@@ -92,9 +92,36 @@ function extractFields(classNode, file) {
     if (left?.type !== "identifier" || !type) continue;
     fields.set(left.text, {
       name: left.text,
-      type: type.text,
+      type: normalizeFieldType(type.text),
+      required: fieldIsRequired(assignment),
       evidence: { file, line: left.startPosition.row + 1 },
     });
   }
   return [...fields.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Deterministic type vocabulary for field contracts (plan §4.1): map the
+// syntax-proven annotation to a small type set; everything else stays as
+// written. Optional[...] unwraps to the inner type.
+function normalizeFieldType(typeText) {
+  const inner = String(typeText ?? "").replace(/^Optional\s*\[\s*|\s*\]$/g, "").trim();
+  const map = {
+    str: "string", string: "string", text: "string", varchar: "string",
+    int: "integer", integer: "integer", bigint: "integer", smallint: "integer",
+    float: "number", double: "number", decimal: "number", numeric: "number",
+    bool: "boolean", boolean: "boolean",
+    datetime: "datetime", date: "date", time: "time", timestamp: "datetime",
+    uuid: "uuid", json: "object", dict: "object", list: "array", array: "array",
+  };
+  return map[inner] ?? inner;
+}
+
+// Requiredness is only claimed where syntax proves it: a default value or an
+// Optional annotation means optional; a bare annotation means required.
+function fieldIsRequired(assignment) {
+  const right = assignment.childForFieldName("right") ?? assignment.childForFieldName("value");
+  if (right) return false;
+  const type = assignment.childForFieldName("type")?.text ?? "";
+  if (/^Optional\s*\[/i.test(type)) return false;
+  return true;
 }

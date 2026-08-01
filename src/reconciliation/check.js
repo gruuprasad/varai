@@ -3,6 +3,7 @@ import { literalMatches, partitionClaims, relationContract } from "./relations.j
 import { resolveBindings, resolveSurfaceBindings } from "./resolve.js";
 import { accountSurfaces, surfacesSummary } from "./surface.js";
 import { attachScenariosSection } from "../runtime/report.js";
+import { checkStateModels, checkFieldContracts, projectFlows } from "./seed-v4.js";
 
 // Reconciliation is a pure, deterministic projection over
 //   ratified seed + realization witness + canonical System Model + coverage.
@@ -76,7 +77,9 @@ function checkCommitment(model, commitment, context) {
     coverage: [],
   };
 
-  const contract = relationContract(commitment.relation);
+  const contract = relationContract(commitment.relation, {
+    literalTarget: commitment.target?.literal !== undefined,
+  });
   if (!contract.checkable) {
     result.verdict = "not_checkable";
     result.reasons = ["no-checker-semantics"];
@@ -208,6 +211,11 @@ export function reconcile({ model, seed, realization = null, provenance = null, 
     surfaceResolution,
   });
 
+  // Seed v4 (plan §2): state models, field contracts, and the flows grouping.
+  const stateModels = checkStateModels({ model, seed, bindingsByConcept: context.bindingsByConcept, resolution });
+  const fieldContracts = checkFieldContracts({ model, seed, bindingsByConcept: context.bindingsByConcept, resolution });
+  const flows = projectFlows({ seed, commitments });
+
   const report = {
     formatVersion: 1,
     system: model.system ? { id: model.system.id, key: model.system.key, name: model.system.name } : null,
@@ -224,6 +232,9 @@ export function reconcile({ model, seed, realization = null, provenance = null, 
     provenance: provenance ?? { state: "unattested", sessionId: null },
     commitments,
     surfaces,
+    stateModels,
+    fieldContracts,
+    flows,
     context: [...(seed.context ?? [])].sort(byId).map((entry) => ({ id: entry.id, text: entry.text })),
     summary: {
       total: commitments.length,

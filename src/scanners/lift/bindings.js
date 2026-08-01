@@ -11,6 +11,10 @@ export function bindBehaviorReferents(behaviors, registry) {
     const behaviorKey = doorKey(behavior.door);
     for (const collection of INTERACTIONS) {
       result[collection] = (behavior[collection] ?? []).map((clause) => {
+        // Emission clauses carry literal boundary targets (external-http:verb,
+        // outbox/queue receiver names) by construction; they are never
+        // declaration referents, so declaration binding must not stamp them.
+        if (clause.relation === "emits") return clause;
         let declaration = clause.targetDeclarationId ? registry.get(clause.targetDeclarationId) : null;
         const candidates = declaration ? [declaration] : registry.named(clause.target);
         if (!declaration && candidates.length === 1) declaration = candidates[0];

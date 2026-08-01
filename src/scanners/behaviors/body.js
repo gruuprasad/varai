@@ -6,8 +6,49 @@ import { createValueFlow, callableTargets, bindingSignature, bodyDescendants } f
 const STATUS_RE = /HTTP_(\d{3})\b/;
 const MAX_TRACE_DEPTH = 8;
 
+// Deterministic literal extraction for state assignments: strings (any quote
+// style), booleans, and integers. Anything else (expressions, identifiers)
+// is not a literal and stays out of the state language.
+function literalValueOf(node) {
+  if (!node) return null;
+  const text = node.text;
+  if (node.type === "string") {
+    const match = text.match(/^(['"])([\s\S]*)\1$/);
+    return match ? match[2] : null;
+  }
+  if (node.type === "true" || node.type === "false") return text === "true" ? "true" : "false";
+  if (node.type === "integer") return text;
+  return null;
+}
+
+const STATE_COMPARE_RE = /(?:==|!=|is(?:\s+not)?)\s*["']([^"']+)["']|["']([^"']+)["']\s*(?:==|!=|is(?:\s+not)?)/;
+
+// Conservative from-state/path evidence: a state comparison on the same
+// attribute that precedes the assignment in the handler (a denial branch or a
+// branch condition). A target assignment alone never proves the transition is
+// guarded — static `holds` for a transition requires this from-state/path
+// evidence (plan §2.1). The nearest preceding guard wins; none found -> null.
+function nearestStateGuard(fnNode, assignment, attributeText, file) {
+  const line = assignment.startPosition.row + 1;
+  let best = null;
+  let bestLine = -1;
+  for (const ifNode of bodyDescendants(fnNode, "if_statement")) {
+    const condition = ifNode.childForFieldName("condition");
+    if (!condition || !condition.text.includes(attributeText)) continue;
+    const match = condition.text.match(STATE_COMPARE_RE);
+    if (!match) continue;
+    const ifLine = ifNode.startPosition.row + 1;
+    if (ifLine < line && ifLine > bestLine) {
+      bestLine = ifLine;
+      best = match[1] ?? match[2] ?? null;
+    }
+  }
+  return best;
+}
+
+
 export async function traceBody(fnNode, file, ctx, resolver, factIndex, options = {}) {
-  const acc = { reads: [], writes: [], fails: [], untraced: [], helperCalls: [], trunkCall: null, applicationCalls: [] };
+  const acc = { reads: [], writes: [], fails: [], states: [], untraced: [], helperCalls: [], trunkCall: null, applicationCalls: [] };
   const info = resolver.describeFunction(file, fnNode);
   // Prefer the scan-wide value-flow (shared memos); reset its per-body work
   // counter so the previous route's spend doesn't starve this one.
@@ -30,6 +71,9 @@ async function walk(info, env, ctx, resolver, factIndex, acc, flow, graph, depth
 
   // A direct field assignment on a declaration-valued local is an entity
   // mutation even when no domain helper call wraps it (record.status = ...).
+  // When the assigned value is a literal, it is a state transition claim
+  // (capability `application.state`), with from-state guard evidence when the
+  // assignment sits under a recognizable state comparison.
   for (const assignment of bodyDescendants(fnNode, "assignment")) {
     const left = assignment.childForFieldName("left");
     if (left?.type !== "attribute") continue;
@@ -42,6 +86,20 @@ async function walk(info, env, ctx, resolver, factIndex, acc, flow, graph, depth
       access: "write", relation: "changes", target, kind: "db_model", medium: "memory",
       via: left.text, observationMethod: "semantic",
     }, evidence, path, file, resolver, acc, graph, currentId, depth);
+
+    const to = literalValueOf(assignment.childForFieldName("right"));
+    if (to !== null) {
+      const from = nearestStateGuard(fnNode, assignment, left.text, file);
+      acc.states.push({
+        resource: target,
+        to,
+        from,
+        guardRecognized: from !== null,
+        evidence,
+        implementationPath: implementationPath(path, evidence),
+        layer: "semantic",
+      });
+    }
   }
 
   for (const raise of bodyDescendants(fnNode, "raise_statement")) {

@@ -2,11 +2,32 @@ import { implementationPath } from "../lift/provenance.js";
 
 const DEPENDS_RE = /Depends\(\s*([A-Za-z_]\w*)/;
 
+// Authorization guard vocabulary (plan §4.1): dependency factories whose
+// names are auth-shaped are classified as authorization gates with an exact
+// condition clause — a string-literal role argument when the call carries
+// one, "authenticated" for identity factories, else the factory name itself.
+// Names are evidence, never a verdict: an unrecognized guard shape becomes
+// `partial` coverage, never a silent absence.
+const AUTH_FACTORY_RE = /current_user|auth|token|principal|session|login|guard|require_|permission|role|owner|member/i;
+const AUTHENTICATED_RE = /current_user|auth|token|principal|session|login/i;
+const DEPENDS_ROLE_ARG_RE = /Depends\(\s*[A-Za-z_]\w*\s*\(\s*["']([^"']+)["']/;
+
+export function classifyAuthorizationGate(depsText) {
+  const factory = depsText.match(DEPENDS_RE)?.[1] ?? null;
+  if (!factory) return { kind: "unresolved", factory: null };
+  if (!AUTH_FACTORY_RE.test(factory)) return { kind: "dependency", factory };
+  const roleArg = depsText.match(DEPENDS_ROLE_ARG_RE)?.[1] ?? null;
+  const condition = roleArg ?? (AUTHENTICATED_RE.test(factory) ? "authenticated" : factory);
+  return { kind: "authorization", factory, condition };
+}
+
 // requires: gates (Depends(...)) + config (env-var identifiers referenced in body).
 // takes: a parameter whose type annotation matches a known schema name.
 // gives: response_model= from the decorator, else a returned *Response constructor.
 export function traceSignature(fnNode, decoratorText, file, factIndex, options = {}) {
   const requires = [];
+  const authorization = [];
+  const authorizationUnresolved = [];
   const takes = [];
   const gives = [];
   const line = (n) => n.startPosition.row + 1;
@@ -17,20 +38,36 @@ export function traceSignature(fnNode, decoratorText, file, factIndex, options =
       const typeNode = p.childForFieldName("type");
       const valueNode = p.childForFieldName("value");
       const typeText = typeNode ? typeNode.text : "";
-
       const valueText = valueNode ? valueNode.text : "";
+
       const depsText = DEPENDS_RE.test(valueText)
         ? valueText
         : DEPENDS_RE.test(typeText) ? typeText : null;
 
       if (depsText) {
-        requires.push({
-          name: depsText.match(DEPENDS_RE)[1],
-          kind: "dependency",
-          evidence: { file, line: line(p) },
-          implementationPath: implementationPath(options.rootEvidence, { file, line: line(p) }),
-          layer: "ast",
-        });
+        const classification = classifyAuthorizationGate(depsText);
+        if (classification.kind === "authorization") {
+          authorization.push({
+            name: classification.factory,
+            condition: classification.condition,
+            evidence: { file, line: line(p) },
+            implementationPath: implementationPath(options.rootEvidence, { file, line: line(p) }),
+            layer: "ast",
+          });
+        } else if (classification.kind === "dependency") {
+          requires.push({
+            name: classification.factory,
+            kind: "dependency",
+            evidence: { file, line: line(p) },
+            implementationPath: implementationPath(options.rootEvidence, { file, line: line(p) }),
+            layer: "ast",
+          });
+        } else {
+          authorizationUnresolved.push({
+            reason: "unrecognized-guard-shape",
+            evidence: { file, line: line(p) },
+          });
+        }
         continue;
       }
       if (typeText && factIndex.schemaNames.has(typeText)) {
@@ -67,5 +104,5 @@ export function traceSignature(fnNode, decoratorText, file, factIndex, options =
     }
   }
 
-  return { requires, takes, gives };
+  return { requires, takes, gives, authorization, authorizationUnresolved };
 }

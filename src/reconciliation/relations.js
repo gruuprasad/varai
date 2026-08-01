@@ -17,10 +17,21 @@ const CHECKABLE_RELATIONS = Object.freeze({
   removes: { capabilities: ["api.effect", "application.effect"], coverageGrain: "element" },
   produces: { capabilities: ["api.output"], coverageGrain: "element" },
   fails_with: { capabilities: ["api.failure"], coverageGrain: "element" },
-  emits: { capabilities: [], coverageGrain: "element" },
+  // emits became checkable with the Gate 2 effect library: external-HTTP and
+  // outbox/queue writes are observed under api.effect.
+  emits: { capabilities: ["api.effect"], coverageGrain: "element" },
   // Python import analysis is explicitly subsystem-complete only when it emits
   // an analyzed arch.dependency record for that scope.
   depends_on: { capabilities: ["arch.dependency"], coverageGrain: "subsystem" },
+});
+
+// Literal-target commitments can also be established or refuted under these
+// additional capabilities, which observe literal-valued claims only (state
+// values, authorization conditions). Concept-target commitments never use
+// them: an entity-level `changes` claim cannot be refuted by state analysis.
+const LITERAL_TARGET_CAPABILITIES = Object.freeze({
+  requires: ["api.authorization"],
+  changes: ["application.state"],
 });
 
 export const RELATION_CAPABILITIES = Object.freeze(Object.fromEntries(
@@ -28,9 +39,12 @@ export const RELATION_CAPABILITIES = Object.freeze(Object.fromEntries(
     [relation, Object.freeze([...contract.capabilities])]),
 ));
 
-export function relationContract(relation) {
+export function relationContract(relation, { literalTarget = false } = {}) {
   const checkable = CHECKABLE_RELATIONS[relation];
-  if (checkable) return { relation, checkable: true, ...checkable };
+  if (checkable) {
+    const extra = literalTarget ? LITERAL_TARGET_CAPABILITIES[relation] ?? [] : [];
+    return { relation, checkable: true, ...checkable, capabilities: [...checkable.capabilities, ...extra] };
+  }
   return {
     relation,
     checkable: false,

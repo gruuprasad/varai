@@ -216,7 +216,10 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
           relation: "has_field",
           target: literal("field", field.name),
           slot: `field:${field.name}`,
-          qualifiers: field.type ? { type: field.type } : {},
+          qualifiers: {
+            ...(field.type ? { type: field.type } : {}),
+            ...(field.required !== undefined ? { required: field.required } : {}),
+          },
           evidence: [field.evidence],
           capability: "data.contract",
           observationMethod: "ast",
@@ -458,6 +461,20 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
       source: behaviorSource, relation: "requires", target: literal("condition", clause.name ?? "unknown requirement"), slot: `requirement:${clause.kind ?? "dependency"}:${clause.name}`,
       evidence: [clause.evidence].flat(), implementationPath: clause.implementationPath, observationMethod: methodFor(clause), claimState: stateFor(clause), capability: "api.condition",
     });
+    // Authorization gates (plan §4.1): exact condition clauses with their own
+    // capability so `requires` commitments on who may act are statically
+    // checkable under `api.authorization` coverage.
+    for (const clause of behavior.authorization ?? []) addClaim({
+      source: behaviorSource, relation: "requires", target: literal("authorization", clause.condition), slot: `authorization:${clause.name}`,
+      evidence: [clause.evidence].flat(), implementationPath: clause.implementationPath, observationMethod: methodFor(clause), claimState: stateFor(clause), capability: "api.authorization",
+    });
+    // State transitions (plan §2.1): literal target-state assignments with
+    // from-state/path evidence when a recognizable guard exists.
+    for (const clause of behavior.states ?? []) addClaim({
+      source: behaviorSource, relation: "changes", target: literal("state", clause.to), slot: `state:${clause.resource}:${clause.to}`,
+      qualifiers: { resource: clause.resource, ...(clause.from != null ? { state_from: clause.from } : {}) },
+      evidence: [clause.evidence].flat(), implementationPath: clause.implementationPath, observationMethod: methodFor(clause), claimState: stateFor(clause), capability: "application.state",
+    });
     for (const [collection, defaultRelation] of [["reads", "reads"], ["writes", "changes"]]) {
       for (const clause of behavior[collection] ?? []) {
         // Transaction ceremony (commit/refresh) is implementation evidence in the
@@ -516,6 +533,27 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
     ...element,
     id: elementId({ subsystemId: subsystemIdByKey.get(element.subsystemKey), kind: element.kind, key: element.key }),
   }));
+  // data.contract element-scope coverage (plan §4.1): analyzed only when the
+  // declaration has parseable class syntax, so a missing declared field is a
+  // violation rather than a shrug.
+  const promotedByKey = new Map([...promoted.values()].map((entry) => [`${entry.kind}\0${entry.key}`, entry]));
+  const dataContractCoverage = [];
+  for (const element of identifiedElements) {
+    if (element.subsystemKey !== "data" || !["entity", "contract", "aggregate"].includes(element.kind)) continue;
+    const declaration = promotedByKey.get(`${element.kind}\0${element.key}`)?.declaration;
+    const analyzed = Boolean(declaration?.node);
+    dataContractCoverage.push({
+      analyzerId: MODEL_BUILDER_ID,
+      analyzerVersion: SYSTEM_MODEL_ANALYZER_VERSION,
+      capability: "data.contract",
+      scope: { kind: "element", subsystemKey: "data", elementKind: element.kind, key: element.key },
+      state: analyzed ? "analyzed" : "partial",
+      evidence: element.evidence ?? [],
+      details: [analyzed
+        ? "Class body parsed; declared fields extracted"
+        : "No class syntax to parse; field coverage cannot be proven"],
+    });
+  }
   const dependencyEdges = resolveDependencyEdges({ importEdges, elements: identifiedElements });
   for (const claim of dependencyEdges.claims) addClaim(claim);
   const dependencyDiagnostics = dependencyEdges.diagnostics;
@@ -529,6 +567,11 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
   })));
   const populatedLenses = new Set(subsystems.keys());
   const dependencyGaps = dependencyDiagnostics.some((item) => item.capability === "arch.dependency");
+  // Authorization vocabulary is recognizable when any scanned handler names an
+  // auth-shaped dependency gate or raises an explicit 401/403.
+  const authVocabulary = behaviors.some((behavior) =>
+    (behavior.authorization?.length ?? 0) > 0
+    || (behavior.fails ?? []).some((clause) => clause.status === 401 || clause.status === 403));
   // Only subsystems with .py Element evidence were in scope for Python import analysis.
   const archDependencyCoverage = [...pythonScopedSubsystemKeys(identifiedElements)].sort().map((lens) => ({
     analyzerId: MODEL_BUILDER_ID,
@@ -543,8 +586,9 @@ export function liftSystemModel({ observations, behaviors, registry, convergence
   }));
   const coverage = [
     ...buildCoverage({ scanContext, behaviors, diagnostics: finalDiagnostics }, populatedLenses),
-    ...buildBehaviorCoverage(behaviors),
+    ...buildBehaviorCoverage(behaviors, { authVocabulary }),
     ...archDependencyCoverage,
+    ...dataContractCoverage,
   ];
   return buildSystemModel({
     subsystems: [...subsystems.values()], elements, claims, coverage, diagnostics: finalDiagnostics,

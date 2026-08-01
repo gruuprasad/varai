@@ -3,8 +3,23 @@ const MUTATION_RE = /^(?:add|append|apply|archive|assign|attach|bind|clear|creat
 const READ_RE = /^(?:build|calculate|compute|derive|ensure|export|fetch|find|get|load|open|project|read|render|resolve|select|serialize|validate)(?:_|$)/i;
 const LOAD_RETURN_RE = /^(?:ensure|fetch|find|get|load|open|read|select)(?:_|$)/i;
 
+// Effect library (plan §4.1): recognized external-HTTP and messaging
+// infrastructure receivers. A write through one of these is an emission to an
+// outside boundary, never a domain aggregate change — so `emits`/`produces`
+// become checkable instead of recorded.
+const HTTP_CLIENT_RECEIVERS = /^(?:httpx|requests|aiohttp|urllib(?:3)?)$/i;
+const HTTP_VERB_RE = /^(?:get|post|put|patch|delete|head|options)$/i;
+const QUEUE_RECEIVERS = /(?:outbox|queue|bus|event|kafka|pubsub|rabbit|stream|topic|notifier|mailer|smtp)/i;
+const QUEUE_METHODS = /^(?:add|append|emit|enqueue|insert|notify|post|publish|push|put|send|send_async|publish_async|write)$/i;
+
 export function classifyAttributeEffect({ method, receiver, call, firstArgIdent, firstArgModel, chainedTarget, modelNames, receiverType = null }) {
   const receiverText = receiver.text;
+  if (HTTP_CLIENT_RECEIVERS.test(receiverText) && HTTP_VERB_RE.test(method)) {
+    return { access: "write", relation: "emits", target: `external-http:${method}`, kind: "external_http", medium: "http", via: `${receiverText}.${method}`, observationMethod: "semantic" };
+  }
+  if (QUEUE_RECEIVERS.test(receiverText) && QUEUE_METHODS.test(method)) {
+    return { access: "write", relation: "emits", target: receiverText, kind: "queue", medium: "queue", via: `${receiverText}.${method}`, observationMethod: "semantic" };
+  }
   if (method === "query") {
     const arg = firstArgIdent(call);
     return { access: "read", target: arg && modelNames.has(arg) ? arg : receiverText, kind: "db_model", medium: "db", via: `${receiverText}.query`, observationMethod: "semantic" };
