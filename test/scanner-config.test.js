@@ -66,6 +66,25 @@ test("loads optional builder envAllowlist as names only", async () => {
   assert.deepEqual(cfg.builders.fake.envAllowlist, ["MY_BUILDER_TOKEN", "OTHER_OK"]);
 });
 
+test("loads agent-compatible builder packet mode", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-cfg-"));
+  await writeFile(join(dir, "varai.config.json"), JSON.stringify({
+    builders: {
+      codex: { executable: "codex", args: ["exec"], packetMode: "argument" },
+    },
+  }));
+  const cfg = await loadRepoConfig(dir);
+  assert.equal(cfg.builders.codex.packetMode, "argument");
+});
+
+test("rejects unknown builder packet modes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-cfg-"));
+  await writeFile(join(dir, "varai.config.json"), JSON.stringify({
+    builders: { codex: { executable: "codex", packetMode: "stdin" } },
+  }));
+  await assert.rejects(() => loadRepoConfig(dir), /packetMode/);
+});
+
 test("rejects non-string envAllowlist entries", async () => {
   const dir = await mkdtemp(join(tmpdir(), "varai-cfg-"));
   await writeFile(join(dir, "varai.config.json"), JSON.stringify({
@@ -74,4 +93,13 @@ test("rejects non-string envAllowlist entries", async () => {
     },
   }));
   await assert.rejects(() => loadRepoConfig(dir), /envAllowlist/);
+});
+
+test("loads a local command Seed assistant", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "varai-cfg-"));
+  await writeFile(join(dir, "varai.config.json"), JSON.stringify({
+    assistant: { executable: "codex", args: ["exec", "--ephemeral"] },
+  }));
+  const cfg = await loadRepoConfig(dir);
+  assert.deepEqual(cfg.assistant, { executable: "codex", args: ["exec", "--ephemeral"] });
 });

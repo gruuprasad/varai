@@ -1,5 +1,9 @@
 # Purchase Approvals — Technical Trial Results
 
+> Historical evidence record. The current product demonstration is
+> [Signal](../../varai-signal-pilot/README.md); these trials preserve the
+> earlier purchase-approval proof and its exact environment.
+
 Gate 8 adversarial proof for the product control room.
 
 - **POC path:** `/home/gp/dreamLand/jodulabs/varai-purchase-approvals-poc`

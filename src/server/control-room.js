@@ -87,9 +87,14 @@ function decisionFromGate(gate, report, {
   seedHash = null,
   focusSession = null,
   liveProvenance = null,
+  liveReport = null,
 } = {}) {
   const decisions = [];
   if (!gate && !report && !liveProvenance) return decisions;
+
+  const evidenceLocations = (evidence) => (evidence ?? [])
+    .map((entry) => `${entry.file}${entry.line != null ? `:${entry.line}` : ""}`)
+    .join(", ");
 
   for (const item of gate?.requirementRegressions ?? []) {
     decisions.push({
@@ -106,6 +111,7 @@ function decisionFromGate(gate, report, {
         id: item.id,
         label: `${item.source} ${item.relation}`,
         evidenceIds: [item.id, ...(item.reasons ?? [])],
+        detail: evidenceLocations(item.evidence ?? []),
       });
     }
   }
@@ -127,11 +133,17 @@ function decisionFromGate(gate, report, {
   }
   for (const item of report?.surfaces?.unaccounted ?? []) {
     const id = item.key ?? item.elementId;
+    // Frozen close reports predate evidence on unaccounted entries; enrich
+    // from the live projection so the verifier can always navigate.
+    const liveItem = (liveReport?.surfaces?.unaccounted ?? []).find((entry) =>
+      (entry.key ?? entry.elementId) === (item.key ?? item.elementId));
+    const evidence = liveItem?.evidence?.length ? liveItem.evidence : (item.evidence ?? []);
     decisions.push({
       kind: "unaccounted_surface",
       id,
       label: item.elementName ?? id,
       evidenceIds: [id],
+      detail: evidenceLocations(evidence),
     });
   }
   for (const item of gate?.coverageRegressions ?? []) {
@@ -287,6 +299,7 @@ export async function loadControlRoom({
     seedHash,
     focusSession,
     liveProvenance: provenance,
+    liveReport: report,
   });
 
   let verificationGate = gate;

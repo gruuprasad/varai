@@ -38,6 +38,7 @@ export async function resolveConfiguredAdapter(repoPath, adapterId, { sourceEnv 
     executable: entry.executable,
     args: entry.args ?? [],
     envAllowlist: entry.envAllowlist ?? [],
+    packetMode: entry.packetMode ?? "path",
     sourceEnv,
   });
 }
@@ -195,6 +196,15 @@ export async function runBuildRun(options = {}) {
     if (active) {
       session = await store.getSession(active.id);
       if (session.completedAt) throw new Error("Active build session pointer is stale; clear it before running");
+      if (seedChanged(repoPath, session)) {
+        await markBuildSuperseded(repoPath, session.id, {
+          reason: "Approved Seed changed before the builder restarted",
+        });
+        active = null;
+      }
+    }
+
+    if (active) {
       if (session.lifecycleState === BUILD_STATES.BUILDING && session.builder?.running && !session.builder?.orphaned) {
         throw new Error("A build session is already building");
       }
@@ -237,6 +247,7 @@ export async function runBuildRun(options = {}) {
       lifecycleState: BUILD_STATES.BUILDING,
       builder: {
         adapterId,
+        pid: process.pid,
         running: true,
         orphaned: false,
         packetPath,

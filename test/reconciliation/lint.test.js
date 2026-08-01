@@ -34,6 +34,7 @@ test("a wrong selector reports not-found with ranked deterministic candidates", 
   const record = lint.bindings.find((item) => item.id === "binding.apply-change-action");
   assert.equal(record.state, "not-found");
   assert.equal(record.reason, "artifact-not-found");
+  assert.equal(lint.summary.bindings.notFound, 1);
   assert.ok(record.candidates.length > 0, "candidates are suggested for the failed selector");
   assert.ok(record.candidates.every((candidate) => typeof candidate.score === "number"));
   const scores = record.candidates.map((candidate) => candidate.score);

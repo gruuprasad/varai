@@ -408,6 +408,25 @@ test("orphan recovery persists running:false so a new build run is not blocked",
   }
 });
 
+test("status does not orphan a builder whose owning process is alive", async () => {
+  const root = await repoWithConfig(["--mode", "success"]);
+  try {
+    const { runBuildBegin } = await import("../../src/build-session/commands.js");
+    const started = await runBuildBegin({ repo: root, json: true, quiet: true, cache: false });
+    const store = createBuildSessionStore(root);
+    const session = await store.getSession(started.session.id);
+    session.lifecycleState = BUILD_STATES.BUILDING;
+    session.builder = { adapterId: "fake", pid: process.pid, running: true, orphaned: false };
+    await store.putSession(session);
+
+    const status = await runBuildStatus({ repo: root, json: true, quiet: true });
+    assert.equal(status.active.builder.running, true);
+    assert.equal(status.active.builder.orphaned, false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("post-completion edit marks provenance unattested", async () => {
   const root = await repoWithConfig(["--mode", "success"]);
   try {

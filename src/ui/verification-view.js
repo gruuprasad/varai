@@ -66,6 +66,7 @@ export function renderVerification(verification) {
         `<strong>${esc(title)}</strong> ` +
         `<span class="decision-label">${esc(decision.label ?? decision.id)}</span> ` +
         `<code>${esc(decision.id)}</code> ` +
+        (decision.detail ? `<small class="decision-detail">evidence: ${esc(decision.detail)}</small> ` : "") +
         evidenceFocusButtons(ids) +
         `</li>`;
     }

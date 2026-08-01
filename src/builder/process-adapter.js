@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 // Process adapter: one explicitly configured local CLI. Executable and fixed
@@ -83,6 +84,7 @@ export function createProcessAdapter({
   args = [],
   sourceEnv = process.env,
   envAllowlist = [],
+  packetMode = "path",
   maxEventBytes = DEFAULT_MAX_EVENT_BYTES,
   stopGraceMs = DEFAULT_STOP_GRACE_MS,
   stopKillWaitMs = DEFAULT_STOP_KILL_WAIT_MS,
@@ -91,6 +93,9 @@ export function createProcessAdapter({
   if (!executable || typeof executable !== "string") throw new Error("Process adapter requires executable");
   if (!Array.isArray(args) || args.some((a) => typeof a !== "string")) {
     throw new Error("Process adapter args must be an array of strings");
+  }
+  if (!["path", "argument"].includes(packetMode)) {
+    throw new Error('Process adapter packetMode must be "path" or "argument"');
   }
 
   let child = null;
@@ -101,6 +106,7 @@ export function createProcessAdapter({
     executable,
     args: [...args],
     envAllowlist: [...envAllowlist],
+    packetMode,
     maxEventBytes,
     async start({ cwd, packetPath, signal, onEvent } = {}) {
       if (child && !hasExited(child)) {
@@ -113,7 +119,10 @@ export function createProcessAdapter({
         // Marks fixture builders as intentionally spawned under a controlled cwd.
         VARAI_FAKE_BUILDER: "1",
       };
-      const argv = [...args, packetPath].filter((part) => part !== undefined && part !== null);
+      const packet = packetMode === "argument" && packetPath
+        ? await readFile(packetPath, "utf8")
+        : packetPath;
+      const argv = [...args, packet].filter((part) => part !== undefined && part !== null);
       // detached → new process group so stop can kill the whole tree.
       const spawned = spawn(executable, argv, {
         cwd: absoluteCwd,
@@ -121,7 +130,7 @@ export function createProcessAdapter({
         shell: false,
         signal,
         detached: true,
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: [packetMode === "argument" ? "ignore" : "pipe", "pipe", "pipe"],
       });
       child = spawned;
 
@@ -150,6 +159,9 @@ export function createProcessAdapter({
       return result;
     },
     async send({ message } = {}) {
+      if (packetMode === "argument") {
+        throw new Error("Argument-mode builders do not accept messages; start a new build with revised approved intent");
+      }
       if (!child || child.killed || hasExited(child)) {
         throw new Error("No running builder process to receive a message");
       }

@@ -1,4 +1,9 @@
-# Product-loop pilot: Slotkeeper
+# Historical product-loop pilot: Slotkeeper
+
+> Historical record. This document describes the July 2026 Slotkeeper trial,
+> not the current quick-start path. For the current product, read
+> [the control-room contract](product-control-room.md) and the root
+> [README](../README.md).
 
 Date: 2026-07-28
 

@@ -74,6 +74,23 @@ test("process adapter spawns shell:false and exits 0 for the fake builder", asyn
   }
 });
 
+test("argument packet mode passes packet content to agent-style CLIs", async () => {
+  const cwd = await tempCwd();
+  try {
+    const adapter = createProcessAdapter({
+      id: "argument-echo",
+      executable: process.execPath,
+      args: ["-e", "process.stdin.resume(); process.stdin.on('end', () => process.stdout.write(process.argv[1]))"],
+      packetMode: "argument",
+    });
+    const { events, onEvent } = collectEvents();
+    await adapter.start({ cwd, packetPath: path.join(cwd, "packet.md"), onEvent });
+    assert.equal(events.find((event) => event.stream === "stdout")?.text, "# packet\n");
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test("process adapter abort/stop terminates a hanging builder", async () => {
   const cwd = await tempCwd();
   try {

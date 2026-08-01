@@ -2,6 +2,10 @@
 
 Status: Accepted
 
+Current-status note: ADR 0009 extends the original handoff-only decision into
+a managed local builder workflow. The authority model below still applies;
+the builder is now orchestrated by Varai through a replaceable command adapter.
+
 ## Context
 
 Varai's System Model observes what a repository contains. Builders supervising AI-written code
@@ -56,8 +60,9 @@ LLM-judged report.
   forward.
 - Absence discipline carries over from the System Model: open-world implementation details are
   never reported as unauthorized behavior; closed-scope orphan detection is a later gate.
-- The build handoff is a vendor-neutral Markdown/JSON packet the user pastes into any coding
-  agent; Varai does not orchestrate builders.
+- The build handoff is a vendor-neutral Markdown/JSON packet. Varai may now
+  pass that packet to a configured local builder and record the session; the
+  builder remains interchangeable and untrusted.
 - The dashboard gains seed authoring and domain review views; mutation endpoints stay bound to
   `127.0.0.1`, bounded, origin-checked, and confined to the fixed seed file with atomic writes.
 - The seed relation vocabulary may include recorded-only relations (`performs`) that validate as

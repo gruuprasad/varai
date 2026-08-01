@@ -133,6 +133,10 @@ test("ratify writes exactly the reviewed canonical draft", async (t) => {
   }));
   assert.equal(written, expected, "the file is exactly the reviewed draft, canonicalized, plus ratification");
   assert.ok(!fs.readdirSync(repo).some((name) => name.endsWith(".tmp")), "no temp file is left behind");
+  const status = await (await fetch(`${server.url}/api/seed`)).json();
+  assert.equal(status.conversation.length, 1, "the approved product conversation remains available to the development interface");
+  assert.ok(!fs.existsSync(path.join(repo, ".varai", "authoring-v1", "session.json")), "approval closes the editable authoring session");
+  assert.ok(fs.existsSync(path.join(repo, ".varai", "authoring-v1", "approved", `${contentHash.slice(7)}.json`)));
 });
 
 test("mutation endpoints reject invalid origin and oversized bodies", async (t) => {

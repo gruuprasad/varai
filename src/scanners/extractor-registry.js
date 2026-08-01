@@ -6,6 +6,7 @@ import { extract as extractReactVite } from "./extractors/react-vite.js";
 import { extract as extractNextjs } from "./extractors/nextjs.js";
 import { extract as extractRunnable } from "./extractors/runnable.js";
 import { extract as extractSchema } from "./extractors/schema.js";
+import { extract as extractPythonHttpserver } from "./extractors/python-httpserver.js";
 
 export const EXTRACTOR_REGISTRY = Object.freeze([
   { id: "fastapi.routes.v1", stack: "fastapi", extract: extractFastapi },
@@ -14,6 +15,7 @@ export const EXTRACTOR_REGISTRY = Object.freeze([
   { id: "react-vite.ui.v2", stack: "react-vite", extract: extractReactVite },
   { id: "nextjs.routes.v1", stack: "nextjs", extract: extractNextjs },
   { id: "python.schemas.v1", stack: "python-common", extract: extractSchema },
+  { id: "python-httpserver.routes.v1", stack: "python-httpserver", extract: extractPythonHttpserver },
   { id: "base.runnables.v1", stack: "base", extract: extractRunnable },
 ]);
 

@@ -2,7 +2,13 @@ import { readGitState } from "../snapshots/git-state.js";
 import { normalizeProposal } from "../seed/assistant.js";
 import { diffSeeds } from "../seed/diff.js";
 import { seedContentHash } from "../seed/identity.js";
-import { clearAuthoringSession, readAuthoringSession, writeAuthoringSession } from "../seed/authoring-session.js";
+import {
+  archiveAuthoringSession,
+  clearAuthoringSession,
+  readApprovedAuthoringSession,
+  readAuthoringSession,
+  writeAuthoringSession,
+} from "../seed/authoring-session.js";
 import { SEED_FILE } from "../seed/schema.js";
 import { ratifySeed, readSeed } from "../seed/store.js";
 import { checkSeed, SeedValidationError } from "../seed/validate.js";
@@ -82,6 +88,7 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
       return { file: SEED_FILE, seed: null, invalid: true, problems: err.problems, ratified: false };
     }
     const git = await readGitState(repoPath).catch(() => null);
+    const authoring = sessionForCurrentSeed();
     return {
       file: SEED_FILE,
       seed: input?.seed ?? null,
@@ -90,8 +97,11 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
       contentHash: input?.contentHash ?? null,
       ratified: input?.ratified ?? false,
       gitDirty: git ? !git.clean : null,
-      draft: sessionForCurrentSeed()?.review ?? null,
-      authoring: sessionForCurrentSeed(),
+      draft: authoring?.review ?? null,
+      authoring,
+      conversation: authoring?.conversation
+        ?? readApprovedAuthoringSession(repoPath, input?.contentHash)?.conversation
+        ?? [],
       assistant: assistant ? { provider: assistant.provider, model: assistant.model } : null,
     };
   }
@@ -159,7 +169,7 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
       return;
     }
     const result = ratifySeed(repoPath, body.draft, { ratifiedAt: new Date().toISOString() });
-    clearAuthoringSession(repoPath);
+    archiveAuthoringSession(repoPath, result.contentHash);
     broadcast({ type: "seed" });
     send(res, 200, { contentHash: result.contentHash, path: result.path });
   }

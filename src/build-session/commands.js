@@ -231,7 +231,7 @@ export async function runBuildStatus(options = {}) {
   if (activeSummary?.builder) {
     const { getLiveBuilderRun } = await import("../builder/runtime.js");
     const live = getLiveBuilderRun(repoPath);
-    if (!live) {
+    if (!live && !processAlive(activeSummary.builder.pid)) {
       const healedBuilder = {
         ...activeSummary.builder,
         running: false,
@@ -292,6 +292,16 @@ export async function runBuildStatus(options = {}) {
   };
   writeOutput(options, result, formatStatusText(result));
   return result;
+}
+
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function setBuildLifecycle(repoPath, sessionId, patch, { completedSession } = {}) {

@@ -1,214 +1,166 @@
 # Varai
 
-**A local product control room for software built by AI.**
-
-When an AI can produce more code than a person can read, code and diffs stop
-being a sufficient human operating surface. Varai lets a person describe and
-approve the product in domain language, hand that approved specification to an
-interchangeable AI builder, and independently check what was actually built.
+Varai is a local application-development interface for software built with AI.
+It keeps the person in one workflow from product idea to a running application:
 
 ```text
-human conversation
-  -> AI-assisted Seed draft
-  -> human approval
-  -> recorded AI build
-  -> independent static and runtime evidence
-  -> ready / needs attention + progression
+conversation → approved Seed → managed Codex build → independent evidence
+             → ready / needs attention → next conversation
 ```
 
-Varai is local-first and pre-release. The current technical proof has completed
-nine adversarial trials with zero false greens; evaluation with target users is
-still pending. The binding model and the value of this workflow to real product
-owners remain open questions, not solved claims.
+The human owns the product decision. The builder writes code. Varai observes
+the repository and runs the checks. Those roles are deliberately separate.
 
-## The problem
+Varai is a pre-release local prototype. It is useful for exploring the
+workflow, not a claim of universal code correctness or framework coverage.
 
-AI changes the economics of software production without changing the economics
-of human comprehension. A person can state a product in conversation and an
-agent can expand it into plans, code, tests, and explanations faster than that
-person can read or retain the result.
+## Start here
 
-Asking the builder to explain or review its own work does not close the trust
-loop: the same probabilistic system becomes both builder and narrator. Domain
-meaning is also difficult to recover from code after the fact. The same
-conditional can enforce ownership, a financial limit, or an arbitrary UI rule.
-
-Varai therefore captures meaning before implementation and separates three
-authorities:
-
-1. **Seed** — human-owned product intent, drafted with AI assistance and approved
-   only by a person.
-2. **System Model** — Varai's independent, evidence-backed observation of the
-   repository.
-3. **Build evidence** — recorded sessions, builder-provided pointers, scenario
-   runs, and gate decisions. Builder testimony can guide a check but cannot set
-   its result.
-
-Varai never persists a combined intent-and-code graph. Reconciliation, surface
-accounting, blueprints, and readiness are projections computed from these
-separate authorities.
-
-## The Seed language
-
-`varai.seed.json` is not a generated requirements document or a mirror of the
-code. It is a small domain-level source language for the product:
-
-- **concepts** — actors, behaviors, resources, conditions, and outcomes;
-- **commitments** — atomic relationships such as creates, reads, changes,
-  requires, fails with, or depends on, with `present` or `absent` polarity;
-- **surfaces** — the approved externally reachable UI, API, webhook, job, or CLI
-  behavior;
-- **scenarios** — bounded multi-step examples involving named product actors;
-- **context** — important intent that Varai records without pretending it can
-  verify it.
-
-The dashboard's Seed Studio supports recoverable, multi-turn authoring. An
-OpenAI-compatible assistant may ask clarifying questions and propose a complete
-draft from the conversation and current Seed. It receives no repository code,
-cannot write the Seed, and cannot approve anything. Unsupported statements stay
-visible instead of disappearing into plausible prose. Approval freezes the
-reviewed draft under a semantic content hash.
-
-The Seed deliberately avoids routes, files, symbols, framework names, and other
-implementation vocabulary. Those belong to realization bindings, not product
-intent.
-
-## Build and independent verification
-
-An approved Seed becomes a vendor-neutral build packet. Varai can run an
-explicitly configured local AI CLI through a replaceable process adapter and
-records the exact Seed hash, repository state, builder events, messages,
-interventions, and final verification result.
-
-The builder emits two untrusted maps:
-
-- `varai.realization.json` binds Seed concepts and expected surfaces to stable
-  observed artifact boundaries;
-- `varai.runtime.json` says where approved behaviors can be exercised and which
-  configured personas to use.
-
-These files are pointers, never proof. Varai independently scans the repository
-and evaluates several complementary evidence planes:
-
-- **System Model and semantic diff** — deterministic Elements, Claims,
-  evidence, identity, coverage, snapshots, and progression;
-- **ArchUnit-style architecture checks** — source dependencies become canonical
-  `depends_on` Claims and roll up into module-grain architecture units. The
-  current dependency extractor covers Python imports; this is the first fitness-
-  function slice, not a general architecture-rule engine;
-- **commitment reconciliation** — declared bindings are resolved against
-  observed Claims and exact analyzer coverage;
-- **surface accounting** — expected public behavior is checked in both
-  directions, exposing both missing behavior and behavior nobody approved;
-- **runtime scenarios** — Varai independently invokes bounded, ratified examples
-  against a loopback application and checks status and partial response bodies;
-- **coverage regression** — making code harder to analyze cannot quietly turn a
-  violation into a harmless-looking unknown.
-
-Requirement verdicts are `holds`, `violated`, `cannot_verify`, or
-`not_checkable`. Binding state is reported separately as `resolved`,
-`ambiguous`, `stale`, or `unbound`. A build is `ready` only when requirements,
-critical scenarios, bindings, expected and observed surfaces, coverage, Seed
-hash, repository state, and scan configuration all agree. There is no generic
-green state that hides `cannot_verify`.
-
-## What runs today
-
-Varai requires Node 20+.
+Requirements: Node.js 20+ and the Codex CLI for AI-assisted authoring/builds.
+The current default model is `gpt-5.6-luna`. Varai uses the local command; it
+does not require an API platform or API key.
 
 ```bash
 npm install -g .
-
-varai start ../repo                  # local product control room
-varai map ../repo                    # current evidence-backed System Model
-varai snapshot ../repo               # Git-bound checkpoint
-varai diff ../repo                   # semantic change since a checkpoint
-
-varai seed validate ../repo
-varai seed approve ../repo           # human approval; alias: ratify
-varai handoff ../repo                # render the approved builder packet
-
-varai build begin ../repo
-varai build run ../repo --adapter <configured-id>
-varai build status ../repo
-varai check ../repo
-varai progression ../repo --from <session> --to <session>
-varai verify scenarios ../repo
+varai create ../my-app
+varai start ../my-app --no-open
 ```
 
-Use `varai start` for the current Change → Blueprint → Build → Verify workflow.
-Use `--include <prefix>` and `--exclude <prefix>` to constrain scans, and
-`--parser native|wasm` to select a parser backend.
+Open the local dashboard. Use the Develop conversation to describe the app,
+review the proposed Seed, approve it, and start the managed build. A generated
+project contains a `varai.config.json` with the Codex assistant and builder
+configuration.
 
-## Current scope
+To inspect an existing repository:
 
-The product proof is intentionally constrained to multi-role operational web
-software—approvals, bookings, case management, resource allocation, and similar
-stateful workflows—on this substrate:
+```bash
+varai start ../repo --no-open
+varai map ../repo
+varai snapshot ../repo
+varai diff ../repo
+```
 
-- React/Vite;
-- FastAPI;
-- SQLAlchemy with PostgreSQL or SQLite;
-- synchronous HTTP commands and queries;
-- local process execution and one configured AI-builder subprocess.
+## The four roles
 
-The underlying repository observer also recognizes selected Next.js, Prisma,
-npm/Python command, and Docker/Compose structures. That broader mapping support
-does **not** imply that the full readiness contract is proven on those stacks.
-Unsupported or dynamic behavior reports `cannot_verify` or `cannot_account`; it
-never becomes a clean absence.
-
-## What the evidence means
-
-| Evidence | Can establish | Cannot establish alone |
+| Role | Job | Authority |
 | --- | --- | --- |
-| Static System Model | routes, effects, dependencies, public artifacts | runtime authorization, atomicity |
-| Runtime scenario | one concrete interaction and observed result | a universal invariant |
-| Realization/runtime map | where to check | correctness |
-| Builder prose and tests | supporting testimony | a verdict |
+| Human | describe, review, approve, change product intent | owns the Seed |
+| Product assistant | clarify conversation and propose Seed JSON | advisory only |
+| Builder | implement an approved Seed in a recorded session | writes code, never verdicts |
+| Verifier | scan, reconcile, run scenarios, report evidence | sets deterministic evidence state |
 
-Scenarios are examples, not proofs over every possible input. Varai does not yet
-prove concurrency, transaction atomicity, temporal properties, performance, or
-general program correctness.
+The assistant and builder are separate command boundaries. Both default to
+local Codex with `gpt-5.6-luna`; the boundary can be replaced later. Varai
+never sends repository contents to a hosted service silently.
 
-## What has been tested—and what has not
+## The three durable authorities
 
-The purchase-approval proof application has been exercised against nine
-adversarial cases: a green build, omitted audit write, inverted authorization,
-state corruption after denial, an unexpected destructive route, analyzer-
-coverage poisoning, a pure refactor, an approved product change, and an edit
-outside the recorded session.
+1. **Seed** — `varai.seed.json`, human-ratified product intent: concepts,
+   commitments, surfaces, scenarios, state models, field contracts, flows, and
+   explicitly recorded context.
+2. **System Model** — Varai's one canonical, evidence-backed observation of the
+   repository. It contains Elements, Claims, evidence, and analyzer coverage.
+3. **Build evidence** — session records, realization/runtime pointers, scenario
+   results, interventions, and gate decisions.
 
-The technical trial produced the expected state in all nine cases with zero
-false greens. That establishes the behavior of this constrained proof, not the
-general Varai thesis. Five-user human evaluation is still pending, so the
-product release gate has not passed.
+`varai.realization.json` and `varai.runtime.json` are untrusted pointers. They
+say what the builder believes should be checked; they do not establish that it
+is correct. Reconciliation is computed from the Seed, pointers, System Model,
+and coverage. Varai does not persist a second combined product IR.
 
-The largest unresolved issue remains binding: reconciliation is deterministic
-once a builder declares where a Seed concept was realized, but whether those
-bindings remain honest, complete, and maintainable on real evolving systems is
-not proven. Varai is published to expose that question to criticism, not to hide
-it behind a finished-product claim.
+## The commands that matter
 
-This repository itself has been developed with extensive AI coding assistance.
-That is part of the motivation for making every claim earn its authority through
-evidence, coverage, adversarial tests, and explicit limits rather than through
-the builder's confidence.
+```bash
+# Product intent
+varai seed validate <repo>
+varai seed approve <repo>                 # alias: ratify
+varai handoff <repo> --json
 
-## Learn more
+# Build lifecycle
+varai build begin <repo>
+varai build run <repo> --adapter codex
+varai build message <repo> "product clarification"
+varai build status <repo>
+varai build stop <repo>
 
-- **[Product control room](docs/product-control-room.md)** — the current product
-  contract, audience, substrate, evidence limits, and readiness rules.
-- **[Semantic language](docs/semantic-language.md)** — the normative vocabulary
-  shared by Seeds and observed System Models.
-- **[Purchase-approval trial results](docs/poc/purchase-approvals-trial-results.md)**
-  — the technical adversarial proof and pending human gate.
-- **[The Varai idea](docs/the-varai-idea.md)** — the longer argument and the
-  unresolved binding problem.
-- **[Specification](docs/spec.md)** and **[glossary](docs/glossary.md)** — the
-  running tool's contract and canonical terms.
-- **[Architecture decisions](docs/adr/)** — accepted product and trust-model
-  decisions.
+# Evidence and change
+varai check <repo>
+varai verify scenarios <repo> --json
+varai realization lint <repo>/varai.realization.json <repo> --json
+varai runtime derive <repo> --write --json
+varai progression <repo> --from <session> --json
+```
+
+Use `--include`, `--exclude`, `--jobs`, `--no-cache`, and
+`--parser native|wasm` with scan-based commands when a repository needs a
+smaller or reproducible scope.
+
+## How to read a result
+
+Static and runtime evidence answer different questions:
+
+| Evidence | Establishes | Does not establish by itself |
+| --- | --- | --- |
+| System Model | observed structure, effects, dependencies, public artifacts | runtime correctness or universal invariants |
+| Runtime scenario | one bounded interaction and response | behavior for every input or concurrent execution |
+| Realization/runtime map | where a check should look | that the implementation is correct |
+| Builder message/test | supporting testimony | a verifier verdict |
+
+Requirement verdicts are `holds`, `violated`, `cannot_verify`, and
+`not_checkable`. Binding states are separate: `resolved`, `ambiguous`, `stale`,
+and `unbound`. A missing claim is only a violation when the responsible
+analyzer coverage is exact; otherwise Varai says it cannot verify.
+
+The build gate compares the recorded build with its starting evidence. It
+blocks on coverage degradation, requirement regressions, bad surfaces, failed
+or unrun scenarios, and violated Seed v4 state/field contracts. A `ready`
+session therefore means the recorded change introduced no blocking regression;
+it does not turn every existing `cannot_verify` result into a proof.
+
+## Proof application: Signal
+
+The sibling project [varai-signal-pilot](../varai-signal-pilot/README.md)
+demonstrates the workflow with a small AI-native knowledge feed. Contributions
+become claims, summaries preserve traceable sources, and disagreement is kept
+visible. The app uses the local Codex command with `gpt-5.6-luna`; its tests
+inject a deterministic fake provider.
+
+```bash
+cd ../varai-signal-pilot
+python3 -m unittest -v test_signal.py
+python3 app.py                         # live local Codex
+```
+
+The Varai runtime map uses `app.py --fake` so its three scenarios are fast and
+repeatable. A separate black-box live check covers the semantic sequence
+`new → redundant → corroborating → conflicting` and confirms that a Codex
+failure returns `503 cannot_verify` without changing stored claims.
+
+## Current boundary
+
+The strongest readiness proof is the constrained operational slice: React/Vite,
+FastAPI, SQLAlchemy over PostgreSQL/SQLite, synchronous HTTP, local processes,
+and one configured builder. Varai also maps selected Next.js, Prisma, Python,
+npm, and Docker/Compose structures, plus the proof app's Python stdlib HTTP
+surface. Mapping support is not the same as full semantic readiness coverage.
+
+Unsupported or dynamic behavior is reported as `cannot_verify` or
+`cannot_account`, never as a clean absence. Varai does not yet prove
+concurrency, transaction atomicity, performance, temporal properties, general
+program correctness, deployment, or hosted repository workflows.
+
+## Documentation map
+
+- [Documentation index](docs/README.md) — the shortest route through the docs.
+- [Product control room](docs/product-control-room.md) — current product and
+  trust contract.
+- [Semantic language](docs/semantic-language.md) — normative Seed/System Model
+  vocabulary.
+- [Roadmap](docs/roadmap.md) — shipped, next, and deliberately deferred.
+- [The Varai idea](docs/the-varai-idea.md) — exploratory rationale.
+- [ADRs](docs/adr/) — accepted decisions and their history.
+- [Historical pilots](docs/poc/) — adversarial evidence, not current product
+  instructions.
 
 ## Development
 
@@ -216,9 +168,8 @@ the builder's confidence.
 npm test
 ```
 
-The Node test suite is the release gate and exits non-zero on any failure. No
-documented claim about Varai's behavior should outrun its tests and recorded
-trials.
+The test suite is the local regression gate. Use a focused fixture and update
+the relevant analyzer/version tests when adding scanner behavior.
 
 ## License
 

@@ -1,61 +1,103 @@
-# Varai Spec
+# Varai implementation contract
 
-## Product contract
+This document describes the stable implementation boundary. Product language
+and meaning are normative in [semantic-language.md](semantic-language.md).
 
-`varai map <repo>` builds and renders a local, deterministic, evidence-backed System Model. It describes software above implementation level while keeping every statement traceable to repository evidence and every analyzer limit explicit.
-
-Varai does not require an intent file or an LLM and never uploads repository contents silently.
-
-## Canonical pipeline
+## Product pipeline
 
 ```text
-local repository
-  -> scope-aware file walk and stack detection
-  -> parser observations and behavior analysis (private)
-  -> System Model v1 (the only product IR)
-       -> current-system map
-       -> snapshots and semantic diff
-       -> later: checks, intent reconciliation, constrained explanation
+repository
+  → scoped scanners and analyzers
+  → System Model v1
+  → map / snapshot / diff / checks / reconciliation / explanation
 ```
 
-Private observations may be cached for performance. They are not exposed by the scanner, stored in semantic snapshots, or independently versioned. Pre-release snapshots from discarded models are intentionally ignored and regenerated.
+The development workflow adds a separate, human-owned input and evidence path:
 
-## System Model v1
+```text
+Seed + builder session + runtime evidence
+  → projections over the System Model
+  → reconciliation, scenarios, progression, and build gate
+```
 
-The model contains one System, registered Subsystems, stable Elements, typed Claims, analyzer Coverage, and Diagnostics. The vocabulary is defined in `docs/semantic-language.md`.
+Parser observations, framework traces, and builder packets are not a second
+public product model.
 
-Element identity derives from subsystem, kind, and semantic key. Claim identity derives from source, relationship, and semantic slot or target. Source paths, evidence, confidence, qualifiers, and analyzer versions do not define semantic identity.
+## System Model
 
-Framework-specific analyzers may use private intermediate shapes, but they must translate them before the scanner boundary. Adding framework support must not require a new kernel object type, snapshot payload, or diff engine.
+The model contains one System, registered Subsystems, stable Elements, typed
+Claims, evidence, claim state, analyzer Coverage, and Diagnostics. Element and
+Claim identity is semantic: source paths, line numbers, analyzer versions, and
+confidence do not define identity. Framework names belong in analyzer details,
+not kernel vocabulary.
 
-## Honesty and coverage
+Every Element/Claim reports:
 
-Every Element and Claim declares evidence, observation method, claim state, and responsible capability. Coverage is one of:
+- evidence location;
+- observation method (`manifest`, `ast`, `semantic`, or `convention`);
+- claim state (`observed`, `inferred`, `unverified`, or `ambiguous`);
+- responsible analyzer coverage.
 
-- `analyzed`: relevant constructs in scope were handled;
-- `partial`: supported shapes were handled but known gaps remain;
-- `unsupported`: the area was recognized without a supporting analyzer;
-- `failed`: an expected analyzer did not complete.
+Coverage states are `analyzed`, `partial`, `unsupported`, and `failed`. Absence
+is only a meaningful claim under `analyzed` coverage.
 
-Absence may be stated only under analyzed coverage. Analyzer-version changes and coverage changes are not silently presented as application changes.
+## Parser and cache contract
 
-## Parser and performance contract
+Parsing is behind `src/scanners/treesitter.js`. Native and WASM backends must
+produce the same canonical model. Serial and worker scans, and cached and
+uncached scans, must preserve canonical model parity.
 
-Parsing remains behind `src/scanners/treesitter.js` with native and WASM backends. Cached/uncached, serial/worker, and native/WASM scans must produce canonical byte-identical System Model JSON.
+Per-file observation cache entries include `EXTRACTOR_VERSION` from
+`src/scanners/cache.js`; extraction changes must bump it. Rendering, diff, and
+report-only changes do not need a bump.
 
-The per-file observation cache key includes `EXTRACTOR_VERSION` in `src/scanners/cache.js`. Bump it whenever extraction logic changes.
+## Seed and reconciliation contract
 
-## Snapshot and diff contract
+`varai.seed.json` is human-ratified source intent. It is not generated from the
+repository and is not an analyzer IR. `varai.realization.json` and
+`varai.runtime.json` are untrusted pointers naming where the builder believes
+intent was implemented and exercised.
 
-Snapshot manifest v1 stores one content-addressed `modelObjectHash`, its `modelSchemaVersion`, Git state, scanned-tree hash, and scan-configuration hash. The configuration hash covers include and exclude scope. Clean snapshots update the shared Git commit ref; linked worktrees share the model store at `.varai/model-v1/`.
+Reconciliation is a pure deterministic projection over:
 
-Diff compares two validated System Models and separates semantic changes from evidence-only movement. It reports Element, Claim, Coverage, and confidence changes using stable semantic identities.
+```text
+ratified Seed + realization/runtime pointers + System Model + coverage
+```
+
+It persists no combined graph and never calls an LLM. Binding state and
+requirement verdict remain separate:
+
+```text
+binding:  unbound | resolved | ambiguous | stale
+verdict:  holds | violated | cannot_verify | not_checkable
+```
+
+The build gate compares a completed recorded session with its starting model.
+It blocks coverage degradation, requirement regressions, surface problems,
+failed/unrun scenarios, and violated Seed v4 state/field contracts. Existing
+`cannot_verify` results remain visible even when the change itself is ready.
+
+## Snapshots and diffs
+
+Snapshots store one content-addressed System Model object with its schema
+version, Git state, scanned-tree hash, and scan-configuration hash. Diff
+compares validated models and separates semantic changes from evidence movement.
+
+## CLI surface
+
+The supported command groups are:
+
+- `create`, `start`;
+- `map`, `snapshot`, `log`, `diff`, `progression`;
+- `seed validate|approve|migrate`, `handoff`;
+- `build begin|run|message|stop|close|status`;
+- `check`, `realization lint`, `runtime derive`, `verify scenarios`.
+
+Run `varai --help` for flags. The root README gives the shortest examples.
 
 ## Non-goals
 
-- exhaustive language/framework coverage;
-- runtime correctness without runtime evidence;
-- intent recovery from implementation;
-- hosted repository analysis;
-- LLM-created findings;
-- architecture diagrams before model evidence stabilizes.
+The implementation does not promise exhaustive framework coverage, hosted
+repository analysis, LLM-created findings, runtime correctness without runtime
+evidence, deployment orchestration, general invariant proving, or intent
+recovery from code.

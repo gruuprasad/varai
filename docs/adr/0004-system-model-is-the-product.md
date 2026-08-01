@@ -2,6 +2,10 @@
 
 Status: Accepted
 
+Current-status note: ADR 0009 adds a managed local builder and Develop
+conversation around this model. It does not change the model boundary: Seed,
+builder/session evidence, and reconciliation remain separate projections.
+
 ## Context
 
 Varai began as an evidence report and later added a concept-level diff over facts and framework-shaped behavior cards. Dogfooding showed that neither a flat inventory nor a diff alone answers the user's main question: “What system exists here, at a level I can reason about without reading all the code?”

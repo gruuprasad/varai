@@ -2,6 +2,11 @@
 
 Status: Accepted
 
+Current-status note: ADR 0009 supersedes the older statement that Varai is only
+a control room around an external builder. Varai now owns the local
+conversation-to-build lifecycle. This ADR still defines the constrained proof
+boundary and the evidence rules.
+
 ## Context
 
 ADR 0006 closed the intent → build → verify loop, but the pilot exposed what the
@@ -28,7 +33,7 @@ exactly that.
 ### Product
 
 Varai is a **local product control room for AI-built operational software**, not
-a general AI IDE and not a prompt-to-app builder. A person authors and approves
+a general AI IDE. A person authors and approves
 roles, workflows, product surfaces, and concrete behavioral scenarios; an
 interchangeable AI builder implements the approved change inside a recorded
 build session; Varai independently checks the result and makes missing, extra,

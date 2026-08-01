@@ -31,7 +31,7 @@ const populated = {
     observation: "missing",
     result: "failed",
     evidenceIds: ["scenario.happy", "status-mismatch"],
-    steps: [{ as: "requester", invoke: "behavior.submit" }],
+    steps: [{ as: "requester", invoke: "behavior.submit", expect: { status: 403 } }],
   }],
   stateModels: [{
     resourceId: "resource.request",
@@ -53,17 +53,29 @@ const populated = {
   ambiguous: [{ surfaceId: "surface.stale", observation: "ambiguous", evidenceIds: ["surface.stale"] }],
 };
 
-test("empty blueprint renders an empty control-room state", () => {
+test("empty system lens tells the user how to create the system", () => {
   const html = renderBlueprint(empty);
-  assert.match(html, /blueprint-empty|No product blueprint/i);
+  assert.match(html, /blueprint-empty|Describe and approve the application/i);
   assert.doesNotMatch(html, /observation-realized/);
 });
 
-test("blueprint renders actors, behaviors, surfaces, scenarios with observation chips and evidence ids", () => {
+test("system lens renders human concepts first and keeps technical evidence available", () => {
   const html = renderBlueprint(populated);
+  assert.match(html, /Human-level system view/);
+  assert.match(html, /approved behaviors/);
+  assert.match(html, /Seen<\/strong> means evidence was found, not that every outcome is proven/);
+  assert.match(html, /Review first/);
+  assert.match(html, /What the application does/);
+  assert.match(html, /Approved journeys/);
+  assert.match(html, /Ways into the application/);
   assert.match(html, /Employee/);
   assert.match(html, /Submit API/);
   assert.match(html, /Happy path/);
+  assert.match(html, /Seen in the application/);
+  assert.match(html, /Not found/);
+  assert.match(html, /Why Varai says this/);
+  assert.match(html, /Evidence references/);
+  assert.match(html, /Expected: is refused/);
   assert.match(html, /observation-realized/);
   assert.match(html, /observation-missing/);
   assert.match(html, /observation-unaccounted/);
@@ -71,6 +83,16 @@ test("blueprint renders actors, behaviors, surfaces, scenarios with observation 
   assert.match(html, /data-evidence-id="surface\.submit-ui"/);
   assert.match(html, /data-evidence-id="scenario\.happy"/);
   assert.match(html, /data-evidence-id="DELETE \/x"/);
+});
+
+test("system lens leads with verifier decisions that block readiness", () => {
+  const html = renderBlueprint(populated, {
+    decisions: [{ kind: "failed_scenario", label: "Owner cannot withdraw" }],
+  });
+  assert.match(html, /Check first/);
+  assert.match(html, /currently block readiness/);
+  assert.match(html, /Approved journey failed/);
+  assert.match(html, /Owner cannot withdraw/);
 });
 
 test("unknown and red observation chips always carry a stable evidence id", () => {
@@ -102,10 +124,10 @@ test("blueprint escapes XSS in names", () => {
 
 test("blueprint renders flows and state models with readiness and transition chips", () => {
   const html = renderBlueprint(populated);
-  assert.match(html, /Flows/);
+  assert.match(html, /Connected work/);
   assert.match(html, /flow\.request-cycle/);
-  assert.match(html, /2\/2 hold/);
-  assert.match(html, /State models/);
-  assert.match(html, /starts pending/);
-  assert.match(html, /pending.*→.*approved/s);
+  assert.match(html, /2 of 2 checks hold/);
+  assert.match(html, /How information changes/);
+  assert.match(html, /Starts as pending/);
+  assert.match(html, /pending.*becomes.*approved/s);
 });

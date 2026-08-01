@@ -40,6 +40,11 @@ export async function detectStacks(repoPath, files = []) {
     stacks.add("prisma");
   }
 
+  if (files.some((file) => String(file).endsWith(".py"))) {
+    stacks.add("python-common");
+    stacks.add("python-httpserver");
+  }
+
   if (pyprojectToml !== null) {
     stacks.add("python-common");
     if (/\bfastapi\b/i.test(pyprojectToml)) stacks.add("fastapi");

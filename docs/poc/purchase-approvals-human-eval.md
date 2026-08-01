@@ -1,5 +1,9 @@
 # Purchase Approvals — Human Evaluation Protocol
 
+> Historical evaluation protocol. It remains the recommended human-learning
+> template, but it targets the earlier purchase-approval pilot rather than the
+> current Signal demonstration.
+
 Protocol from Gate 8 of
 [product-control-room.md](../product-control-room.md) and the product-control-room
 POC plan (`docs/superpowers/plans/2026-07-28-product-control-room-poc.md` on the

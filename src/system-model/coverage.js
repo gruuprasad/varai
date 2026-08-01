@@ -9,6 +9,7 @@ const EXTRACTOR_CAPABILITIES = Object.freeze({
   "prisma.models.v1": [["data", "data.entity"]],
   "react-vite.ui.v2": [["ui", "ui.screen"], ["ui", "ui.component"], ["ui", "ui.action"], ["ui", "ui.availability"], ["data", "data.state"]],
   "python.schemas.v1": [["data", "data.contract"]],
+  "python-httpserver.routes.v1": [["api", "api.operation"]],
   "base.runnables.v1": [["cli", "cli.command"], ["service", "service.process"]],
 });
 

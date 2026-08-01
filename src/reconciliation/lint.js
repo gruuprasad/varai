@@ -87,7 +87,7 @@ function lintBindingRecord(model, record, artifact, lensOf) {
 
 function summaryOf(records) {
   const summary = { total: records.length, resolved: 0, ambiguous: 0, notFound: 0, stale: 0 };
-  for (const record of records) summary[record.state] += 1;
+  for (const record of records) summary[record.state === "not-found" ? "notFound" : record.state] += 1;
   return summary;
 }
 
@@ -145,4 +145,3 @@ export function lintIsActionable(lint) {
     .some((record) => record.state !== "resolved");
   return lint.valid && !anyUnresolved;
 }
-

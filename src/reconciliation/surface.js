@@ -40,6 +40,7 @@ function elementRef(element) {
     key: element.key,
     kind: element.kind,
     name: element.name,
+    ...((element.evidence?.length ? { evidence: [...element.evidence] } : {})),
   };
 }
 

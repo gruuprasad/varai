@@ -2,6 +2,11 @@
 
 Status: Accepted
 
+Current-status note: The Seed v4 structures and their readiness checks are
+implemented. They remain evidence-limited where the selected analyzer cannot
+observe a resource or effect; the result is explicit `cannot_verify`, not an
+implicit hold.
+
 ## Context
 
 ADR 0007's gap list says the rules that make operational software trustworthy —

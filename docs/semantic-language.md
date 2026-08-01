@@ -1,11 +1,17 @@
 # Varai Semantic Language
 
-Status: Draft v0.1  
-Date: 2026-07-18
+Status: Normative reference (System Model v1 / Seed v4)
+Date: 2026-08-01
+
+The product workflow around this language is documented in
+[product-control-room.md](product-control-room.md). This file defines the
+vocabulary; it does not describe a second intermediate representation.
 
 ## Purpose
 
-Varai translates source code into a system-level language that lets a builder understand a software project without reading its implementation.
+Varai translates repository evidence into a system-level language that lets a
+person and an AI builder reason about a software project without reading every
+implementation detail.
 
 This document defines that language before it defines a storage schema. Future IRs, adapters, renderers, diffs, checks, and explanations must encode or project this language; they must not grow an accidental vocabulary independently.
 

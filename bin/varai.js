@@ -10,6 +10,7 @@ import { runProgression } from "../src/evolution/commands.js";
 import { runDiff, runLog, runSnapshot } from "../src/semantic-commands.js";
 import { runVerifyScenarios } from "../src/runtime/commands.js";
 import { runRuntimeDerive } from "../src/runtime/commands.js";
+import { runCreate } from "../src/project/create.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -18,6 +19,7 @@ function usage() {
   return `Varai — a lens for your codebase
 
 Usage:
+  varai create <project-path> [--builder codex]
   varai map [<repo-path>] [--include <prefix>]... [options]
   varai start [<repo-path>] [--port <N>] [--no-open] [scan options]
   varai snapshot [<repo-path>] [scan options]
@@ -150,6 +152,18 @@ async function main() {
 
   if (command === "map") {
     await runMap(parseMapOptions(args.slice(1)));
+    return;
+  }
+
+  if (command === "create") {
+    const opts = {};
+    const rest = args.slice(1);
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === "--builder" && rest[i + 1]) opts.builder = rest[++i];
+      else if (!rest[i].startsWith("-") && !opts.repo) opts.repo = rest[i];
+      else throw new Error(`Unknown create option: ${rest[i]}`);
+    }
+    runCreate(opts);
     return;
   }
 

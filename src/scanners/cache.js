@@ -2,7 +2,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, readFile, rename } from "node:fs/promises";
 
-export const EXTRACTOR_VERSION = 28; // Body traces skip signature mechanics; declared constructors are known
+export const EXTRACTOR_VERSION = 30; // Python stdlib HTTP page aliases no longer duplicate API surfaces
 
 
 const CACHE_FORMAT_VERSION = 1;

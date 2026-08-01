@@ -3,6 +3,11 @@
 *Status: exploratory essay, not a specification. The load-bearing mechanism
 described here is not yet proven to work.*
 
+*Current product shape: Varai now implements the conversation → Seed → local
+builder → independent verification loop described here. See
+[product-control-room.md](product-control-room.md) for the implementation
+contract and [roadmap.md](roadmap.md) for what remains unproven.*
+
 *Provenance: this piece was written by an AI (Claude) as a faithful synthesis of
 an extended thinking session with Varai's author. It is published as an
 AI-generated record of that reasoning — not to imply the author wrote it, and not

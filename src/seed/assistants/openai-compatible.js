@@ -6,7 +6,7 @@ import { CONCEPT_ROLES, RECORDED_ONLY_RELATIONS, SEED_RELATIONS, SURFACE_ACCESS,
 // based credential. It sends only the conversation and the current seed —
 // never repository code — and never writes or ratifies anything.
 
-const SYSTEM_PROMPT = `You draft Varai seed proposals. A seed is human-ratified source intent for a software system.
+export const SYSTEM_PROMPT = `You draft Varai seed proposals. A seed is human-ratified source intent for a software system.
 Reply with ONLY a JSON object of the form:
 {
   "draft": { "formatVersion": 4, "system": {"id": ..., "name": ...}, "concepts": [...], "commitments": [...], "surfaces": [...], "scenarios": [...], "flows": [...], "context": [...] } | null,
@@ -16,19 +16,31 @@ Reply with ONLY a JSON object of the form:
 Rules:
 - Concept roles: ${CONCEPT_ROLES.join(", ")}. Concept ids look like "behavior.book-slot".
 - Checkable relations: ${SEED_RELATIONS.filter((relation) => !RECORDED_ONLY_RELATIONS.includes(relation)).join(", ")}. Commitment targets are {"concept": "<id>"} or {"literal": "<scalar>"}.
-- Commitment ids look like "commitment.booking-creates-booking". Every commitment has "expectation": "present" or "absent".
+- Commitments have exactly { "id": "commitment.booking-creates-booking", "source": "behavior.book-slot", "relation": "creates", "target": { "concept": "resource.booking" }, "expectation": "present" }. Use source, never subject.
 - Surfaces (ids like "surface.withdraw-request-api") name one externally reachable way into the system: behavior concept, channel (${SURFACE_CHANNELS.join("|")}), access (${SURFACE_ACCESS.join("|")}). No HTTP paths, files, symbols, or framework names in surfaces.
-- Scenarios (ids like "scenario.owner-can-withdraw") are bounded ordered examples only: non-empty principals (each \`as\` slug bound to an actor concept), non-empty sequential steps (each \`as\` a declared principal, \`invoke\` a behavior), scalar/JSON \`input\` (optional \`$capture.path\` refs), optional \`capture\`, and required \`expect.status\` (integer) with optional partial \`expect.body\`. No concurrency, windows, performance, expressions, DB inspection, or test code. The \`scenarios\` array itself may be empty when the human has not authored examples yet; each scenario entry must have principals and steps.
+- Scenarios (ids like "scenario.owner-can-withdraw") are bounded ordered examples only. Principals have exactly { "as": "owner", "actor": "actor.owner" }. Every step has a lower-kebab "id", "as" bound to a principal, "invoke" bound to a behavior, optional scalar/JSON "input", optional lower-kebab string "capture" naming the whole response, and required { "expect": { "status": 200, "body": { ...optional partial body... } } }. Later inputs may use refs like "$digest.body.briefs" where digest is a prior capture. No concurrency, windows, performance, expressions, DB inspection, or test code.
 - Keep stable ids when renaming; never invent a relation outside the list.
 - Seed format 4: a resource concept may declare a \`stateModel\` ({ "initial": "<state>", "states": ["<state>", ...], "transitions": [{ "from": "<state>", "to": "<state>", "via": ["behavior.<id>", ...] }] }) — every transition names declared from/to states and one or more behavior concepts that realize it. Declared transitions are checked for literal target-state assignments with from-state/path evidence; a bare assignment never proves a transition, so only declare transitions the product actually restricts.
 - Seed format 4: a resource concept may declare \`fields\` ([{ "name": "<field_name>", "type": "string|integer|number|boolean|datetime|date|time|uuid|object|array", "required": true|false }]) — the data shape the product needs. Declare only fields that must exist; optional fields may be omitted.
 - Seed format 4: \`flows\` (ids like "flow.request-lifecycle") group behavior members behind one surface entry: { "id": ..., "name": ..., "entry": "surface.<id>", "members": ["behavior.<id>", ...] }.
+- Field names are lower snake_case. Context is an array of objects shaped exactly { "id": "context.some-limit", "text": "..." }, never strings.
 - Prefer a small set of meaningful commitments. Put anything uncheckable in "unsupported", never in commitments.`;
 
-function stripCodeFences(text) {
+export function stripCodeFences(text) {
   const trimmed = String(text).trim();
   const fenced = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/);
   return fenced ? fenced[1] : trimmed;
+}
+
+export function parseProposalJson(text) {
+  const stripped = stripCodeFences(text);
+  try { return JSON.parse(stripped); }
+  catch {
+    const start = stripped.indexOf("{");
+    const end = stripped.lastIndexOf("}");
+    if (start >= 0 && end > start) return JSON.parse(stripped.slice(start, end + 1));
+    throw new Error("Assistant proposal was not valid JSON");
+  }
 }
 
 export function createOpenAICompatibleAssistant({ endpoint, model, apiKey, fetchImpl } = {}) {
@@ -62,7 +74,7 @@ export function createOpenAICompatibleAssistant({ endpoint, model, apiKey, fetch
       if (!content) throw new Error("Assistant returned no proposal content");
       let parsed;
       try {
-        parsed = JSON.parse(stripCodeFences(content));
+        parsed = parseProposalJson(content);
       } catch {
         throw new Error("Assistant proposal was not valid JSON");
       }

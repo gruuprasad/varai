@@ -150,3 +150,27 @@ An exact literal condition observed from a recognized guard pattern
 (`api.authorization`): identity factories yield "authenticated", role calls
 yield their literal argument, otherwise the factory name. Unrecognized guard
 shapes degrade coverage to `partial`; absence is never inferred from them.
+
+## Develop conversation
+
+The primary Varai dashboard surface for product authoring, builder messages,
+clarifications, and verification evidence. It is a projection over the Seed and
+build records, not a fourth authority.
+
+## Product assistant
+
+The local command that helps turn conversation into a structured Seed draft. It
+is advisory, receives no repository code, and cannot ratify intent or set a
+verdict.
+
+## Builder adapter
+
+A replaceable local process boundary that receives an approved build packet and
+may modify the project. The current generated-project adapter invokes Codex
+CLI with `gpt-5.6-luna`; builder output remains untrusted evidence.
+
+## Black-box verifier
+
+An optional human or AI-assisted review of the running application's behavior.
+It may identify a semantic concern, but its report is advisory and cannot
+override deterministic scenarios, coverage, reconciliation, or human approval.

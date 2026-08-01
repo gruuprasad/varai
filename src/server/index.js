@@ -17,6 +17,7 @@ import { createBuilderHandlers } from "./builder.js";
 import { createControlRoomHandlers } from "./control-room.js";
 import { createEvolutionHandler } from "./evolution.js";
 import { assistantFromEnvironment } from "../seed/assistants/openai-compatible.js";
+import { createCommandSeedAssistant } from "../seed/assistants/command.js";
 import { displayLanguage } from "../reporters/display-language.js";
 import { serializeProjections } from "./projections.js";
 import { analyzeCurrentInWorker, AnalyzeAbortedError } from "./analyze-in-worker.js";
@@ -172,7 +173,9 @@ export async function startServer({
   const seedHandlers = createSeedHandlers({
     repoPath: absRepo,
     port,
-    assistant: seedAssistant === undefined ? assistantFromEnvironment() : seedAssistant,
+    assistant: seedAssistant === undefined
+      ? (config.assistant ? createCommandSeedAssistant(config.assistant) : assistantFromEnvironment())
+      : seedAssistant,
     broadcast,
   });
   const reconciliationHandler = createReconciliationHandler({ repoPath: absRepo, getModel: seedGetModel });

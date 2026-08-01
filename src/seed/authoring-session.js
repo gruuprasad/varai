@@ -5,6 +5,7 @@ import path from "node:path";
 // drafting conversation recoverable across dashboard restarts without ever
 // making an assistant proposal executable intent.
 const SESSION_FILE = path.join(".varai", "authoring-v1", "session.json");
+const APPROVED_DIR = path.join(".varai", "authoring-v1", "approved");
 
 export function authoringSessionPath(repoPath) {
   const root = path.resolve(repoPath);
@@ -41,4 +42,29 @@ export function writeAuthoringSession(repoPath, session) {
 export function clearAuthoringSession(repoPath) {
   try { fs.unlinkSync(authoringSessionPath(repoPath)); }
   catch (error) { if (error.code !== "ENOENT") throw error; }
+}
+
+function approvedSessionPath(repoPath, contentHash) {
+  const name = String(contentHash).replace(/^sha256:/, "");
+  if (!/^[a-f0-9]{64}$/.test(name)) throw new Error("Approved authoring session requires a Seed content hash");
+  return path.join(path.resolve(repoPath), APPROVED_DIR, `${name}.json`);
+}
+
+export function archiveAuthoringSession(repoPath, contentHash) {
+  const session = readAuthoringSession(repoPath);
+  if (!session) return null;
+  atomicWrite(approvedSessionPath(repoPath, contentHash), session);
+  clearAuthoringSession(repoPath);
+  return session;
+}
+
+export function readApprovedAuthoringSession(repoPath, contentHash) {
+  if (!contentHash) return null;
+  const target = approvedSessionPath(repoPath, contentHash);
+  if (!fs.existsSync(target)) return null;
+  const value = JSON.parse(fs.readFileSync(target, "utf8"));
+  if (value?.formatVersion !== 1 || !Array.isArray(value.conversation)) {
+    throw new Error(`Invalid approved authoring session at ${target}`);
+  }
+  return value;
 }

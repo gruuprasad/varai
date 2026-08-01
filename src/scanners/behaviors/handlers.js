@@ -17,6 +17,7 @@ export async function findHandlers(routeFacts, ctx) {
     const tree = await ctx.tree(file, "python");
     if (!tree) continue;
     const decorated = await queryTree(tree, "python", "(decorated_definition) @dd");
+    const functions = await queryTree(tree, "python", "(function_definition) @fn");
 
     // Map decorator line -> function_definition node.
     const lineToFn = new Map();
@@ -33,7 +34,11 @@ export async function findHandlers(routeFacts, ctx) {
     }
 
     for (const fact of facts) {
-      const handlerNode = lineToFn.get(fact.evidence[0].line);
+      const evidenceLine = fact.evidence[0].line;
+      const handlerNode = lineToFn.get(evidenceLine) ?? functions
+        .map(({ node }) => node)
+        .filter((node) => node.startPosition.row + 1 <= evidenceLine && node.endPosition.row + 1 >= evidenceLine)
+        .sort((a, b) => (a.endPosition.row - a.startPosition.row) - (b.endPosition.row - b.startPosition.row))[0];
       if (!handlerNode) continue;
       const spaceIdx = fact.name.indexOf(" ");
       if (spaceIdx === -1) continue;

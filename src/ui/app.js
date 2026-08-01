@@ -9,6 +9,7 @@ import {
 } from "./intent-view.js";
 import { renderBlueprint } from "./blueprint-view.js";
 import { renderBuild } from "./build-view.js";
+import { renderDevelop } from "./develop-view.js";
 import { renderVerification } from "./verification-view.js";
 import { renderReport } from "./report-view.js";
 import {
@@ -42,7 +43,7 @@ if (el.backBtn) {
   });
 }
 
-let activeView = "blueprint";
+let activeView = "develop";
 let progressionData = null;
 let controlRoomData = null;
 let expandedId = null;
@@ -73,8 +74,10 @@ fetch("/api/diff").then((response) => response.json()).then((data) => { diffData
 fetch("/api/progression").then((response) => response.json()).then((data) => { progressionData = data; render(); }).catch(() => {});
 
 function refreshSeed() {
-  fetch("/api/seed").then((response) => response.json()).then((data) => { seedData = data; render(); }).catch(() => {});
-  fetch("/api/reconciliation").then((response) => response.json()).then((data) => { reconciliationData = data; render(); }).catch(() => {});
+  return Promise.all([
+    fetch("/api/seed").then((response) => response.json()).then((data) => { seedData = data; }),
+    fetch("/api/reconciliation").then((response) => response.json()).then((data) => { reconciliationData = data; }),
+  ]).then(render).catch(() => {});
 }
 function refreshControlRoom() {
   return fetch("/api/control-room").then((response) => response.json()).then((data) => { controlRoomData = data; render(); }).catch(() => {});
@@ -172,6 +175,7 @@ function emptyDetailPlaceholder(title = "Select an item", message = "Select an i
 function render() {
   renderTopbar();
   renderNav();
+  if (activeView === "develop") { renderDevelopView(); return; }
   if (activeView === "blueprint") { renderBlueprintView(); return; }
   if (activeView === "intent" || activeView === "change") { renderIntent(); return; }
   if (activeView === "build") { renderBuildView(); return; }
@@ -201,6 +205,7 @@ function renderTopbar() {
 }
 
 const NAV_ICONS = {
+  develop: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
   blueprint: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg>`,
   change: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
   build: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
@@ -225,7 +230,8 @@ const MAP_MODES = [
 function renderNav() {
   const changes = diffData?.diff?.summary?.semanticChanges ?? 0;
   el.sidebarNav.innerHTML =
-    navItem("blueprint", "▦", "Blueprint", null) +
+    navItem("develop", "✦", "Develop", null) +
+    navItem("blueprint", "▦", "System", null) +
     navItem("change", "✦", "Change", null) +
     navItem("build", "▸", "Build", null) +
     navItem("verify", "✓", "Verify", null) +
@@ -482,8 +488,9 @@ function bindComposer(draft) {
     });
     const data = await response.json();
     if (!response.ok) { alert(data.error ?? "Ratification failed"); return; }
-    refreshSeed();
-    refreshControlRoom();
+    await Promise.all([refreshSeed(), refreshControlRoom()]);
+    activeView = "develop";
+    render();
   });
 }
 
@@ -547,8 +554,35 @@ function bindEvidenceFocus() {
 function renderBlueprintView() {
   hideSearch();
   const blueprint = controlRoomData?.blueprint ?? { empty: true };
-  renderPanes(renderBlueprint(blueprint), "", { inlineExpand: true });
+  renderPanes(renderBlueprint(blueprint, controlRoomData?.verification), "", { inlineExpand: true });
   bindEvidenceFocus();
+}
+
+function renderDevelopView() {
+  hideSearch();
+  renderPanes(renderDevelop({ seed: seedData ?? {}, controlRoom: controlRoomData ?? {} }), "", { inlineExpand: true });
+  $("develop-review")?.addEventListener("click", () => { activeView = "intent"; render(); });
+  $("develop-send")?.addEventListener("click", async (event) => {
+    const message = $("develop-message")?.value?.trim();
+    if (!message) return;
+    const target = event.currentTarget.dataset.target;
+    const response = await fetch(target === "builder" ? "/api/build/message" : "/api/seed/draft", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }),
+    });
+    const data = await response.json();
+    if (!response.ok) { alert(data.error ?? "Message failed"); return; }
+    await Promise.all([refreshSeed(), refreshControlRoom()]);
+  });
+  $("develop-build")?.addEventListener("click", async () => {
+    const adapter = $("develop-adapter")?.value;
+    if (!adapter) return;
+    const response = await fetch("/api/build/run", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adapter }),
+    });
+    const data = await response.json();
+    if (!response.ok) { alert(data.error ?? "Build failed to start"); return; }
+    await refreshControlRoom();
+  });
 }
 
 function renderBuildView() {
