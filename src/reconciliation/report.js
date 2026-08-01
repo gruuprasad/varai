@@ -4,6 +4,7 @@
 
 import { verdictLabel, bindingStateLabel, reasonLabel } from "../reporters/display-language.js";
 import { renderSurfacesSection } from "./surface-report.js";
+import { lintIsActionable } from "./lint.js";
 
 function formatTarget(target) {
   if (target?.concept !== undefined) return target.concept;
@@ -84,6 +85,46 @@ export function renderCheckText(report, { model } = {}) {
     lines.push("");
   }
 
+  if (report.stateModels?.length) {
+    lines.push("State models (declared transitions)");
+    for (const section of report.stateModels) {
+      lines.push(`  ${section.resourceId} (starts ${section.initial})`);
+      for (const transition of section.transitions) {
+        const label = transition.verdict === "holds" ? "transition holds"
+          : transition.verdict === "violated" ? "transition VIOLATED"
+            : "transition cannot verify";
+        lines.push(`    ${label}  ${transition.from} -> ${transition.to} via ${transition.via.join(", ")}`);
+        if (transition.reasons?.length) lines.push(`      why: ${transition.reasons.join("; ")}`);
+        if (transition.evidence?.length) {
+          lines.push(`      evidence: ${transition.evidence.map(formatEvidence).join("; ")}`);
+        }
+      }
+    }
+    lines.push("");
+  }
+  if (report.fieldContracts?.length) {
+    lines.push("Field contracts (declared shapes)");
+    for (const section of report.fieldContracts) {
+      for (const field of section.fields) {
+        const label = field.verdict === "holds" ? "field holds"
+          : field.verdict === "violated" ? `field VIOLATED (${field.reasons.join("; ")})`
+            : "field cannot verify";
+        lines.push(`  ${label}  ${section.resourceId}.${field.name} (${field.declared.type}${field.declared.required ? "" : ", optional"})`);
+      }
+    }
+    lines.push("");
+  }
+  if (report.flows?.length) {
+    lines.push("Flows");
+    for (const flow of report.flows) {
+      const parts = flow.memberReadiness.map((item) =>
+        `${item.member}: ${item.holds}/${item.commitments} hold${item.violated ? `, ${item.violated} violated` : ""}${item.cannotVerify ? `, ${item.cannotVerify} unverified` : ""}`);
+      lines.push(`  ${flow.id} (${flow.name}) — entry ${flow.entry}; ${parts.join("; ")}`);
+    }
+    lines.push("");
+  }
+
+
   const { summary } = report;
   lines.push([
     `${summary.total} requirements:`,
@@ -96,3 +137,42 @@ export function renderCheckText(report, { model } = {}) {
   ].join(" "));
   return `${lines.join("\n")}\n`;
 }
+
+// Deterministic text rendering of a realization lint result. Candidates are
+// ranked suggestions for the builder's next selector; they never change a
+// verdict and lint never picks one.
+export function renderLintText(lint, { model } = {}) {
+  const lines = [];
+  const elementNames = new Map((model?.elements ?? []).map((element) => [element.id, element.name]));
+  lines.push(`Realization lint — spec ${lint.seedHash.slice(0, 16)}… (${lint.seedMatches ? "matches" : "OUT OF DATE"})`);
+  for (const problem of lint.problems) {
+    lines.push(`  [${problem.code}] ${problem.message}`);
+  }
+  const renderRecord = (record) => {
+    lines.push(`  ${record.state}  ${record.id}`);
+    if (record.elementIds?.length) {
+      lines.push(`    matches: ${record.elementIds.map((id) => elementNames.get(id) ?? id).join(", ")}`);
+    }
+    if (record.candidates?.length) {
+      lines.push(`    candidates (ranked, never chosen):`);
+      for (const candidate of record.candidates) {
+        const label = candidate.score == null
+          ? elementNames.get(candidate.elementId) ?? candidate.key
+          : `${candidate.score} ${elementNames.get(candidate.elementId) ?? candidate.key} [${candidate.kind}]`;
+        lines.push(`      ${label}`);
+      }
+    }
+  };
+  if (lint.bindings.length) {
+    lines.push(`Concept bindings (${lint.summary.bindings.resolved} resolved, ${lint.summary.bindings.ambiguous} ambiguous, ${lint.summary.bindings.notFound} not found, ${lint.summary.bindings.stale} stale):`);
+    for (const record of lint.bindings) renderRecord(record);
+  }
+  if (lint.surfaceBindings.length) {
+    lines.push(`Surface bindings (${lint.summary.surfaceBindings.resolved} resolved, ${lint.summary.surfaceBindings.ambiguous} ambiguous, ${lint.summary.surfaceBindings.notFound} not found, ${lint.summary.surfaceBindings.stale} stale):`);
+    for (const record of lint.surfaceBindings) renderRecord(record);
+  }
+  if (lintIsActionable(lint)) lines.push("Actionable: every binding resolves; the witness is ready for check.");
+  else lines.push("Actionable: no — fix the problems above, then lint again.");
+  return `${lines.join("\n")}\n`;
+}
+

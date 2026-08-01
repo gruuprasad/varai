@@ -1,4 +1,5 @@
 import { seedContentHash } from "./identity.js";
+import { diffSeeds } from "./diff.js";
 import { RECORDED_ONLY_RELATIONS, SEED_RELATIONS, SURFACE_ACCESS, SURFACE_CHANNELS } from "./schema.js";
 
 // Vendor-neutral build packet (ADR 0005): a plain Markdown document the user
@@ -36,7 +37,9 @@ function expectationText(commitment) {
   return commitment.expectation === "absent" ? "must not" : commitment.relation;
 }
 
-export function renderBuildPacket({ seed, brief } = {}) {
+// Shared ratification guard for every handoff projection: only ratified seed
+// content with a matching hash may leave the building.
+function assertRatifiedSeed(seed) {
   if (seed?.ratification?.status !== "ratified") {
     throw new Error("This spec is not approved yet; approve it before creating a build packet.");
   }
@@ -44,6 +47,85 @@ export function renderBuildPacket({ seed, brief } = {}) {
   if (seed.ratification.contentHash !== contentHash) {
     throw new Error("The spec changed since it was approved; approve it again before creating a build packet.");
   }
+  return contentHash;
+}
+
+function byId(items) {
+  return new Map((items ?? []).map((item) => [item.id, item]));
+}
+
+// Carry-forward candidates from the latest prior `ready` session. A mapping is
+// a candidate only when the Seed ID it references still exists and its relevant
+// Seed definition is unchanged — never an assertion that the mapping is still
+// valid. The builder must lint candidates against the current System Model.
+export function carryForwardCandidates({ baselineSeed, baselineRealization, currentSeed, changes }) {
+  const currentConcepts = byId(currentSeed.concepts);
+  const currentCommitments = byId(currentSeed.commitments);
+  const currentSurfaces = byId(currentSeed.surfaces);
+  const removedConcepts = new Set((changes?.concepts?.removed ?? []).map((item) => item.id));
+  const changedConcepts = new Set((changes?.concepts?.changed ?? []).map((item) => item.after?.id));
+  const removedCommitments = new Set((changes?.commitments?.removed ?? []).map((item) => item.id));
+  const changedCommitments = new Set((changes?.commitments?.changed ?? []).map((item) => item.after?.id));
+  const removedSurfaces = new Set((changes?.surfaces?.removed ?? []).map((item) => item.id));
+  const changedSurfaces = new Set((changes?.surfaces?.changed ?? []).map((item) => item.after?.id));
+
+  const bindings = (baselineRealization?.bindings ?? [])
+    .filter((binding) => currentConcepts.has(binding.concept)
+      && !removedConcepts.has(binding.concept) && !changedConcepts.has(binding.concept))
+    .map((binding) => ({ id: binding.id, concept: binding.concept, artifact: binding.artifact }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+
+  const carriedBindingIds = new Set(bindings.map((binding) => binding.id));
+  const surfaceBindings = (baselineRealization?.surfaceBindings ?? [])
+    .filter((binding) => currentSurfaces.has(binding.surface)
+      && !removedSurfaces.has(binding.surface) && !changedSurfaces.has(binding.surface))
+    .map((binding) => ({ id: binding.id, surface: binding.surface, artifact: binding.artifact }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+
+  const witnesses = (baselineRealization?.witnesses ?? [])
+    .filter((witness) => currentCommitments.has(witness.commitment)
+      && !removedCommitments.has(witness.commitment) && !changedCommitments.has(witness.commitment)
+      && carriedBindingIds.has(witness.sourceBinding))
+    .map((witness) => ({ commitment: witness.commitment, sourceBinding: witness.sourceBinding, target: witness.target }))
+    .sort((a, b) => `${a.commitment} ${a.sourceBinding}`.localeCompare(`${b.commitment} ${b.sourceBinding}`));
+
+  return { bindings, surfaceBindings, witnesses };
+}
+
+export function renderBuildPacketJson({ seed, brief, baseline } = {}) {
+  const contentHash = assertRatifiedSeed(seed);
+  const packet = renderBuildPacket({ seed, brief });
+  if (!baseline) {
+    return {
+      formatVersion: 1,
+      system: seed.system,
+      contentHash,
+      packet,
+      baseline: { present: false, sessionId: null, seedHash: null },
+      changes: null,
+      carryForwardCandidates: { present: false, bindings: [], surfaceBindings: [], witnesses: [] },
+    };
+  }
+  const changes = diffSeeds(baseline.seed, seed);
+  const candidates = carryForwardCandidates({
+    baselineSeed: baseline.seed,
+    baselineRealization: baseline.realization ?? null,
+    currentSeed: seed,
+    changes,
+  });
+  return {
+    formatVersion: 1,
+    system: seed.system,
+    contentHash,
+    packet,
+    baseline: { present: true, sessionId: baseline.sessionId, seedHash: seedContentHash(baseline.seed) },
+    changes,
+    carryForwardCandidates: { present: true, ...candidates },
+  };
+}
+
+export function renderBuildPacket({ seed, brief } = {}) {
+  const contentHash = assertRatifiedSeed(seed);
 
   const lines = [];
   lines.push(`# Build packet — ${seed.system.name}`);
@@ -68,6 +150,18 @@ export function renderBuildPacket({ seed, brief } = {}) {
   lines.push("");
   for (const concept of [...seed.concepts].sort((a, b) => a.id.localeCompare(b.id))) {
     lines.push(`- \`${concept.id}\` (${concept.role}): ${concept.name}${concept.summary ? ` — ${concept.summary}` : ""}`);
+    if (concept.stateModel) {
+      const transitions = (concept.stateModel.transitions ?? [])
+        .map((transition) => `${transition.from} -> ${transition.to} via ${transition.via.join(", ")}`)
+        .join("; ");
+      lines.push(`  state model: starts ${concept.stateModel.initial}; ${transitions}`);
+    }
+    if (Array.isArray(concept.fields) && concept.fields.length) {
+      const fields = concept.fields
+        .map((field) => `${field.name}: ${field.type}${field.required === false ? " (optional)" : ""}`)
+        .join(", ");
+      lines.push(`  fields: ${fields}`);
+    }
   }
   lines.push("");
   if (Array.isArray(seed.surfaces) && seed.surfaces.length) {
@@ -100,6 +194,15 @@ export function renderBuildPacket({ seed, brief } = {}) {
     }
     lines.push("");
   }
+  if (Array.isArray(seed.flows) && seed.flows.length) {
+    lines.push("## Flows");
+    lines.push("");
+    for (const flow of [...seed.flows].sort((a, b) => a.id.localeCompare(b.id))) {
+      lines.push(`- \`${flow.id}\`: ${flow.name} — entry \`${flow.entry}\`; members: ${flow.members.join(", ")}`);
+    }
+    lines.push("");
+  }
+  lines.push("## Requirements");
   lines.push("## Requirements");
   lines.push("");
   for (const commitment of [...seed.commitments].sort((a, b) => a.id.localeCompare(b.id))) {

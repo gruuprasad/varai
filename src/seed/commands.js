@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { renderBuildPacket } from "./handoff.js";
+import { loadLatestReadyBaseline } from "../build-session/commands.js";
+import { emitHandoffSchemas } from "../reconciliation/json-schema.js";
+import { renderBuildPacket, renderBuildPacketJson } from "./handoff.js";
 import { SEED_FILE } from "./schema.js";
 import { ratifySeed, readSeed, seedPath } from "./store.js";
 import { migrateSeedToCurrent } from "./migrate.js";
@@ -100,6 +102,9 @@ export async function runSeedMigrate(options = {}) {
 
 // CLI runner for `varai handoff`: renders the vendor-neutral build packet for
 // the ratified seed. The packet never carries unratified draft content.
+// `--schema` prints the structural JSON Schemas for builder witnesses and
+// runtime maps; `--json` adds the full seed diff against the latest prior
+// `ready` session and carry-forward candidates.
 export async function runHandoff(options = {}) {
   const repoPath = path.resolve(options.repo ?? ".");
   const result = readSeed(repoPath);
@@ -109,6 +114,23 @@ export async function runHandoff(options = {}) {
     return null;
   }
   const brief = options.brief ? fs.readFileSync(path.resolve(options.brief), "utf8") : undefined;
+  if (options.schema) {
+    process.stdout.write(`${JSON.stringify(emitHandoffSchemas(), null, 2)}\n`);
+    return emitHandoffSchemas();
+  }
+  if (options.json) {
+    const baseline = await loadLatestReadyBaseline(repoPath);
+    let packet;
+    try {
+      packet = renderBuildPacketJson({ seed: result.seed, brief, baseline });
+    } catch (err) {
+      process.stderr.write(`${err.message}\n`);
+      process.exitCode = 1;
+      return null;
+    }
+    process.stdout.write(`${JSON.stringify(packet, null, 2)}\n`);
+    return packet;
+  }
   let packet;
   try {
     packet = renderBuildPacket({ seed: result.seed, brief });
@@ -117,10 +139,6 @@ export async function runHandoff(options = {}) {
     process.exitCode = 1;
     return null;
   }
-  if (options.json) {
-    process.stdout.write(`${JSON.stringify({ system: result.seed.system, contentHash: result.contentHash, packet }, null, 2)}\n`);
-  } else {
-    process.stdout.write(packet);
-  }
+  process.stdout.write(packet);
   return packet;
 }

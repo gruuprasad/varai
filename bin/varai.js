@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { runMap } from "../src/map.js";
-import { runCheck } from "../src/reconciliation/commands.js";
+import { runCheck, runRealizationLint } from "../src/reconciliation/commands.js";
 import { runHandoff, runSeedMigrate, runSeedRatify, runSeedValidate } from "../src/seed/commands.js";
 import { startServer } from "../src/server/index.js";
 import { runBuildBegin, runBuildClose, runBuildStatus } from "../src/build-session/commands.js";
@@ -9,6 +9,7 @@ import { runBuildMessage, runBuildRun, runBuildStop } from "../src/builder/comma
 import { runProgression } from "../src/evolution/commands.js";
 import { runDiff, runLog, runSnapshot } from "../src/semantic-commands.js";
 import { runVerifyScenarios } from "../src/runtime/commands.js";
+import { runRuntimeDerive } from "../src/runtime/commands.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -25,7 +26,7 @@ Usage:
   varai seed validate [<repo-path>]
   varai seed approve [<repo-path>]   (alias: ratify)
   varai seed migrate [<repo-path>] [--write]
-  varai handoff [<repo-path>] [--json] [--brief <file>]
+  varai handoff [<repo-path>] [--json] [--schema] [--brief <file>]
   varai build begin [<repo-path>] [--brief <file>] [--json]
   varai build run [<repo-path>] --adapter <configured-id> [--json]
   varai build message [<repo-path>] "<product clarification>"
@@ -34,6 +35,8 @@ Usage:
   varai build status [<repo-path>] [--json]
   varai progression [<repo-path>] --from <session> [--to <session>] [--json]
   varai check [<repo-path>] [--json] [scan options]
+  varai realization lint <witness-file> [<repo-path>] [--json] [scan options]
+  varai runtime derive [<repo-path>] [--write] [--json]
   varai verify scenarios [<repo-path>] [--json]
 
 Options (map):
@@ -222,6 +225,7 @@ async function main() {
     const rest = args.slice(1);
     for (let i = 0; i < rest.length; i++) {
       if (rest[i] === "--json") opts.json = true;
+      else if (rest[i] === "--schema") opts.schema = true;
       else if (rest[i] === "--brief" && rest[i + 1]) opts.brief = rest[++i];
       else if (!rest[i].startsWith("-")) opts.repo = rest[i];
       else {
@@ -231,6 +235,29 @@ async function main() {
       }
     }
     await runHandoff(opts);
+    return;
+  }
+
+  if (command === "realization") {
+    const subcommand = args[1];
+    if (subcommand !== "lint") {
+      process.stderr.write(`Unknown realization subcommand: ${subcommand ?? "(none)"}\n\n${usage()}`);
+      process.exitCode = 1;
+      return;
+    }
+    const opts = {};
+    const rest = args.slice(2);
+    const positionals = [];
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === "--json") opts.json = true;
+      else if (rest[i] === "--no-cache") opts.cache = false;
+      else if (rest[i] === "--parser" && rest[i + 1]) opts.parser = rest[++i];
+      else if (!rest[i].startsWith("-")) positionals.push(rest[i]);
+      else throw new Error(`Unknown realization option: ${rest[i]}`);
+    }
+    if (positionals[0]) opts.file = positionals[0];
+    if (positionals[1]) opts.repo = positionals[1];
+    await runRealizationLint(opts);
     return;
   }
 
@@ -276,6 +303,28 @@ async function main() {
     if (!run) throw new Error(`Unknown build subcommand: ${subcommand ?? "(none)"}`);
     const result = await run(opts);
     if ((subcommand === "close" || subcommand === "run") && result?.exitCode) process.exitCode = result.exitCode;
+    return;
+  }
+
+  if (command === "runtime") {
+    const subcommand = args[1];
+    if (subcommand !== "derive") {
+      process.stderr.write(`Unknown runtime subcommand: ${subcommand ?? "(none)"}\n\n${usage()}`);
+      process.exitCode = 1;
+      return;
+    }
+    const opts = {};
+    const rest = args.slice(2);
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === "--write") opts.write = true;
+      else if (rest[i] === "--json") opts.json = true;
+      else if (rest[i] === "--no-cache") opts.cache = false;
+      else if (rest[i] === "--parser" && rest[i + 1]) opts.parser = rest[++i];
+      else if (!rest[i].startsWith("-")) opts.repo = rest[i];
+      else throw new Error(`Unknown runtime option: ${rest[i]}`);
+    }
+    const result = await runRuntimeDerive(opts);
+    if (result?.exitCode) process.exitCode = result.exitCode;
     return;
   }
 

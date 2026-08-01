@@ -5,6 +5,7 @@ import { semanticHash } from "../system-model/identity.js";
 import { analyzeCurrent, persistCurrentModel } from "../snapshots/snapshot.js";
 import { createSnapshotStore } from "../snapshots/store.js";
 import { reconcile } from "../reconciliation/check.js";
+import { projectContinuity } from "../reconciliation/continuity.js";
 import { readRealization } from "../reconciliation/witness-store.js";
 import { renderBuildPacket } from "../seed/handoff.js";
 import { readSeed } from "../seed/store.js";
@@ -205,6 +206,18 @@ function formatStatusText(result) {
       : " gate —";
     lines.push(`${session.id}${session.completedAt ? " completed" : " open"}${gateText}`);
   }
+  if (result.continuity) {
+    const s = result.continuity.summary;
+    lines.push(`binding continuity: ${s.carried} carried, ${s.rebound} rebound, ${s.new} new, ${s.unresolvable} unresolvable`);
+    for (const entry of result.continuity.entries) {
+      if (entry.state === "rebound") {
+        const fates = (entry.oldElementFates ?? []).map((item) => `${item.elementId} (${item.fate})`).join(", ");
+        lines.push(`  rebound ${entry.id} -> ${entry.to?.join(", ") ?? ""}; old: ${fates}`);
+      } else if (entry.state === "unresolvable") {
+        lines.push(`  unresolvable ${entry.id} (${entry.reason})`);
+      }
+    }
+  }
   return `${lines.join("\n")}\n`;
 }
 
@@ -243,10 +256,39 @@ export async function runBuildStatus(options = {}) {
   const latestCompleted = sessions.find((session) => session.completedAt) ?? null;
   const provenanceHint = latestCompleted?.provenanceHint
     ?? (latestCompleted?.unattested ? { state: "unattested", sessionId: latestCompleted.id } : null);
+
+  // Binding continuity (plan §3.5): compare the current mapping with the
+  // latest prior `ready` session on demand. Computed only when such a
+  // baseline exists; otherwise explicitly absent.
+  let continuity = null;
+  const priorReady = sessions.find((session) =>
+    session.gate?.state === GATE_STATES.READY && session.completion && session.id !== active?.id);
+  if (priorReady && priorReady.completion?.snapshotId) {
+    const baselineSeed = await store.getObject(priorReady.seedObjectHash);
+    const baselineRealization = priorReady.completion?.realizationObjectHash
+      ? await store.getObject(priorReady.completion.realizationObjectHash)
+      : null;
+    const priorModel = await loadSnapshotModel(repoPath, priorReady.completion.snapshotId);
+    const seedInput = readSeed(repoPath);
+    const realizationInput = seedInput ? readRealization(repoPath, { seed: seedInput.seed }) : null;
+    if (seedInput && realizationInput) {
+      const current = await analyzeCurrent(repoPath, options);
+      continuity = projectContinuity({
+        currentModel: current.scan.model,
+        currentSeed: seedInput.seed,
+        currentRealization: realizationInput.realization,
+        priorModel,
+        priorSeed: baselineSeed,
+        priorRealization: baselineRealization,
+      });
+    }
+  }
+
   const result = {
     active: activeSummary,
     sessions: (await store.listSessions()).map(statusSummary),
     provenanceHint,
+    continuity,
   };
   writeOutput(options, result, formatStatusText(result));
   return result;
@@ -337,4 +379,21 @@ export async function findBuildProvenance(repoPath, { seedHash, scannedTreeHash,
   if (matching) return { state: matching.completion.mode === "carry-forward" ? "recorded_carry_forward" : "recorded_build", sessionId: matching.id };
   const related = sessions.find((session) => session.seedHash === seedHash);
   return related ? { state: "stale", sessionId: related.id } : { state: "unattested", sessionId: null };
+}
+
+
+// Baseline for handoff changes / carry-forward candidates and binding
+// continuity: the latest completed build session whose gate is `ready`. The
+// session store already persists the approved Seed and the builder's
+// realization by object hash — no separate ledger is added (plan §3.5).
+export async function loadLatestReadyBaseline(repoPath) {
+  const store = createBuildSessionStore(repoPath);
+  const sessions = await store.listSessions();
+  const ready = sessions.find((session) => session.gate?.state === GATE_STATES.READY && session.completion);
+  if (!ready) return null;
+  const seed = await store.getObject(ready.seedObjectHash);
+  const realization = ready.completion?.realizationObjectHash
+    ? await store.getObject(ready.completion.realizationObjectHash)
+    : null;
+  return { sessionId: ready.id, seed, realization };
 }
