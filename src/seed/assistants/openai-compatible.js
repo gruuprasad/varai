@@ -9,7 +9,7 @@ import { CONCEPT_ROLES, RECORDED_ONLY_RELATIONS, SEED_RELATIONS, SURFACE_ACCESS,
 const SYSTEM_PROMPT = `You draft Varai seed proposals. A seed is human-ratified source intent for a software system.
 Reply with ONLY a JSON object of the form:
 {
-  "draft": { "formatVersion": 3, "system": {"id": ..., "name": ...}, "concepts": [...], "commitments": [...], "surfaces": [...], "scenarios": [...], "context": [...] } | null,
+  "draft": { "formatVersion": 4, "system": {"id": ..., "name": ...}, "concepts": [...], "commitments": [...], "surfaces": [...], "scenarios": [...], "flows": [...], "context": [...] } | null,
   "questions": ["clarifying question for the human", ...],
   "unsupported": ["human statements you could not express in the vocabulary", ...]
 }
@@ -20,6 +20,9 @@ Rules:
 - Surfaces (ids like "surface.withdraw-request-api") name one externally reachable way into the system: behavior concept, channel (${SURFACE_CHANNELS.join("|")}), access (${SURFACE_ACCESS.join("|")}). No HTTP paths, files, symbols, or framework names in surfaces.
 - Scenarios (ids like "scenario.owner-can-withdraw") are bounded ordered examples only: non-empty principals (each \`as\` slug bound to an actor concept), non-empty sequential steps (each \`as\` a declared principal, \`invoke\` a behavior), scalar/JSON \`input\` (optional \`$capture.path\` refs), optional \`capture\`, and required \`expect.status\` (integer) with optional partial \`expect.body\`. No concurrency, windows, performance, expressions, DB inspection, or test code. The \`scenarios\` array itself may be empty when the human has not authored examples yet; each scenario entry must have principals and steps.
 - Keep stable ids when renaming; never invent a relation outside the list.
+- Seed format 4: a resource concept may declare a \`stateModel\` ({ "initial": "<state>", "states": ["<state>", ...], "transitions": [{ "from": "<state>", "to": "<state>", "via": ["behavior.<id>", ...] }] }) — every transition names declared from/to states and one or more behavior concepts that realize it. Declared transitions are checked for literal target-state assignments with from-state/path evidence; a bare assignment never proves a transition, so only declare transitions the product actually restricts.
+- Seed format 4: a resource concept may declare \`fields\` ([{ "name": "<field_name>", "type": "string|integer|number|boolean|datetime|date|time|uuid|object|array", "required": true|false }]) — the data shape the product needs. Declare only fields that must exist; optional fields may be omitted.
+- Seed format 4: \`flows\` (ids like "flow.request-lifecycle") group behavior members behind one surface entry: { "id": ..., "name": ..., "entry": "surface.<id>", "members": ["behavior.<id>", ...] }.
 - Prefer a small set of meaningful commitments. Put anything uncheckable in "unsupported", never in commitments.`;
 
 function stripCodeFences(text) {

@@ -106,21 +106,42 @@ export function renderProblems(problems) {
 export function renderDraftStructure(draft) {
   if (!draft) return "";
   const conceptRows = [...(draft.concepts ?? [])].sort((a, b) => a.id.localeCompare(b.id))
-    .map((concept) => `<tr><td><code>${esc(concept.id)}</code></td><td>${esc(concept.role)}</td><td>${esc(concept.name)}</td></tr>`).join("");
+    .map((concept) => {
+      const extras = [];
+      if (concept.stateModel) {
+        const transitions = (concept.stateModel.transitions ?? [])
+          .map((transition) => `${transition.from} → ${transition.to} via ${transition.via.join(", ")}`)
+          .join("; ");
+        extras.push(`<div class="concept-extras state-model">state model: starts ${esc(concept.stateModel.initial)}; ${esc(transitions)}</div>`);
+      }
+      if (Array.isArray(concept.fields) && concept.fields.length) {
+        const fields = concept.fields
+          .map((field) => `${esc(field.name)}: ${esc(field.type)}${field.required === false ? " (optional)" : ""}`)
+          .join(", ");
+        extras.push(`<div class="concept-extras fields">fields: ${fields}</div>`);
+      }
+      return `<tr><td><code>${esc(concept.id)}</code></td><td>${esc(concept.role)}</td><td>${esc(concept.name)}</td><td>${extras.join("")}</td></tr>`;
+    }).join("");
   const commitmentRows = [...(draft.commitments ?? [])].sort((a, b) => a.id.localeCompare(b.id))
     .map((commitment) => `<tr><td><code>${esc(commitment.id)}</code></td>` +
       `<td><code>${esc(commitment.source)}</code></td><td>${esc(commitment.relation)}</td><td><code>${esc(formatTarget(commitment.target))}</code></td></tr>`).join("");
+  const flowRows = [...(draft.flows ?? [])].sort((a, b) => a.id.localeCompare(b.id))
+    .map((flow) => `<tr><td><code>${esc(flow.id)}</code></td><td>${esc(flow.name)}</td>` +
+      `<td><code>${esc(flow.entry)}</code></td><td>${flow.members.map((member) => `<code>${esc(member)}</code>`).join(", ")}</td></tr>`).join("");
   return `<section class="intent-structure">` +
     `<h4>${esc(draft.system?.name ?? "Untitled system")} — proposed draft</h4>` +
-    `<table class="intent-table"><thead><tr><th>Concept</th><th>Role</th><th>Name</th></tr></thead><tbody>${conceptRows}</tbody></table>` +
+    `<table class="intent-table"><thead><tr><th>Concept</th><th>Role</th><th>Name</th><th>Details</th></tr></thead><tbody>${conceptRows}</tbody></table>` +
     `<table class="intent-table"><thead><tr><th>Commitment</th><th>Source</th><th>Relation</th><th>Target</th></tr></thead><tbody>${commitmentRows}</tbody></table>` +
+    (flowRows
+      ? `<table class="intent-table"><thead><tr><th>Flow</th><th>Name</th><th>Entry</th><th>Members</th></tr></thead><tbody>${flowRows}</tbody></table>`
+      : "") +
     `</section>`;
 }
 
 export function renderSeedDiff(diff) {
   if (!diff) return "";
   const groups = [];
-  for (const key of ["concepts", "commitments", "surfaces", "scenarios", "context"]) {
+  for (const key of ["concepts", "commitments", "surfaces", "scenarios", "flows", "context"]) {
     const group = diff[key];
     if (!group) continue;
     const rows = [];

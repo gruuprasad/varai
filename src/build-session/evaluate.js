@@ -119,6 +119,25 @@ export function evaluateBuildGate({
     }));
   const requirementRegressions = compareRequirementVerdicts(startReport, completionReport);
   const surfaceProblems = surfaceProblemCounts(completionReport?.surfaces);
+
+  // Seed v4 sections (plan §4.3): violated declared transitions and violated
+  // field contracts block readiness like any other requirement.
+  const stateModelProblems = [];
+  for (const section of completionReport?.stateModels ?? []) {
+    for (const transition of section.transitions ?? []) {
+      if (transition.verdict === "violated") {
+        stateModelProblems.push({ resourceId: section.resourceId, from: transition.from, to: transition.to });
+      }
+    }
+  }
+  const fieldContractProblems = [];
+  for (const section of completionReport?.fieldContracts ?? []) {
+    for (const field of section.fields ?? []) {
+      if (field.verdict === "violated") {
+        fieldContractProblems.push({ resourceId: section.resourceId, name: field.name, reasons: field.reasons });
+      }
+    }
+  }
   const reasons = [];
 
   for (const item of coverageRegressions) {
@@ -142,6 +161,12 @@ export function evaluateBuildGate({
   for (const item of completionReport?.surfaces?.stale ?? []) {
     reasons.push(`stale-surface:${item.surfaceId}`);
   }
+  for (const item of stateModelProblems) {
+    reasons.push(`state-transition-violated:${item.resourceId}:${item.from}->${item.to}`);
+  }
+  for (const item of fieldContractProblems) {
+    reasons.push(`field-contract-violated:${item.resourceId}:${item.name}`);
+  }
 
   const scenarioResults = scenarioRun?.scenarios
     ?? completionReport?.scenarios?.results
@@ -159,16 +184,20 @@ export function evaluateBuildGate({
     || surfaceProblems.ambiguous > 0
     || surfaceProblems.stale > 0;
   const scenarioBlocks = scenarioProblems.length > 0;
+  const seedV4Blocks = stateModelProblems.length > 0 || fieldContractProblems.length > 0;
   const blocksReady = coverageRegressions.length > 0
     || requirementRegressions.length > 0
     || surfaceBlocks
-    || scenarioBlocks;
+    || scenarioBlocks
+    || seedV4Blocks;
   return {
     state: blocksReady ? GATE_STATES.NEEDS_ATTENTION : GATE_STATES.READY,
     reasons,
     coverageRegressions,
     requirementRegressions,
     surfaceProblems,
+    stateModelProblems,
+    fieldContractProblems,
     scenarioProblems: scenarioProblems.map((item) => ({
       id: item.id,
       result: item.result,

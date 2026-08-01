@@ -67,6 +67,9 @@ export function ratifySeed(repoPath, draft, { ratifiedAt } = {}) {
       surfaces: draft.surfaces ?? [],
       scenarios: draft.scenarios ?? [],
     } : {}),
+    ...(draft.formatVersion >= 4 ? {
+      flows: draft.flows ?? [],
+    } : {}),
     context: draft.context ?? [],
     ratification: {
       status: "ratified",

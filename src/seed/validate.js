@@ -5,6 +5,8 @@ import {
   CONTEXT_FIELDS, CONTEXT_ID_PATTERN, RATIFICATION_FIELDS, RATIFICATION_STATES, ROOT_FIELDS,
   COMMITMENT_EXPECTATIONS, SEED_RELATIONS, SURFACE_ACCESS, SURFACE_CHANNELS, SURFACE_FIELDS,
   SURFACE_ID_PATTERN, SUPPORTED_SEED_FORMAT_VERSIONS, SYSTEM_FIELDS, SYSTEM_ID_PATTERN,
+  FLOW_FIELDS, FLOW_ID_PATTERN, STATE_MODEL_FIELDS, STATE_TRANSITION_FIELDS, STATE_VALUE_PATTERN,
+  FIELD_CONTRACT_FIELDS, FIELD_NAME_PATTERN,
 } from "./schema.js";
 
 export class SeedValidationError extends Error {
@@ -63,6 +65,144 @@ function validateSurfaces(seed, conceptById, seenIds, problems) {
       problems.push({ code: "dangling-concept-reference", message: `Surface ${surface.id} behavior ${JSON.stringify(surface.behavior)} is not a declared concept` });
     } else if (conceptById.get(surface.behavior)?.role !== "behavior") {
       problems.push({ code: "invalid-surface-behavior", message: `Surface ${surface.id} behavior ${JSON.stringify(surface.behavior)} must reference a behavior concept` });
+    }
+  }
+}
+
+// Seed v4 (plan §2.1): a resource may declare a state model — initial state,
+// state set, and legal transitions keyed by (from, to, via behaviors).
+function validateStateModel(concept, conceptById, problems) {
+  if (concept.stateModel === undefined) return;
+  if (concept.role !== "resource") {
+    problems.push({ code: "state-model-on-non-resource", message: `Concept ${concept.id} may declare a stateModel only with role resource` });
+    return;
+  }
+  const model = concept.stateModel;
+  if (!isPlainObject(model)) {
+    problems.push({ code: "invalid-state-model", message: `Concept ${concept.id} stateModel must be an object` });
+    return;
+  }
+  unknownFields(model, STATE_MODEL_FIELDS, `State model ${concept.id}`, problems);
+  const states = Array.isArray(model.states) ? model.states : null;
+  if (!states) {
+    problems.push({ code: "invalid-state-model", message: `State model ${concept.id} requires a states array` });
+    return;
+  }
+  const stateSet = new Set();
+  for (const state of states) {
+    if (typeof state !== "string" || !STATE_VALUE_PATTERN.test(state)) {
+      problems.push({ code: "invalid-state-value", message: `State model ${concept.id} state ${JSON.stringify(state)} must match ${STATE_VALUE_PATTERN}` });
+    } else if (stateSet.has(state)) {
+      problems.push({ code: "duplicate-state", message: `State model ${concept.id} declares ${state} twice` });
+    }
+    if (typeof state === "string") stateSet.add(state);
+  }
+  if (typeof model.initial !== "string" || !stateSet.has(model.initial)) {
+    problems.push({ code: "unknown-initial-state", message: `State model ${concept.id} initial ${JSON.stringify(model.initial)} must name a declared state` });
+  }
+  const seenTransitions = new Set();
+  for (const transition of Array.isArray(model.transitions) ? model.transitions : []) {
+    if (!isPlainObject(transition)) {
+      problems.push({ code: "invalid-entry", message: `State model ${concept.id} transition entries must be objects` });
+      continue;
+    }
+    unknownFields(transition, STATE_TRANSITION_FIELDS, `Transition in ${concept.id}`, problems);
+    const { from, to, via } = transition;
+    if (typeof from !== "string" || !stateSet.has(from)) {
+      problems.push({ code: "unknown-transition-from", message: `Transition ${concept.id} ${JSON.stringify(from)} -> ${JSON.stringify(to)} has unknown from-state` });
+    }
+    if (typeof to !== "string" || !stateSet.has(to)) {
+      problems.push({ code: "unknown-transition-to", message: `Transition ${concept.id} ${JSON.stringify(from)} -> ${JSON.stringify(to)} has unknown to-state` });
+    }
+    if (!Array.isArray(via) || via.length === 0) {
+      problems.push({ code: "invalid-transition-via", message: `Transition ${concept.id} ${JSON.stringify(from)} -> ${JSON.stringify(to)} requires at least one behavior in via` });
+    } else {
+      for (const behaviorId of via) {
+        if (typeof behaviorId !== "string" || !conceptById.has(behaviorId) || conceptById.get(behaviorId)?.role !== "behavior") {
+          problems.push({ code: "dangling-concept-reference", message: `Transition ${concept.id} via ${JSON.stringify(behaviorId)} is not a declared behavior concept` });
+        }
+      }
+      const key = `${from}\0${to}\0${[...via].sort().join(",")}`;
+      if (seenTransitions.has(key)) {
+        problems.push({ code: "duplicate-transition", message: `State model ${concept.id} declares the ${from} -> ${to} transition twice` });
+      }
+      seenTransitions.add(key);
+    }
+  }
+}
+
+// Seed v4 (plan §2.2): a resource may declare the data shape it needs.
+function validateFieldContract(concept, problems) {
+  if (concept.fields === undefined) return;
+  if (concept.role !== "resource") {
+    problems.push({ code: "fields-on-non-resource", message: `Concept ${concept.id} may declare fields only with role resource` });
+    return;
+  }
+  if (!Array.isArray(concept.fields)) {
+    problems.push({ code: "invalid-collection", message: `Concept ${concept.id} fields must be an array` });
+    return;
+  }
+  const seen = new Set();
+  for (const field of concept.fields) {
+    if (!isPlainObject(field)) {
+      problems.push({ code: "invalid-entry", message: `Concept ${concept.id} field entries must be objects` });
+      continue;
+    }
+    unknownFields(field, FIELD_CONTRACT_FIELDS, `Field in ${concept.id}`, problems);
+    if (typeof field.name !== "string" || !FIELD_NAME_PATTERN.test(field.name)) {
+      problems.push({ code: "invalid-field-name", message: `Field in ${concept.id} name ${JSON.stringify(field.name)} must match ${FIELD_NAME_PATTERN}` });
+    } else if (seen.has(field.name)) {
+      problems.push({ code: "duplicate-field", message: `Concept ${concept.id} declares field ${field.name} twice` });
+    }
+    if (typeof field.name === "string") seen.add(field.name);
+    if (typeof field.type !== "string" || !field.type) {
+      problems.push({ code: "invalid-field-type", message: `Field ${concept.id}.${field.name} requires a type` });
+    }
+    if (field.required !== undefined && typeof field.required !== "boolean") {
+      problems.push({ code: "invalid-field-required", message: `Field ${concept.id}.${field.name} required must be a boolean` });
+    }
+  }
+}
+
+// Seed v4 (plan §2.3): flows group behaviors behind one surface entry.
+function validateFlows(seed, conceptById, seenIds, problems) {
+  if (seed.formatVersion < 4) {
+    if (seed.flows !== undefined) {
+      problems.push({ code: "unsupported-field-for-format", message: "Seed flows require seed format version 4" });
+    }
+    return;
+  }
+  if (!Array.isArray(seed.flows)) {
+    problems.push({ code: "invalid-collection", message: "Seed flows must be an array" });
+    return;
+  }
+  const surfaceIds = new Set((seed.surfaces ?? []).map((surface) => surface.id));
+  for (const flow of seed.flows) {
+    if (!isPlainObject(flow)) {
+      problems.push({ code: "invalid-entry", message: "Flow entries must be objects" });
+      continue;
+    }
+    unknownFields(flow, FLOW_FIELDS, `Flow ${flow.id}`, problems);
+    if (typeof flow.id !== "string" || !FLOW_ID_PATTERN.test(flow.id)) {
+      problems.push({ code: "invalid-id-format", message: `Flow id ${JSON.stringify(flow.id)} must match ${FLOW_ID_PATTERN}` });
+    } else if (seenIds.has(flow.id)) {
+      problems.push({ code: "duplicate-id", message: `Duplicate stable ID: ${flow.id}` });
+    }
+    if (typeof flow.id === "string") seenIds.add(flow.id);
+    if (typeof flow.name !== "string" || !flow.name) {
+      problems.push({ code: "invalid-flow", message: `Flow ${flow.id} requires a name` });
+    }
+    if (typeof flow.entry !== "string" || !surfaceIds.has(flow.entry)) {
+      problems.push({ code: "dangling-surface-reference", message: `Flow ${flow.id} entry ${JSON.stringify(flow.entry)} is not a declared surface` });
+    }
+    if (!Array.isArray(flow.members)) {
+      problems.push({ code: "invalid-flow-members", message: `Flow ${flow.id} members must be an array` });
+    } else {
+      for (const member of flow.members) {
+        if (typeof member !== "string" || !conceptById.has(member) || conceptById.get(member)?.role !== "behavior") {
+          problems.push({ code: "dangling-concept-reference", message: `Flow ${flow.id} member ${JSON.stringify(member)} is not a declared behavior concept` });
+        }
+      }
     }
   }
 }
@@ -129,6 +269,8 @@ export function checkSeed(seed) {
     if (typeof concept.name !== "string" || !concept.name) {
       problems.push({ code: "invalid-concept", message: `Concept ${concept.id} requires a name` });
     }
+    validateStateModel(concept, conceptById, problems);
+    validateFieldContract(concept, problems);
     if (concept.summary !== undefined && typeof concept.summary !== "string") {
       problems.push({ code: "invalid-concept", message: `Concept ${concept.id} summary must be a string` });
     }
@@ -171,6 +313,7 @@ export function checkSeed(seed) {
 
   validateSurfaces(seed, conceptById, seenIds, problems);
   validateScenarios(seed, conceptById, seenIds, problems);
+  validateFlows(seed, conceptById, seenIds, problems);
 
   for (const entry of Array.isArray(seed.context) ? seed.context : []) {
     if (!isPlainObject(entry)) continue;

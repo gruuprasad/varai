@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { canonicalStringifySeed, seedSemanticContent } from "./canonicalize.js";
-import { COMMITMENT_ID_PATTERN, CONCEPT_ID_PATTERN, CONTEXT_ID_PATTERN, SYSTEM_ID_PATTERN } from "./schema.js";
+import { COMMITMENT_ID_PATTERN, CONCEPT_ID_PATTERN, CONTEXT_ID_PATTERN, FLOW_ID_PATTERN, SYSTEM_ID_PATTERN } from "./schema.js";
 
 // Varai owns seed identity mechanics. Concept, commitment, and context IDs are
 // explicit stable identifiers: an assistant may propose names, but renaming a
@@ -34,6 +34,12 @@ export function commitmentId(name) {
 export function contextId(name) {
   const id = `context.${slugify(name)}`;
   if (!CONTEXT_ID_PATTERN.test(id)) throw new Error(`Invalid context ID: ${id}`);
+  return id;
+}
+
+export function flowId(name) {
+  const id = `flow.${slugify(name)}`;
+  if (!FLOW_ID_PATTERN.test(id)) throw new Error(`Invalid flow ID: ${id}`);
   return id;
 }
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  renderDraftStructure,
   renderQuestions,
   renderReviewActions,
   renderSeedDiff,
@@ -92,4 +93,21 @@ test("seed status shows ratification state, hash, and git-dirty indication", () 
 
   const empty = renderSeedStatus({ file: "varai.seed.json", seed: null, ratified: false });
   assert.ok(empty.includes("draft one below"));
+});
+
+test("draft structure renders v4 state models, field contracts, and flows", () => {
+  const draft = {
+    system: { id: "demo", name: "Demo" },
+    concepts: [
+      { id: "resource.request", role: "resource", name: "Request", stateModel: { initial: "pending", states: ["pending", "approved"], transitions: [{ from: "pending", to: "approved", via: ["behavior.approve"] }] }, fields: [{ name: "amount", type: "number", required: true }] },
+      { id: "behavior.approve", role: "behavior", name: "Approve" },
+    ],
+    commitments: [{ id: "commitment.approve-changes", source: "behavior.approve", relation: "changes", target: { literal: "approved" } }],
+    flows: [{ id: "flow.cycle", name: "Cycle", entry: "surface.approve-api", members: ["behavior.approve"] }],
+  };
+  const html = renderDraftStructure(draft);
+  assert.match(html, /state model: starts pending/);
+  assert.match(html, /pending → approved via behavior\.approve/);
+  assert.match(html, /fields: amount: number/);
+  assert.match(html, /flow\.cycle/);
 });

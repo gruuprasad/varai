@@ -8,6 +8,8 @@ const empty = {
   behaviors: [],
   surfaces: [],
   scenarios: [],
+  stateModels: [],
+  flows: [],
   resources: [],
   unaccounted: [],
   ambiguous: [],
@@ -30,6 +32,22 @@ const populated = {
     result: "failed",
     evidenceIds: ["scenario.happy", "status-mismatch"],
     steps: [{ as: "requester", invoke: "behavior.submit" }],
+  }],
+  stateModels: [{
+    resourceId: "resource.request",
+    resourceName: "Request",
+    initial: "pending",
+    states: ["pending", "approved"],
+    transitions: [{ from: "pending", to: "approved", via: ["behavior.submit"], observation: "realized", evidenceIds: ["claim:1"] }],
+  }],
+  flows: [{
+    id: "flow.request-cycle",
+    name: "Request cycle",
+    entry: "surface.submit-api",
+    members: ["behavior.submit"],
+    memberReadiness: [{ member: "behavior.submit", commitments: 2, holds: 2, violated: 0, cannotVerify: 0 }],
+    observation: "realized",
+    evidenceIds: ["flow.request-cycle"],
   }],
   unaccounted: [{ key: "DELETE /x", name: "DELETE /x", observation: "unaccounted", evidenceIds: ["DELETE /x"] }],
   ambiguous: [{ surfaceId: "surface.stale", observation: "ambiguous", evidenceIds: ["surface.stale"] }],
@@ -80,4 +98,14 @@ test("blueprint escapes XSS in names", () => {
   assert.doesNotMatch(html, /<script>alert/);
   assert.doesNotMatch(html, /<img src=x/);
   assert.match(html, /&lt;script&gt;|&lt;img src=x/);
+});
+
+test("blueprint renders flows and state models with readiness and transition chips", () => {
+  const html = renderBlueprint(populated);
+  assert.match(html, /Flows/);
+  assert.match(html, /flow\.request-cycle/);
+  assert.match(html, /2\/2 hold/);
+  assert.match(html, /State models/);
+  assert.match(html, /starts pending/);
+  assert.match(html, /pending.*→.*approved/s);
 });

@@ -165,6 +165,53 @@ export function projectBlueprint({ seed = null, report = null } = {}) {
     };
   });
 
+  // Seed v4 (plan §2.1–2.3): state models and flows are projected with their
+  // reconciliation observations — declared transitions and member readiness.
+  const stateModels = [...(seed.concepts ?? [])]
+    .filter((concept) => concept.role === "resource" && concept.stateModel)
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map((concept) => {
+      const checked = (report?.stateModels ?? []).find((section) => section.resourceId === concept.id);
+      return {
+        resourceId: concept.id,
+        resourceName: concept.name,
+        initial: concept.stateModel.initial,
+        states: [...concept.stateModel.states].sort(),
+        transitions: (concept.stateModel.transitions ?? []).map((transition) => {
+          const checkedTransition = checked?.transitions.find((item) =>
+            item.from === transition.from && item.to === transition.to);
+          return {
+            from: transition.from,
+            to: transition.to,
+            via: [...transition.via],
+            observation: checkedTransition ? verdictToObservation(checkedTransition.verdict) : OBSERVATION.UNVERIFIABLE,
+            evidenceIds: [...(checkedTransition?.claimIds ?? []), ...(checkedTransition?.reasons ?? [])].map(String),
+          };
+        }),
+      };
+    });
+
+  const flows = [...(seed.flows ?? [])].sort((a, b) => a.id.localeCompare(b.id)).map((flow) => {
+    const projected = (report?.flows ?? []).find((item) => item.id === flow.id);
+    return {
+      id: flow.id,
+      name: flow.name,
+      entry: flow.entry,
+      members: [...flow.members],
+      memberReadiness: (projected?.memberReadiness ?? []).map((item) => ({
+        member: item.member,
+        holds: item.holds,
+        violated: item.violated,
+        cannotVerify: item.cannotVerify,
+        commitments: item.commitments,
+      })),
+      observation: projected && projected.memberReadiness?.some((item) => item.violated > 0)
+        ? OBSERVATION.MISSING
+        : OBSERVATION.REALIZED,
+      evidenceIds: [flow.id],
+    };
+  });
+
   return {
     empty: false,
     system: seed.system ? { id: seed.system.id, name: seed.system.name } : null,
@@ -173,6 +220,8 @@ export function projectBlueprint({ seed = null, report = null } = {}) {
     resources: annotate(byRole(seed, "resource")),
     surfaces,
     scenarios,
+    stateModels,
+    flows,
     unaccounted,
     ambiguous,
   };

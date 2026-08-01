@@ -605,6 +605,54 @@ did not execute is `could_not_run`, which is never a pass.
 The worked example is
 [examples/purchase-approvals.seed.v3.json](examples/purchase-approvals.seed.v3.json).
 
+
+### State models, field contracts, and flows (seed v4)
+
+Seed v4 ([ADR 0008](adr/0008-seed-v4-state-models-field-contracts-flows.md))
+adds three optional, additive constructs on top of the v3 vocabulary.
+
+A **state model** on a resource concept declares the legal life of that
+resource: an `initial` state, a `states` set, and `transitions` from one
+declared state to another, each realized by one or more behavior concepts.
+A declared transition reconciles against the `application.state` capability:
+it holds only when a bound behavior Element carries a literal target-state
+Claim whose `state_from` qualifier names the declared `from` state — a target
+assignment alone never proves the transition is guarded. Missing
+from-state/path evidence degrades coverage to `partial`, so the transition
+reconciles to `cannot_verify`; the transition is `violated` only when the
+responsible scope is fully `analyzed`. Scenarios crossing a transition
+corroborate reachability for that one path and never upgrade missing static
+evidence. Reordering states or transitions is evidence-only movement:
+transition identity is `(resource, from, to, via)`.
+
+A **field contract** on a resource concept declares the data shape the product
+needs: `name`, `type`, and `required`. Declared fields must be covered by
+observed `has_field` Claims on the bound data Element under the
+`data.contract` capability, which is `analyzed` only where the declaration has
+parseable class syntax. Type and requiredness qualifiers are checked only
+where syntax proves them; a missing declared field under analyzed coverage is
+`violated`, and an undeclared observed field is visible but never a violation.
+
+A **flow** groups behavior concepts behind one surface entry. Flows add no new
+verdicts; they project per-member commitment readiness so a person can review
+an entire journey — submit → approve → order — instead of only its parts.
+
+### Builder loop commands (seed v4)
+
+`varai realization lint` resolves a builder witness against the current
+System Model in one read-only command and reports deterministic candidate
+elements for failed selectors — ranked, never chosen. `varai runtime derive`
+regenerates runtime operation mappings from the model and approved surface
+bindings while preserving stable profile fields; without a baseline it
+reports the exact unresolved fields and exits non-zero rather than inventing
+configuration. `varai handoff --schema` publishes structural JSON Schemas for
+the witness and runtime map, and `varai handoff --json` adds the full Seed
+diff against the latest prior `ready` session plus carry-forward candidates.
+Binding continuity is projected on demand from the latest prior `ready`
+session — unchanged mappings report `carried`, re-pointed mappings report
+`rebound` with the old element's fate (gone, renamed, or still present) — and
+no separate ledger is persisted.
+
 ## Explicit non-claims
 
 Without additional evidence, Varai does not claim:

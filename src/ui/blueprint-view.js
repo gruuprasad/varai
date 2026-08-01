@@ -55,6 +55,29 @@ export function renderBlueprint(blueprint) {
       : "") +
     `</li>`);
 
+  html += renderGroup("Flows", blueprint.flows, (item) =>
+    `<li class="blueprint-item" id="evidence-${esc(item.id)}" ${evidenceAttrs(item.evidenceIds)} tabindex="-1">${chip(item.observation, item.evidenceIds)} ` +
+    `<strong>${esc(item.name)}</strong> ` +
+    `<span class="surface-meta">entry <code>${esc(item.entry)}</code></span> ` +
+    `<code>${esc(item.id)}</code>` +
+    (item.memberReadiness?.length
+      ? `<ul class="flow-members">${item.memberReadiness.map((member) =>
+          `<li><code>${esc(member.member)}</code> — ${member.holds}/${member.commitments} hold` +
+          `${member.violated ? `, <span class="flow-violated">${member.violated} violated</span>` : ""}` +
+          `${member.cannotVerify ? `, ${member.cannotVerify} unverified` : ""}</li>`).join("")}</ul>`
+      : "") +
+    `</li>`);
+
+  html += renderGroup("State models", blueprint.stateModels, (item) =>
+    `<li class="blueprint-item" id="evidence-${esc(item.resourceId)}" tabindex="-1">` +
+    `<strong>${esc(item.resourceName)}</strong> <code>${esc(item.resourceId)}</code> ` +
+    `<span class="surface-meta">starts ${esc(item.initial)}</span>` +
+    `<ol class="state-transitions">${item.transitions.map((transition) =>
+      `<li>${chip(transition.observation, transition.evidenceIds)} ` +
+      `<code>${esc(transition.from)}</code> → <code>${esc(transition.to)}</code> ` +
+      `via ${transition.via.map((via) => `<code>${esc(via)}</code>`).join(", ")}</li>`).join("")}</ol>` +
+    `</li>`);
+
   html += renderGroup("Resources", blueprint.resources, (item) =>
     `<li class="blueprint-item" id="evidence-${esc(item.id)}" ${evidenceAttrs(item.evidenceIds)} tabindex="-1">${chip(item.observation, item.evidenceIds)} ` +
     `<strong>${esc(item.name)}</strong> <code>${esc(item.id)}</code></li>`);

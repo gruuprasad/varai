@@ -105,3 +105,48 @@ A critical scope moving from `analyzed` to `partial`, `unsupported`, `failed`, o
 ## Build gate
 
 The pure evaluation of a completed build session against the readiness criteria, yielding `ready`, `needs_attention`, `build_failed`, or `superseded` with machine-readable reasons. No builder output, test, or LLM statement can set it.
+
+## State model
+
+A Seed v4 declaration on a resource concept: an initial state, a state set, and
+legal transitions keyed by (resource, from, to, via behaviors). A declared
+transition holds only with recognizable from-state/path evidence
+(`application.state`); reordering states or transitions is evidence-only.
+
+## Field contract
+
+A Seed v4 declaration of a resource's required data shape (name, type,
+required). Declared fields must be covered by observed `has_field` Claims
+under analyzed `data.contract` coverage.
+
+## Flow
+
+A Seed v4 grouping of behavior concepts behind one surface entry, projected
+with per-member commitment readiness. Flows add no new verdicts.
+
+## Realization lint
+
+A read-only command that validates a builder witness, resolves it against the
+current System Model, and reports deterministic candidate elements for failed
+selectors — ranked, never chosen. Candidates never affect a verdict.
+
+## Runtime derive
+
+A command that regenerates runtime operation mappings from the System Model
+and approved surface bindings while preserving stable profile fields; without
+an existing profile it reports the exact unresolved fields and exits
+non-zero.
+
+## Binding continuity
+
+A projection comparing the current concept→element mapping with the latest
+prior `ready` build session: `carried` when unchanged, `rebound` with the old
+element's fate (gone, renamed, or still present) when re-pointed. No separate
+ledger is persisted.
+
+## Authorization condition
+
+An exact literal condition observed from a recognized guard pattern
+(`api.authorization`): identity factories yield "authenticated", role calls
+yield their literal argument, otherwise the factory name. Unrecognized guard
+shapes degrade coverage to `partial`; absence is never inferred from them.

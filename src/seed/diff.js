@@ -27,7 +27,7 @@ function diffCollection(beforeItems, afterItems) {
 }
 
 export function diffSeeds(before, after) {
-  const empty = { concepts: [], commitments: [], surfaces: [], scenarios: [], context: [] };
+  const empty = { concepts: [], commitments: [], surfaces: [], scenarios: [], flows: [], context: [] };
   const from = before ?? empty;
   return {
     systemChanged: Boolean(before) && !semanticEquals(from.system, after.system),
@@ -35,12 +35,13 @@ export function diffSeeds(before, after) {
     commitments: diffCollection(from.commitments, after.commitments),
     surfaces: diffCollection(from.surfaces ?? [], after.surfaces ?? []),
     scenarios: diffCollection(from.scenarios ?? [], after.scenarios ?? []),
+    flows: diffCollection(from.flows ?? [], after.flows ?? []),
     context: diffCollection(from.context, after.context),
   };
 }
 
 export function diffIsEmpty(diff) {
   return !diff.systemChanged &&
-    ["concepts", "commitments", "surfaces", "scenarios", "context"]
+    ["concepts", "commitments", "surfaces", "scenarios", "flows", "context"]
       .every((key) => !diff[key].added.length && !diff[key].removed.length && !diff[key].changed.length);
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { renderBuildPacket } from "../../src/seed/handoff.js";
+import { renderBuildPacket, renderBuildPacketJson, carryForwardCandidates } from "../../src/seed/handoff.js";
+import { diffSeeds } from "../../src/seed/diff.js";
 import { seedContentHash } from "../../src/seed/identity.js";
 import { checkRealization } from "../../src/reconciliation/schema.js";
 import { slotkeeperDraft } from "./fixtures.js";
@@ -131,3 +132,126 @@ test("handoff documents bounded product scenarios when present", () => {
   assert.ok(packet.includes("concurrency"), "packet states concurrency is out of language");
   assert.ok(packet.includes("examples, not invariants"), "packet frames scenarios as examples");
 });
+
+test("handoff --json without a prior ready session reports an explicit no-baseline state", () => {
+  const seed = ratifiedSeed();
+  const packet = renderBuildPacketJson({ seed });
+  assert.equal(packet.baseline.present, false);
+  assert.equal(packet.changes, null);
+  assert.equal(packet.carryForwardCandidates.present, false);
+  assert.deepEqual(packet.carryForwardCandidates.bindings, []);
+  assert.equal(packet.packet, renderBuildPacket({ seed }));
+});
+
+test("handoff --json carries the full seed diff against the prior ready session", () => {
+  const baselineSeed = ratifiedSeed();
+  const changed = {
+    ...baselineSeed,
+    commitments: [
+      ...baselineSeed.commitments,
+      { id: "commitment.new-requirement", source: "behavior.book-slot", relation: "requires", target: { literal: "slot is available" } },
+    ],
+  };
+  changed.ratification = { status: "ratified", contentHash: seedContentHash(changed) };
+  const packet = renderBuildPacketJson({
+    seed: changed,
+    baseline: { sessionId: "build:prior", seed: baselineSeed, realization: null },
+  });
+  assert.equal(packet.baseline.present, true);
+  assert.equal(packet.baseline.sessionId, "build:prior");
+  assert.equal(packet.changes.commitments.added.length, 1);
+  assert.equal(packet.changes.commitments.added[0].id, "commitment.new-requirement");
+  assert.equal(packet.changes.commitments.removed.length, 0);
+  assert.equal(packet.changes.commitments.changed.length, 0);
+});
+
+test("carry-forward candidates require unchanged seed definitions", () => {
+  const baselineSeed = ratifiedSeed();
+  const realization = {
+    formatVersion: 2,
+    seedHash: seedContentHash(baselineSeed),
+    bindings: [
+      { id: "binding.book", concept: "behavior.book-slot", artifact: { kind: "operation", key: "POST /bookings" } },
+      { id: "binding.stale-concept", concept: "behavior.removed", artifact: { kind: "operation", key: "POST /x" } },
+    ],
+    surfaceBindings: [],
+    witnesses: [],
+  };
+  const unchanged = { ...baselineSeed, ratification: { status: "ratified", contentHash: seedContentHash(baselineSeed) } };
+  const removedConceptSeed = {
+    ...baselineSeed,
+    concepts: baselineSeed.concepts.filter((concept) => concept.id !== "behavior.removed"),
+  };
+  // The stale binding's concept never existed in the baseline seed; drop it to
+  // keep the baseline valid, and instead test a *changed* concept.
+  const changedConcept = { ...baselineSeed.concepts.find((c) => c.id === "behavior.book-slot"), summary: "edited summary" };
+  const changedSeed = {
+    ...baselineSeed,
+    concepts: baselineSeed.concepts.map((concept) => concept.id === "behavior.book-slot" ? changedConcept : concept),
+  };
+  const changedRatified = { ...changedSeed, ratification: { status: "ratified", contentHash: seedContentHash(changedSeed) } };
+
+  const candidates = carryForwardCandidates({
+    baselineSeed,
+    baselineRealization: realization,
+    currentSeed: changedRatified,
+    changes: diffSeeds(baselineSeed, changedRatified),
+  });
+  // binding.book's concept changed -> not carried; stale-concept is not in the
+  // current seed -> not carried.
+  assert.deepEqual(candidates.bindings, []);
+  assert.deepEqual(candidates.surfaceBindings, []);
+  assert.deepEqual(candidates.witnesses, []);
+});
+
+test("carry-forward candidates keep unchanged concept, surface, and commitment mappings", () => {
+  const draft = {
+    formatVersion: 3,
+    system: { id: "demo", name: "Demo" },
+    concepts: [
+      { id: "behavior.book-slot", role: "behavior", name: "Book Slot" },
+      { id: "resource.booking", role: "resource", name: "Booking" },
+    ],
+    commitments: [
+      { id: "commitment.booking-creates-booking", source: "behavior.book-slot", relation: "creates", target: { concept: "resource.booking" } },
+    ],
+    surfaces: [
+      { id: "surface.book-api", name: "Book via API", behavior: "behavior.book-slot", channel: "api", access: "authenticated" },
+    ],
+    scenarios: [],
+    context: [],
+  };
+  const baselineSeed = { ...draft, ratification: { status: "ratified", contentHash: seedContentHash(draft) } };
+  const realization = {
+    formatVersion: 2,
+    seedHash: seedContentHash(baselineSeed),
+    bindings: [
+      { id: "binding.book", concept: "behavior.book-slot", artifact: { kind: "operation", key: "POST /bookings" } },
+    ],
+    surfaceBindings: [
+      { id: "surface-binding.book", surface: "surface.book-api", artifact: { kind: "operation", key: "POST /bookings" } },
+    ],
+    witnesses: [
+      { commitment: "commitment.booking-creates-booking", sourceBinding: "binding.book", target: { concept: "resource.booking" } },
+    ],
+  };
+  // Context-only change: every concept/surface/commitment definition is unchanged.
+  const changedSeed = {
+    ...baselineSeed,
+    context: [...baselineSeed.context, { id: "context.note", text: "A note" }],
+  };
+  const changedRatified = { ...changedSeed, ratification: { status: "ratified", contentHash: seedContentHash(changedSeed) } };
+  const candidates = carryForwardCandidates({
+    baselineSeed,
+    baselineRealization: realization,
+    currentSeed: changedRatified,
+    changes: diffSeeds(baselineSeed, changedRatified),
+  });
+  assert.equal(candidates.bindings.length, 1);
+  assert.equal(candidates.bindings[0].id, "binding.book");
+  assert.equal(candidates.surfaceBindings.length, 1);
+  assert.equal(candidates.surfaceBindings[0].id, "surface-binding.book");
+  assert.equal(candidates.witnesses.length, 1);
+  assert.equal(candidates.witnesses[0].commitment, "commitment.booking-creates-booking");
+});
+

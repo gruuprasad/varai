@@ -27,6 +27,14 @@ export function migrateSeedToCurrent(seed) {
       ratification: { status: "draft" },
     };
   }
+  if (next.formatVersion === 3) {
+    next = {
+      ...next,
+      formatVersion: 4,
+      flows: [],
+      ratification: { status: "draft" },
+    };
+  }
   if (next.formatVersion !== SEED_FORMAT_VERSION) {
     throw new Error(`Cannot migrate seed format version ${seed.formatVersion}`);
   }

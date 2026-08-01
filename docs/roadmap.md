@@ -35,6 +35,27 @@ cannot prove, is [product-control-room.md](product-control-room.md).
   deterministic reconciliation are wired end to end. A realization remains
   untrusted testimony; provenance is reported separately from requirement
   verdicts.
+- **Builder loop (Gate 1).** `varai realization lint` resolves a witness in
+  one read-only command with deterministic candidates; `varai handoff --json`
+  carries the full Seed diff and carry-forward candidates against the latest
+  prior `ready` session; `varai handoff --schema` publishes structural JSON
+  Schemas; `varai runtime derive` regenerates operation mappings without
+  inventing profile fields; binding continuity reports `carried`/`rebound`
+  with the old element's fate — no separate ledger.
+- **Evidence semantics (Gate 2).** `api.authorization` (guard recognition with
+  exact condition clauses and `analyzed`/`partial` discipline),
+  `application.state` (literal target-state assignments plus from-state/path
+  evidence), strengthened `data.contract` (type and requiredness qualifiers
+  where syntax proves them), and the `emits` effect library (outbox/queue and
+  external-HTTP) make `requires`, `changes`, and `emits` statically checkable
+  on the FastAPI slice. Inverted authorization is now caught statically, not
+  only by scenarios.
+- **Seed v4 (Gate 3).** State models, field contracts, and flows are declared
+  in the Seed, validated, canonicalized, migrated, diffed, rendered in the
+  handoff packet and the dashboard's Blueprint and Seed Studio, and reconciled
+  with verdicts; the readiness gate blocks on violated transitions and field
+  contracts. Existing v3 seeds remain valid and migrate to unapproved v4
+  drafts.
 
 ## What is unproven
 
@@ -67,6 +88,11 @@ cannot prove, is [product-control-room.md](product-control-room.md).
 
 ## What's next
 
+- **Human evaluation (Gate H).** The product release gate is still pending:
+  run `docs/poc/purchase-approvals-human-eval.md` once against the completed
+  Gate-3 slice with five target users before broadening. Gates 4–6
+  (real-repo adoption, control room depth, second substrate proof) do not
+  begin before Gate H passes.
 - Extend exact effect/failure coverage past the FastAPI slice. All three real
   Slotkeeper operations now reach `analyzed` — a body trace no longer mistakes
   signature mechanics (`Depends`, `Header`) or a declared model constructor for
@@ -79,7 +105,7 @@ cannot prove, is [product-control-room.md](product-control-room.md).
   analyze and watch `violated` decay into a calm `cannot_verify`.
 - Add ratified surfaces and surface accounting, so the check answers "what public
   behavior exists that nobody asked for?" and not only "was what I asked for
-  built?"
+  built?" (implemented in the builder loop; adversarial trials recorded).
 - Execute ratified scenarios independently against a running application, to
   reach authorization and state-transition mistakes that static evidence cannot
   settle.

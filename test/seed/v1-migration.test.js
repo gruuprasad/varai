@@ -7,19 +7,21 @@ import { slotkeeperDraft } from "./fixtures.js";
 
 test("v1 migration makes every existing commitment explicitly present and unapproved at current format", () => {
   const migrated = migrateSeedToCurrent(slotkeeperDraft());
-  assert.equal(SEED_FORMAT_VERSION, 3);
-  assert.equal(migrated.formatVersion, 3);
+  assert.equal(SEED_FORMAT_VERSION, 4);
+  assert.equal(migrated.formatVersion, 4);
   assert.ok(migrated.commitments.every((commitment) => commitment.expectation === "present"));
   assert.deepEqual(migrated.surfaces, []);
   assert.deepEqual(migrated.scenarios, []);
+  assert.deepEqual(migrated.flows, []);
   assert.deepEqual(migrated.ratification, { status: "draft" });
   assert.equal(checkSeed(migrated).valid, true);
 });
 
-test("v1 still migrates through to v3 current without inventing surfaces", () => {
+test("v1 still migrates through to v4 current without inventing surfaces", () => {
   const migrated = migrateSeedToCurrent(slotkeeperDraft());
   assert.equal(migrated.formatVersion, SEED_FORMAT_VERSION);
   assert.equal(migrated.surfaces.length, 0);
   assert.equal(migrated.scenarios.length, 0);
+  assert.equal(migrated.flows.length, 0);
   assert.ok(!JSON.stringify(migrated).includes("POST /"));
 });

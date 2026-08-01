@@ -39,8 +39,8 @@ function v3Base(overrides = {}) {
   };
 }
 
-test("SEED_FORMAT_VERSION is 3 and vocabulary lists are closed", () => {
-  assert.equal(SEED_FORMAT_VERSION, 3);
+test("SEED_FORMAT_VERSION is 4 and vocabulary lists are closed", () => {
+  assert.equal(SEED_FORMAT_VERSION, 4);
   assert.deepEqual([...SURFACE_CHANNELS], ["ui", "api", "webhook", "job", "cli"]);
   assert.deepEqual([...SURFACE_ACCESS], ["public", "authenticated", "internal"]);
 });
@@ -216,7 +216,7 @@ test("purchase-approvals.seed.v3.json validates as Seed v3", () => {
   assert.equal(result.valid, true);
 });
 
-test("v2 to v3 migration yields empty surfaces/scenarios and a draft", () => {
+test("v2 migrates to the current format with empty surfaces/scenarios/flows and a draft", () => {
   const draft = slotkeeperDraft();
   const v2 = {
     ...draft,
@@ -228,9 +228,10 @@ test("v2 to v3 migration yields empty surfaces/scenarios and a draft", () => {
     ratification: { status: "ratified", contentHash: seedContentHash(v2) },
   };
   const migrated = migrateSeedToCurrent(v2Ratified);
-  assert.equal(migrated.formatVersion, 3);
+  assert.equal(migrated.formatVersion, SEED_FORMAT_VERSION);
   assert.deepEqual(migrated.surfaces, []);
   assert.deepEqual(migrated.scenarios, []);
+  assert.deepEqual(migrated.flows, []);
   assert.deepEqual(migrated.ratification, { status: "draft" });
   assert.equal(checkSeed(migrated).valid, true);
 });
