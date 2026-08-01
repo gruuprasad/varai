@@ -1,8 +1,9 @@
 # Seed v4, Handoff, and Verification Leap — Execution Plan
 
 **Date:** 2026-08-01  
-**Status:** Proposed  
+**Status:** Gates 0–3 executed and recorded; Gate H (human validation) deferred to a person.  
 **Revision:** 2026-08-01 — automated execution through Seed v4; deferred human release checkpoint; existing-store reuse; conservative checker semantics.  
+**Execution record:** Gates 0–3 completed with the suite green (674 tests) and all adversarial trials passing (nine original + three binding trials + one static-evidence trial), committed as `feat(gate1)`, `feat(gate2)`, `feat(gate3)`.  
 **Goal:** Take Varai from a proven adversarial POC to a repeatable product
 loop — a Seed language rich enough to bind and loose enough to speak, a
 handoff that is a self-checking contract, and verification that is redundant
