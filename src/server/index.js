@@ -18,13 +18,18 @@ import { createControlRoomHandlers } from "./control-room.js";
 import { createEvolutionHandler } from "./evolution.js";
 import { assistantFromEnvironment } from "../seed/assistants/openai-compatible.js";
 import { createCommandSeedAssistant } from "../seed/assistants/command.js";
+import { createCommandRoleReviewer } from "../development-roles/review.js";
+import { createRoleReviewHandlers } from "./development-review.js";
 import { displayLanguage } from "../reporters/display-language.js";
 import { serializeProjections } from "./projections.js";
 import { analyzeCurrentInWorker, AnalyzeAbortedError } from "./analyze-in-worker.js";
 import { recordBuildIntervention } from "../builder/commands.js";
+import { projectDevelopmentRole } from "../development-roles/project.js";
+import { buildVerificationPlan } from "../reconciliation/verification-plan.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.resolve(__dirname, "..", "ui");
+const DEVELOPMENT_ROLES_DIR = path.resolve(__dirname, "..", "development-roles");
 // UI modules import shared glossary/labels from ../reporters, so the browser
 // requests /reporters/<file>.js. Serve those from the reporters dir; without
 // this the module graph 404s and app.js never runs (UI stuck on "Scanning").
@@ -82,6 +87,7 @@ export async function startServer({
   openBrowser: openBrowserFn = openBrowser,
   scanOptions: cliScanOptions = {},
   seedAssistant,
+  roleReviewer,
   seedModel,
   // Default: off the HTTP thread so large repos don't freeze the dashboard.
   // Tests may inject a custom analyze(repoPath, scanOptions) => current.
@@ -170,12 +176,35 @@ export async function startServer({
   let watcher = { close() {} };
 
   const seedGetModel = seedModel ?? (async () => latestScan?.model ?? (await runAnalyze()).scan.model);
+  const seedRoleContext = async ({ roleId, seed, draft }) => {
+    // Authoring must remain usable before the first analyzable repository
+    // state exists. Role context can still be derived from the Seed alone.
+    const model = await seedGetModel().catch(() => null);
+    const roleSeed = draft ?? seed;
+    return projectDevelopmentRole({
+      roleId,
+      seed: roleSeed,
+      model,
+      verificationPlan: buildVerificationPlan({ seed: roleSeed }),
+    });
+  };
   const seedHandlers = createSeedHandlers({
     repoPath: absRepo,
     port,
     assistant: seedAssistant === undefined
       ? (config.assistant ? createCommandSeedAssistant(config.assistant) : assistantFromEnvironment())
       : seedAssistant,
+    getRoleContext: seedRoleContext,
+    broadcast,
+  });
+  const effectiveRoleReviewer = roleReviewer === undefined
+    ? (config.assistant ? createCommandRoleReviewer(config.assistant) : null)
+    : roleReviewer;
+  const reviewHandlers = createRoleReviewHandlers({
+    repoPath: absRepo,
+    port,
+    reviewer: effectiveRoleReviewer,
+    getModel: seedGetModel,
     broadcast,
   });
   const reconciliationHandler = createReconciliationHandler({ repoPath: absRepo, getModel: seedGetModel });
@@ -193,6 +222,7 @@ export async function startServer({
         implementationTreeHash: current.implementationTreeHash,
       };
     },
+    reviewerAvailable: Boolean(effectiveRoleReviewer),
   });
 
   const server = http.createServer((req, res) => {
@@ -213,6 +243,19 @@ export async function startServer({
 
     if (url.pathname === "/api/control-room") {
       controlRoomHandlers.handle(req, res, url).then((handled) => {
+        if (!handled) {
+          res.writeHead(404);
+          res.end("Not Found");
+        }
+      }).catch((err) => {
+        res.writeHead(err.statusCode ?? 500, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ error: err.message }));
+      });
+      return;
+    }
+
+    if (url.pathname.startsWith("/api/development/")) {
+      reviewHandlers.handle(req, res, url).then((handled) => {
         if (!handled) {
           res.writeHead(404);
           res.end("Not Found");
@@ -294,6 +337,8 @@ export async function startServer({
       filePath = path.join(UI_DIR, "index.html");
     } else if (url.pathname.startsWith("/reporters/") && !url.pathname.includes("..")) {
       filePath = path.join(REPORTERS_DIR, path.basename(url.pathname));
+    } else if (url.pathname.startsWith("/development-roles/") && !url.pathname.includes("..")) {
+      filePath = path.join(DEVELOPMENT_ROLES_DIR, path.basename(url.pathname));
     } else if (url.pathname.startsWith("/") && !url.pathname.includes("..")) {
       const safeName = path.basename(url.pathname);
       filePath = path.join(UI_DIR, safeName);

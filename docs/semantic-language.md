@@ -659,6 +659,20 @@ session — unchanged mappings report `carried`, re-pointed mappings report
 `rebound` with the old element's fate (gone, renamed, or still present) — and
 no separate ledger is persisted.
 
+### Development-role projections
+
+Product, Frontend, Backend, Architecture, AI Behavior, and Verification are
+responsibility lenses over the same Seed and System Model. They are not kernel
+entities, persisted specifications, or evidence sources. A role assistant may
+propose ordinary Seed constructs and ask questions; the human still ratifies
+the resulting draft.
+
+Before a build, Varai projects each Seed construct into a verification plan:
+the method (deterministic, bounded runtime, measurement, judgment,
+recorded-only, or unsupported), required observability, and blocking rule.
+After a build, role views filter the existing obligation/evidence IDs. They do
+not introduce role-specific verdicts or promote human/AI judgment to `holds`.
+
 ## Explicit non-claims
 
 Without additional evidence, Varai does not claim:

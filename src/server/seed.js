@@ -12,6 +12,7 @@ import {
 import { SEED_FILE } from "../seed/schema.js";
 import { ratifySeed, readSeed } from "../seed/store.js";
 import { checkSeed, SeedValidationError } from "../seed/validate.js";
+import { getDevelopmentRole } from "../development-roles/definitions.js";
 
 // Seed Studio endpoints (ADR 0005). Mutation rules:
 // - the server stays bound to 127.0.0.1 (enforced in index.js);
@@ -69,7 +70,7 @@ export function readJsonBody(req, limit = MAX_BODY_BYTES) {
   });
 }
 
-export function createSeedHandlers({ repoPath, port, assistant = null, broadcast = () => {} }) {
+export function createSeedHandlers({ repoPath, port, assistant = null, getRoleContext = async () => null, broadcast = () => {} }) {
   function currentSeed() { return readSeed(repoPath)?.seed ?? null; }
 
   function sessionForCurrentSeed() {
@@ -113,6 +114,7 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
       return;
     }
     let proposal;
+    const developmentRole = getDevelopmentRole(body.developmentRole)?.id ?? null;
     if (body.proposal !== undefined) {
       proposal = normalizeProposal(body.proposal);
     } else if (typeof body.message === "string" && body.message.trim()) {
@@ -120,9 +122,26 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
         send(res, 409, { error: "No assistant is configured for this server; import a proposal JSON instead." });
         return;
       }
-      const conversation = [...(existing?.conversation ?? []), { role: "user", content: body.message.trim() }];
-      proposal = await assistant.propose({ conversation, seed: currentSeed(), draft: existing?.review?.draft ?? null });
-      body = { ...body, conversation };
+      const conversation = [...(existing?.conversation ?? []), {
+        role: "user",
+        content: body.message.trim(),
+        ...(developmentRole ? { developmentRole } : {}),
+      }];
+      const roleContext = developmentRole
+        ? await getRoleContext({
+          roleId: developmentRole,
+          seed: currentSeed(),
+          draft: existing?.review?.draft ?? null,
+        })
+        : null;
+      proposal = await assistant.propose({
+        conversation,
+        seed: currentSeed(),
+        draft: existing?.review?.draft ?? null,
+        developmentRole,
+        roleContext,
+      });
+      body = { ...body, conversation, developmentRole };
     } else {
       send(res, 400, { error: "POST a message for the assistant or a proposal object to import." });
       return;
@@ -138,11 +157,17 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
       diff: proposal.draft ? diffSeeds(ratified, proposal.draft) : null,
       contentHash: proposal.draft && !problems.length ? seedContentHash({ context: [], ...proposal.draft }) : null,
       source: body.proposal !== undefined ? "import" : "assistant",
+      developmentRole,
     };
     const conversation = body.conversation ?? (existing?.conversation ?? []);
     const session = writeAuthoringSession(repoPath, {
       baseSeedHash: ratified ? seedContentHash(ratified) : null,
-      conversation: [...conversation, { role: "assistant", content: JSON.stringify({ questions: proposal.questions, unsupported: proposal.unsupported }) }],
+      activeRole: developmentRole ?? existing?.activeRole ?? null,
+      conversation: [...conversation, {
+        role: "assistant",
+        content: JSON.stringify({ questions: proposal.questions, unsupported: proposal.unsupported }),
+        ...(developmentRole ? { developmentRole } : {}),
+      }],
       review,
     });
     send(res, 200, { ...review, authoring: { ...session, stale: false } });
@@ -227,6 +252,7 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
       };
       const next = writeAuthoringSession(repoPath, {
         baseSeedHash: session.baseSeedHash,
+        activeRole: session.activeRole ?? null,
         conversation,
         review,
       });
@@ -272,6 +298,7 @@ export function createSeedHandlers({ repoPath, port, assistant = null, broadcast
       : (session.conversation ?? []);
     const next = writeAuthoringSession(repoPath, {
       baseSeedHash: session.baseSeedHash,
+      activeRole: session.activeRole ?? null,
       conversation,
       review,
     });

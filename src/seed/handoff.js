@@ -1,6 +1,7 @@
 import { seedContentHash } from "./identity.js";
 import { diffSeeds } from "./diff.js";
 import { RECORDED_ONLY_RELATIONS, SEED_RELATIONS, SURFACE_ACCESS, SURFACE_CHANNELS } from "./schema.js";
+import { buildVerificationPlan } from "../reconciliation/verification-plan.js";
 
 // Vendor-neutral build packet (ADR 0005): a plain Markdown document the user
 // pastes into any coding agent. It carries only ratified seed content — never
@@ -186,11 +187,17 @@ export function renderBuildPacket({ seed, brief } = {}) {
     lines.push("A passing scenario proves one concrete interaction; it does not prove a universal rule.");
     lines.push("");
     for (const scenario of [...seed.scenarios].sort((a, b) => a.id.localeCompare(b.id))) {
-      const principals = (scenario.principals ?? [])
-        .map((principal) => `${principal.as}=${principal.actor}`)
-        .join(", ");
-      const stepCount = Array.isArray(scenario.steps) ? scenario.steps.length : 0;
-      lines.push(`- \`${scenario.id}\`: ${scenario.name} — ${stepCount} step(s); principals: ${principals || "(none)"}`);
+      lines.push(`### \`${scenario.id}\` — ${scenario.name}`);
+      lines.push("");
+      lines.push("```json");
+      lines.push(JSON.stringify({
+        id: scenario.id,
+        name: scenario.name,
+        principals: scenario.principals ?? [],
+        steps: scenario.steps ?? [],
+      }, null, 2));
+      lines.push("```");
+      lines.push("");
     }
     lines.push("");
   }
@@ -203,7 +210,6 @@ export function renderBuildPacket({ seed, brief } = {}) {
     lines.push("");
   }
   lines.push("## Requirements");
-  lines.push("## Requirements");
   lines.push("");
   for (const commitment of [...seed.commitments].sort((a, b) => a.id.localeCompare(b.id))) {
     lines.push(`- \`${commitment.id}\`: \`${commitment.source}\` **${expectationText(commitment)}** \`${formatTarget(commitment.target)}\`${commitment.note ? ` — ${commitment.note}` : ""}`);
@@ -214,6 +220,23 @@ export function renderBuildPacket({ seed, brief } = {}) {
   if (RECORDED_ONLY_RELATIONS.length) {
     lines.push(`Relations recorded as intent (not machine-checked yet): ${RECORDED_ONLY_RELATIONS.join(", ")}.`);
   }
+  lines.push("");
+  const verificationPlan = buildVerificationPlan({ seed });
+  lines.push("## Verification plan");
+  lines.push("");
+  lines.push("Varai will independently check the approved items below. The builder's map is an observability hint, never proof.");
+  lines.push("");
+  for (const obligation of verificationPlan.obligations) {
+    const roles = obligation.roles?.length ? `; roles: ${obligation.roles.join(", ")}` : "";
+    const capabilities = obligation.capabilities?.length ? `; coverage: ${obligation.capabilities.join(", ")}` : "";
+    lines.push(`- \`${obligation.id}\` — ${obligation.method}${obligation.blocking ? "; blocks readiness when violated" : "; recorded only"}${roles}${capabilities}`);
+  }
+  lines.push("");
+  lines.push("Required observability:");
+  lines.push("- Keep stable public boundaries for every checkable concept and expected surface.");
+  lines.push("- Bind separate UI, API, data, and runtime artifacts when one behavior crosses those boundaries.");
+  lines.push("- Preserve explicit failure behavior and do not hide a violation by moving it outside analyzed coverage.");
+  lines.push("- Treat all scenario assertions as bounded examples, not universal guarantees.");
   lines.push("");
   lines.push("## Build preferences");
   lines.push("");

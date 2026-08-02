@@ -4,9 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { buildBuilderEnv } from "../../builder/process-adapter.js";
 import { normalizeProposal } from "../assistant.js";
-import { parseProposalJson, SYSTEM_PROMPT } from "./openai-compatible.js";
+import { parseProposalJson, roleSystemPrompt } from "./openai-compatible.js";
 
 const MAX_OUTPUT_BYTES = 1024 * 1024;
+const MAX_PROMPT_ARGUMENT_BYTES = 64 * 1024;
 
 export function createCommandSeedAssistant({ executable, args = [], envAllowlist = [], sourceEnv = process.env } = {}) {
   if (!executable || typeof executable !== "string") throw new Error("Command Seed assistant requires executable");
@@ -14,17 +15,19 @@ export function createCommandSeedAssistant({ executable, args = [], envAllowlist
   return {
     provider: "local-command",
     model: modelIndex >= 0 ? args[modelIndex + 1] : executable,
-    async propose({ conversation, seed, draft = null }) {
-      const prompt = `${SYSTEM_PROMPT}\n\nInput:\n${JSON.stringify({ conversation, currentSeed: seed ?? null, currentDraft: draft })}`;
+    async propose({ conversation, seed, draft = null, developmentRole = null, roleContext = null }) {
+      const prompt = `${roleSystemPrompt(developmentRole, roleContext)}\n\nInput:\n${JSON.stringify({ conversation, currentSeed: seed ?? null, currentDraft: draft, developmentRole, roleContext })}`;
+      const promptArg = Buffer.byteLength(prompt, "utf8") > MAX_PROMPT_ARGUMENT_BYTES ? "-" : prompt;
       const cwd = await mkdtemp(path.join(os.tmpdir(), "varai-seed-assistant-"));
       try {
         const output = await new Promise((resolve, reject) => {
-          const child = spawn(executable, [...args, prompt], {
+          const child = spawn(executable, [...args, promptArg], {
             cwd,
             env: buildBuilderEnv(sourceEnv, { envAllowlist }),
             shell: false,
-            stdio: ["ignore", "pipe", "pipe"],
+            stdio: [promptArg === "-" ? "pipe" : "ignore", "pipe", "pipe"],
           });
+          if (promptArg === "-") child.stdin.end(prompt);
           const stdout = [];
           const stderr = [];
           let size = 0;

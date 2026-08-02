@@ -120,3 +120,46 @@ test("verification escapes XSS in decision labels", () => {
   assert.doesNotMatch(html, /<img src=x/);
   assert.match(html, /&lt;img src=x/);
 });
+
+test("verification keeps role evidence advisory over one gate", () => {
+  const html = renderVerification(baseVerification(), {
+    suggestedRoles: ["frontend"],
+    roles: {
+      frontend: {
+        role: { id: "frontend", label: "Frontend", responsibility: "User-facing interaction" },
+        intent: {}, observed: {},
+        evidence: { obligations: 2, commitments: 1, scenarios: 1, surfaces: { accounted: 1, missing: 0, ambiguous: 0, stale: 0 }, decisionIds: ["scenario.happy"] },
+      },
+    },
+  });
+  assert.match(html, /Role lenses over the same result/);
+  assert.match(html, /Frontend/);
+  assert.match(html, /suggested/);
+  assert.match(html, /attention item/);
+  assert.match(html, /cannot change the readiness gate/);
+});
+
+test("role review stays advisory and offers a proposed-change handoff", () => {
+  const html = renderVerification({
+    phase: "ready",
+    gate: { state: "ready", reasons: [], coverageRegressions: [], requirementRegressions: [], surfaceProblems: { missing: 0, unaccounted: 0, ambiguous: 0, stale: 0 }, scenarioProblems: [] },
+    decisions: [],
+  }, {
+    reviewerAvailable: true,
+    roles: {
+      backend: {
+        role: { id: "backend", label: "Backend", responsibility: "Contracts" },
+        intent: {}, observed: {}, evidence: { obligations: 0, commitments: 0, scenarios: 0, surfaces: {} },
+        review: {
+          status: { state: "current", reasons: [] },
+          summary: "Check the unavailable state.",
+          findings: [{ statement: "Add a stable unavailable result", certainty: "judgment", evidenceIds: ["scenario.failure"] }],
+        },
+      },
+    },
+  });
+  assert.match(html, /AI review/);
+  assert.match(html, /advisory only/);
+  assert.match(html, /data-review-change/);
+  assert.match(html, /Propose change/);
+});

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createFakeAssistant, normalizeProposal } from "../../src/seed/assistant.js";
-import { createOpenAICompatibleAssistant } from "../../src/seed/assistants/openai-compatible.js";
+import { createOpenAICompatibleAssistant, parseProposalJson } from "../../src/seed/assistants/openai-compatible.js";
 import { slotkeeperDraft } from "./fixtures.js";
 
 function stubFetch(payload, { status = 200 } = {}) {
@@ -45,6 +45,16 @@ test("code fences are stripped and proposals are normalized", async () => {
   const assistant = createOpenAICompatibleAssistant({ endpoint: "http://x", model: "m", fetchImpl });
   const proposal = await assistant.propose({ conversation: [], seed: null });
   assert.deepEqual(proposal.unsupported, ["atomicity"]);
+});
+
+test("command transcripts use the final JSON object, not a schema example", () => {
+  const transcript = `user\n{ "draft": { "formatVersion": 4 }, "questions": [], "unsupported": [] }\ncodex\n{"draft":null,"questions":["ok"],"unsupported":[]}`;
+  assert.deepEqual(parseProposalJson(transcript), { draft: null, questions: ["ok"], unsupported: [] });
+});
+
+test("pretty-printed proposal JSON is recovered from a command transcript", () => {
+  const transcript = `prompt schema {\n  "draft": {}\n}\ncodex\n{\n  "draft": null,\n  "questions": ["ok"],\n  "unsupported": []\n}`;
+  assert.deepEqual(parseProposalJson(transcript), { draft: null, questions: ["ok"], unsupported: [] });
 });
 
 test("provider failures are loud, never silent", async () => {

@@ -16,3 +16,10 @@ test("command Seed assistant exposes its configured model", () => {
   const assistant = createCommandSeedAssistant({ executable: "codex", args: ["--model", "gpt-5.6-luna", "exec"] });
   assert.equal(assistant.model, "gpt-5.6-luna");
 });
+
+test("command Seed assistant sends oversized prompts through stdin", async () => {
+  const script = `const fs = require("node:fs"); if (process.argv.at(-1) !== "-") process.exit(2); process.stdin.resume(); process.stdin.on("end", () => process.stdout.write(JSON.stringify({ draft: null, questions: [], unsupported: [] })));`;
+  const assistant = createCommandSeedAssistant({ executable: process.execPath, args: ["-e", script] });
+  const result = await assistant.propose({ conversation: [{ role: "user", content: "x".repeat(70_000) }], seed: null });
+  assert.deepEqual(result, { draft: null, questions: [], unsupported: [] });
+});

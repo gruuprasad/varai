@@ -68,6 +68,23 @@ test("assistant receives only conversation and current seed — never repository
   assert.ok(!sent.includes("hunter2"), "repository file content never reaches the assistant");
 });
 
+test("role authoring attributes the turn and supplies a bounded role projection", async (t) => {
+  const repo = tempRepo();
+  const assistant = createFakeAssistant(() => ({ draft: slotkeeperDraft(), questions: [], unsupported: [] }));
+  const { server, api, post } = await startStudio(repo, { assistant });
+  t.after(() => server.close());
+
+  const response = await post("/api/seed/draft", { message: "make booking easier to use", developmentRole: "frontend" });
+  assert.equal(response.status, 200);
+  assert.equal(assistant.calls[0].developmentRole, "frontend");
+  assert.equal(assistant.calls[0].roleContext.role.id, "frontend");
+  assert.ok(Array.isArray(assistant.calls[0].roleContext.intent.surfaces));
+  const status = await (await api("/api/seed")).json();
+  assert.equal(status.authoring.activeRole, "frontend");
+  assert.equal(status.conversation[0].developmentRole, "frontend");
+  assert.equal(status.conversation[1].developmentRole, "frontend");
+});
+
 test("authoring is multi-turn and survives a dashboard restart without approving a seed", async (t) => {
   const repo = tempRepo();
   const assistant = createFakeAssistant((input) => ({

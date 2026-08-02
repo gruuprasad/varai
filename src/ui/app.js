@@ -52,6 +52,7 @@ let scanData = null;
 let diffData = null;
 let seedData = null;
 let reconciliationData = null;
+let activeDevelopmentRole = "product";
 const snippetCache = new Map();
 const openSnippets = new Set();
 
@@ -560,14 +561,19 @@ function renderBlueprintView() {
 
 function renderDevelopView() {
   hideSearch();
-  renderPanes(renderDevelop({ seed: seedData ?? {}, controlRoom: controlRoomData ?? {} }), "", { inlineExpand: true });
+  renderPanes(renderDevelop({ seed: seedData ?? {}, controlRoom: controlRoomData ?? {}, activeRole: activeDevelopmentRole }), "", { inlineExpand: true });
+  $("develop-role")?.addEventListener("change", (event) => {
+    activeDevelopmentRole = event.currentTarget.value;
+    renderDevelopView();
+  });
   $("develop-review")?.addEventListener("click", () => { activeView = "intent"; render(); });
   $("develop-send")?.addEventListener("click", async (event) => {
     const message = $("develop-message")?.value?.trim();
     if (!message) return;
     const target = event.currentTarget.dataset.target;
     const response = await fetch(target === "builder" ? "/api/build/message" : "/api/seed/draft", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }),
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, ...(target === "intent" ? { developmentRole: activeDevelopmentRole } : {}) }),
     });
     const data = await response.json();
     if (!response.ok) { alert(data.error ?? "Message failed"); return; }
@@ -595,8 +601,31 @@ function renderBuildView() {
 function renderVerifyView() {
   hideSearch();
   const verification = controlRoomData?.verification ?? { phase: "empty", gate: null, decisions: [] };
-  renderPanes(renderVerification(verification), "", { inlineExpand: true });
+  renderPanes(renderVerification(verification, controlRoomData?.development), "", { inlineExpand: true });
   bindEvidenceFocus();
+  document.querySelectorAll("[data-role-review]").forEach((button) => button.addEventListener("click", async () => {
+    button.disabled = true;
+    const response = await fetch("/api/development/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roleId: button.dataset.roleReview }),
+    });
+    const data = await response.json();
+    if (!response.ok) alert(data.error ?? "Advisory review failed");
+    await refreshControlRoom();
+  }));
+  document.querySelectorAll("[data-review-change]").forEach((button) => button.addEventListener("click", () => {
+    activeDevelopmentRole = button.dataset.role ?? "product";
+    activeView = "develop";
+    render();
+    queueMicrotask(() => {
+      const input = $("develop-message");
+      if (input) {
+        input.value = button.dataset.message ?? "";
+        input.focus();
+      }
+    });
+  }));
 }
 
 function bindBuildControls() {

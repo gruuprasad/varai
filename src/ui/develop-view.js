@@ -1,3 +1,6 @@
+import { renderVerificationPlan } from "./verification-plan-view.js";
+import { DEVELOPMENT_ROLE_IDS, DEVELOPMENT_ROLES, getDevelopmentRole } from "../development-roles/definitions.js";
+
 const esc = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
 function assistantText(content) {
@@ -14,7 +17,40 @@ function message(role, text, label) {
   return `<li class="develop-message develop-${esc(role)}"><small>${esc(label)}</small><p>${esc(text)}</p></li>`;
 }
 
-export function renderDevelop({ seed = {}, controlRoom = {} } = {}) {
+function roleOptions(activeRole, disabled = false) {
+  return DEVELOPMENT_ROLE_IDS.map((id) => {
+    const role = DEVELOPMENT_ROLES[id];
+    return `<option value="${esc(id)}"${id === activeRole ? " selected" : ""}${disabled ? " disabled" : ""}>${esc(role.label)} — ${esc(role.responsibility)}</option>`;
+  }).join("");
+}
+
+function renderRoleLens(development, activeRole) {
+  const selected = development?.roles?.[activeRole];
+  if (!selected) return "";
+  const intent = selected.intent ?? {};
+  const observed = selected.observed ?? {};
+  const evidence = selected.evidence ?? {};
+  const count = (value) => Array.isArray(value) ? value.length : 0;
+  const surfaceEvidence = evidence.surfaces ?? {};
+  const evidenceCount = count(evidence.commitments) + count(evidence.scenarios)
+    + count(surfaceEvidence.accounted) + count(surfaceEvidence.missing)
+    + count(surfaceEvidence.ambiguous) + count(surfaceEvidence.stale);
+  return `<section class="develop-role-lens" aria-labelledby="develop-role-title">` +
+    `<header><h3 id="develop-role-title">${esc(selected.role.label)} lens</h3>` +
+    `<p>${esc(selected.role.responsibility)} This is an advisory projection over the shared Seed and System Model; it cannot change the verifier gate.</p></header>` +
+    `<div class="develop-role-stats">` +
+      `<span><b>${count(intent.concepts)}</b> intent concepts</span>` +
+      `<span><b>${count(intent.commitments)}</b> commitments</span>` +
+      `<span><b>${count(intent.surfaces)}</b> surfaces</span>` +
+      `<span><b>${count(observed.elements)}</b> observed elements</span>` +
+      `<span><b>${evidenceCount}</b> evidence items</span>` +
+    `</div>` +
+    `<small class="develop-role-boundary">AI suggestions remain advisory. Deterministic reconciliation and human approval remain authoritative.</small>` +
+  `</section>`;
+}
+
+export function renderDevelop({ seed = {}, controlRoom = {}, activeRole = "product" } = {}) {
+  const selectedRole = getDevelopmentRole(activeRole)?.id ?? "product";
   const phase = controlRoom.phase ?? "empty";
   const build = controlRoom.build ?? { session: null, live: { running: false }, events: [], adapters: [] };
   const running = Boolean(build.live?.running || build.session?.builder?.running);
@@ -22,7 +58,7 @@ export function renderDevelop({ seed = {}, controlRoom = {} } = {}) {
   const messages = conversation.map((item) => message(
     item.role === "user" ? "user" : "assistant",
     item.role === "assistant" ? assistantText(item.content) : item.content,
-    item.role === "user" ? "You" : "Product assistant",
+    item.role === "user" ? "You" : `${getDevelopmentRole(item.developmentRole)?.label ?? "Product"} assistant`,
   ));
 
   for (const event of (build.events ?? []).slice(-30)) {
@@ -59,6 +95,9 @@ export function renderDevelop({ seed = {}, controlRoom = {} } = {}) {
         `<button class="btn-primary" id="develop-build" type="button">${build.session ? "Rebuild approved product" : "Build application"}</button></div>`
       : "";
     action = buildAction +
+      `<label class="compose-label" for="develop-role">Work through a role lens</label>` +
+      `<select id="develop-role" aria-label="Development role" ${canAsk ? "" : "disabled"}>${roleOptions(selectedRole, !canAsk)}</select>` +
+      `<p class="compose-note">${esc(DEVELOPMENT_ROLES[selectedRole].responsibility)} The same approved intent and builder remain underneath.</p>` +
       `<label class="compose-label" for="develop-message">${seed.ratified ? "Describe the next product change" : "What should we build?"}</label>` +
       `<textarea id="develop-message" rows="4" placeholder="Build a booking application where…" ${canAsk ? "" : "disabled"}></textarea>` +
       `<button class="btn-primary" id="develop-send" data-target="intent" type="button" ${canAsk ? "" : "disabled"}>Send</button>` +
@@ -69,5 +108,7 @@ export function renderDevelop({ seed = {}, controlRoom = {} } = {}) {
     `<span class="seed-badge build-state-${esc(phase)}">${esc(phase.replaceAll("_", " "))}</span>` +
     `<p>One conversation; explicit product approval; independently checked implementation.</p></header>` +
     `<ol class="develop-thread">${messages.join("")}</ol>` +
+    renderRoleLens(controlRoom.development, selectedRole) +
+    renderVerificationPlan(controlRoom.verification?.plan) +
     `<section class="develop-compose">${action}</section></div>`;
 }

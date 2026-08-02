@@ -22,6 +22,9 @@ workflow, not framework count.
   Its live Luna sequence has been black-box checked for new, redundant,
   corroborating, and conflicting contributions; disagreement remains visible.
 - A Python stdlib HTTP analyzer that observes Signal's public API/UI surfaces.
+- Built-in AI-assisted development roles over one shared Seed/System Model
+  core, with role-attributed authoring, a pre-build verification plan, exact
+  scenario handoff, and role-filtered advisory evidence.
 
 ## Next: make the workflow useful to real people
 

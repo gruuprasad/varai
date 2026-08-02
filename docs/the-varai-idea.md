@@ -8,6 +8,11 @@ builder → independent verification loop described here. See
 [product-control-room.md](product-control-room.md) for the implementation
 contract and [roadmap.md](roadmap.md) for what remains unproven.*
 
+*Current interaction shape: one developer can switch responsibility lenses
+(Product, Frontend, Backend, Architecture, AI Behavior, Verification) while
+keeping one evolving Seed, one builder packet, and one verifier. The lenses
+help shape and inspect the same authorities; they are not a simulated team.*
+
 *Provenance: this piece was written by an AI (Claude) as a faithful synthesis of
 an extended thinking session with Varai's author. It is published as an
 AI-generated record of that reasoning — not to imply the author wrote it, and not

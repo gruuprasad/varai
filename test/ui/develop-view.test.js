@@ -20,6 +20,8 @@ test("develop view carries one conversation through intent, builder, and verifie
   assert.match(html, /Independent verifier/);
   assert.doesNotMatch(html, /id="develop-build"/);
   assert.match(html, /Describe the next product change/);
+  assert.match(html, /id="develop-role"/);
+  assert.match(html, /Frontend — User-facing interaction/);
 });
 
 test("approved product offers one build action before the first build", () => {
@@ -34,4 +36,26 @@ test("develop view routes a pending draft to explicit review", () => {
   const html = renderDevelop({ seed: { draft: { draft: {} } }, controlRoom: { phase: "draft", build: {} } });
   assert.match(html, /Review and approve draft/);
   assert.doesNotMatch(html, /id="develop-build"/);
+});
+
+test("develop view renders the selected role lens over shared authorities", () => {
+  const html = renderDevelop({
+    seed: { assistant: { provider: "fake", model: "fake" } },
+    activeRole: "verification",
+    controlRoom: {
+      development: {
+        roles: {
+          verification: {
+            role: { label: "Verification", responsibility: "How approved intent will be checked" },
+            intent: { concepts: 2, commitments: 1, surfaces: 1 },
+            observed: { elements: 3 },
+            evidence: { commitments: [], scenarios: [], surfaces: { accounted: [], missing: [] } },
+          },
+        },
+      },
+    },
+  });
+  assert.match(html, /Verification lens/);
+  assert.match(html, /advisory projection/);
+  assert.match(html, /id="develop-role"/);
 });

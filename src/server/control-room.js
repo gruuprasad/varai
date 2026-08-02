@@ -9,6 +9,10 @@ import { readAuthoringSession } from "../seed/authoring-session.js";
 import { seedContentHash } from "../seed/identity.js";
 import { reconcile } from "../reconciliation/check.js";
 import { readRealization } from "../reconciliation/witness-store.js";
+import { buildVerificationPlan } from "../reconciliation/verification-plan.js";
+import { DEVELOPMENT_ROLE_IDS } from "../development-roles/definitions.js";
+import { projectDevelopmentRole, recommendDevelopmentRoles } from "../development-roles/project.js";
+import { roleReviewStatus } from "../development-roles/review.js";
 import { BUILD_STATES } from "../build-session/state.js";
 
 function send(res, status, data) {
@@ -199,6 +203,7 @@ export async function loadControlRoom({
   repoPath,
   model = null,
   scannedTreeHash = null,
+  implementationTreeHash = null,
   scanConfigHash = null,
 } = {}) {
   let seedInput = null;
@@ -344,6 +349,51 @@ export async function loadControlRoom({
 
   const phase = derivePhase({ seedInput, authoring, buildStatus: status, gate: verificationGate });
   const change = buildChangeProjection({ seedInput, authoring });
+  const planSeed = authoring?.review?.draft ?? seedInput?.seed ?? null;
+  const planReport = authoring?.review?.draft ? null : decisionReport;
+  const verificationPlan = buildVerificationPlan({ seed: planSeed, report: planReport });
+  const storedRoleReviews = Object.fromEntries(await Promise.all(DEVELOPMENT_ROLE_IDS.map(async (roleId) => {
+    const hash = focusSession?.roleReviews?.[roleId];
+    if (!hash) return [roleId, null];
+    const review = await sessionStore.getObject(hash).catch(() => null);
+    return [roleId, review ? { ...review, status: roleReviewStatus(review, {
+      seedHash,
+      treeHash: implementationTreeHash,
+      sessionId: focusSession?.id,
+    }) } : null];
+  })));
+  const roleProjections = Object.fromEntries(DEVELOPMENT_ROLE_IDS.map((roleId) => {
+    const projection = projectDevelopmentRole({
+      roleId,
+      seed: planSeed,
+      change: change.draft?.diff ?? null,
+      model,
+      report: planReport,
+      verificationPlan,
+    });
+    const count = (value) => Array.isArray(value) ? value.length : 0;
+    const surfaces = projection.evidence?.surfaces ?? {};
+    const evidenceIds = new Set([
+      ...(projection.evidence?.obligations ?? []).map((item) => item.id),
+      ...(projection.evidence?.commitments ?? []).map((item) => item.id),
+      ...(projection.evidence?.scenarios ?? []).map((item) => item.id),
+      ...Object.values(surfaces).flat().map((item) => item.surfaceId ?? item.bindingId ?? item.id),
+    ].filter(Boolean));
+    return [roleId, {
+      role: projection.role,
+      intent: Object.fromEntries(Object.entries(projection.intent).map(([key, value]) => [key, count(value)])),
+      observed: Object.fromEntries(Object.entries(projection.observed).map(([key, value]) => [key, count(value)])),
+      evidence: {
+        obligations: count(projection.evidence?.obligations),
+        commitments: count(projection.evidence?.commitments),
+        scenarios: count(projection.evidence?.scenarios),
+        surfaces: Object.fromEntries(Object.entries(surfaces).map(([key, value]) => [key, count(value)])),
+        decisionIds: decisions.filter((decision) => (decision.evidenceIds ?? []).some((id) => evidenceIds.has(id))).map((decision) => decision.id),
+      },
+      review: storedRoleReviews[roleId],
+      advisory: projection.advisory,
+    }];
+  }));
 
   return {
     phase,
@@ -375,11 +425,17 @@ export async function loadControlRoom({
       decisions,
       reportSummary: completionReport?.summary ?? null,
       provenance,
+      plan: verificationPlan,
+    },
+    development: {
+      roles: roleProjections,
+      reviewerAvailable: false,
+      suggestedRoles: recommendDevelopmentRoles({ seed: planSeed, change: change.draft?.diff ?? null }),
     },
   };
 }
 
-export function createControlRoomHandlers({ repoPath, getModel, getScanMeta }) {
+export function createControlRoomHandlers({ repoPath, getModel, getScanMeta, reviewerAvailable = false }) {
   return {
     async handle(req, res, url) {
       if (req.method !== "GET" || url.pathname !== "/api/control-room") return false;
@@ -389,8 +445,10 @@ export function createControlRoomHandlers({ repoPath, getModel, getScanMeta }) {
         repoPath,
         model,
         scannedTreeHash: meta?.scannedTreeHash ?? null,
+        implementationTreeHash: meta?.implementationTreeHash ?? null,
         scanConfigHash: meta?.scanConfigHash ?? null,
       });
+      payload.development.reviewerAvailable = reviewerAvailable;
       send(res, 200, payload);
       return true;
     },

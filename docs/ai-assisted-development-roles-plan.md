@@ -534,11 +534,13 @@ Exit: a cross-role requirement appears in several role views with one verdict.
 Add:
 
 - `src/development-roles/review.js`
+- `src/server/development-review.js`
 - focused tests for normalization, provenance, staleness, and authority
 
 Reuse build-session content-addressed objects and the configured Luna command
-adapter. Store role review output with Seed/session/tree hashes. Add a Develop
-action that converts a finding into a new proposed change.
+adapter. Store role review output with Seed/session/tree hashes. Add the
+`/api/development/review` Develop action that converts a finding into a new
+proposed change.
 
 Exit: AI review can recommend action but cannot change Seed, evidence, coverage,
 verdicts, or readiness.
@@ -596,7 +598,7 @@ Backend expectations:
 - explicit public API contracts;
 - deterministic fake AI provider for tests and runtime scenarios.
 
-Pilot architecture:
+Preferred pilot architecture:
 
 ```text
 React + Vite
@@ -611,6 +613,16 @@ gpt-5.6-luna
 The AI command is behind one replaceable module. Invalid, missing, timed-out,
 or malformed AI output returns an explicit unavailable result and does not
 mutate application state. No API platform or API key is used.
+
+The first greenfield build deliberately allowed the builder to choose a simpler
+stack because the Seed did not force a framework. Luna produced a Node standard
+library HTTP server, static UI, and Node test file. This was useful evidence of
+the role-to-builder loop, but it also exposed a real Varai limitation: the
+current generic analyzer does not observe route declarations in this style of
+Node server. The resulting report therefore stays `needs_attention` with
+explicitly unresolved surfaces and `could_not_run` scenarios; it does not claim
+readiness from the builder's realization map. A future trial should either add a
+small Node route analyzer or force an analyzed stack in the architecture role.
 
 ## Signal development sequence through roles
 
@@ -697,6 +709,26 @@ After the greenfield build, develop one meaningful follow-up change:
 This proves context continuity, Seed diff, role selection, protected behavior,
 carry-forward bindings, regression detection, and continued development rather
 than one-shot generation.
+
+### Prototype evidence captured
+
+- Varai created the fresh sibling repository and drove the initial Signal build
+  with the configured local `gpt-5.6-luna` Codex command; no API platform or key
+  was introduced.
+- The initial role sequence established one shared Seed across Product,
+  Frontend, Backend, Architecture, AI Behavior, and Verification. The UI shows
+  one gate and role evidence points back to shared obligation IDs.
+- The follow-up Product turn added reader annotations, a 280-character limit,
+  create/delete-own semantics, an explicit unsupported-editing context, and
+  bounded scenarios. Luna then added the API/UI behavior and application tests.
+- Signal's own test command passes. Varai's independent map/lint/runtime/check
+  passes structurally but reports the Node route coverage gap honestly: the
+  final build gate is `needs_attention`, nine scenarios are
+  `could_not_run`, and no requirement is presented as proven merely because a
+  builder binding exists.
+- A large role prompt initially hit OS argument-size limits. The local command
+  assistant now switches oversized prompts to stdin, preserving the
+  provider-replaceable command boundary without adding an API client.
 
 ## Definition of done
 

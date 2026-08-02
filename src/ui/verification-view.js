@@ -35,7 +35,40 @@ function evidenceFocusButtons(ids = []) {
     `</span>`;
 }
 
-export function renderVerification(verification) {
+function renderRoleEvidence(development) {
+  const roles = Object.values(development?.roles ?? {});
+  if (!roles.length) return "";
+  const suggested = new Set(development.suggestedRoles ?? []);
+  return `<section class="verification-role-evidence"><h3>Role lenses over the same result</h3>` +
+    `<p class="empty-copy">Each lens filters shared evidence. Role lenses cannot change the readiness gate.</p><ul>` +
+    roles.map((item) => {
+      const intent = item.intent ?? {};
+      const observed = item.observed ?? {};
+      const evidence = item.evidence ?? {};
+      const surfaces = evidence.surfaces ?? {};
+      const total = (evidence.obligations ?? 0) + (evidence.commitments ?? 0) + (evidence.scenarios ?? 0)
+        + (surfaces.accounted ?? 0) + (surfaces.missing ?? 0) + (surfaces.ambiguous ?? 0) + (surfaces.stale ?? 0);
+      const review = item.review;
+      const reviewStatus = review?.status?.state ?? null;
+      const reviewHtml = review
+        ? `<div class="role-review"><small>AI review · ${esc(reviewStatus ?? "advisory")} · advisory only</small>` +
+          `<p>${esc(review.summary)}</p>` +
+          (review.findings?.length ? `<ul>${review.findings.map((finding) =>
+            `<li><span>${esc(finding.statement)}</span> <em>${esc(finding.certainty)}</em>` +
+            (finding.evidenceIds?.length ? ` <code>${esc(finding.evidenceIds.join(", "))}</code>` : "") +
+            (development.reviewerAvailable ? ` <button type="button" class="btn-quiet role-review-change" data-review-change data-role="${esc(item.role?.id)}" data-message="${esc(finding.statement)}">Propose change</button>` : "") +
+            `</li>`).join("")}</ul>` : "") +
+          `</div>`
+        : (development.reviewerAvailable ? `<button type="button" class="btn-quiet role-review-ask" data-role-review="${esc(item.role?.id)}">Ask AI reviewer</button>` : "");
+      return `<li><div><strong>${esc(item.role?.label ?? item.role?.id)}</strong>` +
+        `${suggested.has(item.role?.id) ? `<span class="role-chip">suggested</span>` : ""}</div>` +
+        `<small>${esc(item.role?.responsibility ?? "")} · ${total} evidence items` +
+        `${(evidence.decisionIds ?? []).length ? ` · ${evidence.decisionIds.length} attention item(s)` : ""}</small>${reviewHtml}</li>`;
+    }).join("") +
+    `</ul></section>`;
+}
+
+export function renderVerification(verification, development = null) {
   if (!verification || verification.phase === "empty" || (!verification.gate && !verification.decisions?.length)) {
     return `<div class="verification verification-empty"><h2>Verify</h2>` +
       `<p class="empty-copy">No verification yet — approve a Seed and run a build to see readiness decisions.</p></div>`;
@@ -82,6 +115,7 @@ export function renderVerification(verification) {
   }
 
   html += `<p class="verification-evidence-help empty-copy">Use an evidence id button to focus the matching decision or blueprint item in this control room.</p>`;
+  html += renderRoleEvidence(development);
 
   return `${html}</div>`;
 }

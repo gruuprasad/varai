@@ -2134,3 +2134,32 @@ body {
 .develop-build { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
 .develop-build select { flex: 1; margin: 0; }
 .develop-next { margin-top: 0; }
+.develop-role-lens { margin-top: 18px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.develop-role-lens h3 { margin: 0 0 4px; }
+.develop-role-lens p { margin: 0; color: var(--text-mid); line-height: 1.55; }
+.develop-role-stats { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 8px; }
+.develop-role-stats span { padding: 5px 8px; border: 1px solid var(--border); border-radius: 999px; color: var(--text-mid); font-size: 12px; }
+.develop-role-stats b { color: var(--text-bright); }
+.develop-role-boundary { color: var(--text-dim); }
+.verification-role-evidence { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--border); }
+.verification-role-evidence h3 { margin: 0 0 4px; }
+.verification-role-evidence ul { display: grid; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
+.verification-role-evidence li { padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.verification-role-evidence li div { display: flex; gap: 8px; align-items: center; }
+.verification-role-evidence li small { display: block; margin-top: 3px; color: var(--text-dim); }
+.role-review { margin-top: 9px; padding: 9px 10px; border-left: 2px solid var(--accent); background: var(--bg-surface); }
+.role-review p { margin: 4px 0; }
+.role-review ul { margin: 5px 0 0 16px; padding: 0; }
+.role-review li { display: list-item; padding: 2px 0; border: 0; }
+.role-review em { color: var(--text-dim); font-size: 11px; }
+.role-review code { color: var(--text-dim); font-size: 11px; }
+.role-review-change, .role-review-ask { margin-top: 5px; }
+.verification-plan { margin-top: 18px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.verification-plan header h3 { margin: 0; }
+.verification-plan header p { margin: 5px 0 10px; color: var(--text-mid); font-size: 13px; }
+.verification-plan ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.verification-plan-item { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.verification-plan-item > div { display: flex; justify-content: space-between; gap: 10px; }
+.verification-plan-item small { display: block; margin-top: 3px; color: var(--text-dim); }
+.verification-plan-method { color: var(--verdict-unknown); font-size: 12px; white-space: nowrap; }
+.verification-plan-more { color: var(--text-dim); font-size: 12px; margin: 10px 0 0; }

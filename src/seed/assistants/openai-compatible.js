@@ -1,5 +1,6 @@
 import { normalizeProposal } from "../assistant.js";
 import { CONCEPT_ROLES, RECORDED_ONLY_RELATIONS, SEED_RELATIONS, SURFACE_ACCESS, SURFACE_CHANNELS } from "../schema.js";
+import { getDevelopmentRole } from "../../development-roles/definitions.js";
 
 // One real SeedAssistant adapter: any OpenAI-compatible chat-completions
 // endpoint. Configured through explicit endpoint/model and an environment-
@@ -26,21 +27,81 @@ Rules:
 - Field names are lower snake_case. Context is an array of objects shaped exactly { "id": "context.some-limit", "text": "..." }, never strings.
 - Prefer a small set of meaningful commitments. Put anything uncheckable in "unsupported", never in commitments.`;
 
+export function roleSystemPrompt(developmentRole = null, roleContext = null) {
+  const role = developmentRole ? getDevelopmentRole(developmentRole) : null;
+  if (!role) return SYSTEM_PROMPT;
+  return `${SYSTEM_PROMPT}
+
+Active development role: ${role.label} (${role.id})
+Responsibility: ${role.responsibility}
+Role guidance: ${role.instruction}
+The role is advisory. Preserve the full current draft, ask focused questions, and never silently ratify a decision.
+The role context below is an evidence-backed projection, not raw source code:
+${JSON.stringify(roleContext ?? null)}`;
+}
+
 export function stripCodeFences(text) {
   const trimmed = String(text).trim();
   const fenced = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/);
   return fenced ? fenced[1] : trimmed;
 }
 
-export function parseProposalJson(text) {
+export function parseJsonTranscript(text, matches = () => true) {
   const stripped = stripCodeFences(text);
-  try { return JSON.parse(stripped); }
-  catch {
-    const start = stripped.indexOf("{");
-    const end = stripped.lastIndexOf("}");
-    if (start >= 0 && end > start) return JSON.parse(stripped.slice(start, end + 1));
-    throw new Error("Assistant proposal was not valid JSON");
+  try {
+    const value = JSON.parse(stripped);
+    if (matches(value)) return value;
   }
+  catch {
+  }
+  // Codex command output includes a transcript of the prompt before its
+  // final JSON. Prefer the last complete JSON value instead of accidentally
+  // parsing a schema example from that prompt.
+  const lines = stripped.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).reverse();
+  for (const line of lines) {
+    if (!line.startsWith("{") || !line.endsWith("}")) continue;
+    try {
+      const value = JSON.parse(line);
+      if (matches(value)) return value;
+    } catch { /* keep looking */ }
+  }
+  // Also accept pretty-printed final JSON embedded in a CLI transcript.
+  // ponytail: bounded CLI output is small; a linear scanner can replace this
+  // simple O(n²) fallback if transcript size ever becomes a concern.
+  const candidates = [];
+  for (let start = 0; start < stripped.length; start++) {
+    if (stripped[start] !== "{") continue;
+    let depth = 0;
+    let quoted = false;
+    let escaped = false;
+    for (let index = start; index < stripped.length; index++) {
+      const char = stripped[index];
+      if (quoted) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') quoted = false;
+        continue;
+      }
+      if (char === '"') { quoted = true; continue; }
+      if (char === "{") depth++;
+      else if (char === "}") {
+        depth--;
+        if (depth !== 0) continue;
+        try {
+          const value = JSON.parse(stripped.slice(start, index + 1));
+          if (matches(value)) candidates.push(value);
+        } catch { /* this object belonged to the transcript */ }
+        break;
+      }
+    }
+  }
+  if (candidates.length) return candidates[candidates.length - 1];
+  throw new Error("Assistant output was not valid JSON");
+}
+
+export function parseProposalJson(text) {
+  return parseJsonTranscript(text, (value) => value && typeof value === "object" &&
+    ("draft" in value || "questions" in value || "unsupported" in value));
 }
 
 export function createOpenAICompatibleAssistant({ endpoint, model, apiKey, fetchImpl } = {}) {
@@ -52,7 +113,7 @@ export function createOpenAICompatibleAssistant({ endpoint, model, apiKey, fetch
     provider: "openai-compatible",
     model,
     endpoint,
-    async propose({ conversation, seed, draft = null }) {
+    async propose({ conversation, seed, draft = null, developmentRole = null, roleContext = null }) {
       const response = await fetcher(endpoint, {
         method: "POST",
         headers: {
@@ -62,8 +123,8 @@ export function createOpenAICompatibleAssistant({ endpoint, model, apiKey, fetch
         body: JSON.stringify({
           model,
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: JSON.stringify({ conversation, currentSeed: seed ?? null, currentDraft: draft }) },
+            { role: "system", content: roleSystemPrompt(developmentRole, roleContext) },
+            { role: "user", content: JSON.stringify({ conversation, currentSeed: seed ?? null, currentDraft: draft, developmentRole, roleContext }) },
           ],
           temperature: 0,
         }),

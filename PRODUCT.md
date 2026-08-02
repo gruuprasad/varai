@@ -35,6 +35,13 @@ first; implementation detail is available on demand.
 - Keep intent, builder output, and verifier evidence visibly distinct.
 - Offer one clear next action at a time.
 - Use the existing Seed and System Model; never create a second product model.
+- Let one person switch between Product, Frontend, Backend, Architecture, AI
+  Behavior, and Verification lenses over that same core. Roles are
+  responsibilities, not separate agents or teams.
+- Show the verification plan before building: every approved item is labeled
+  deterministic, runtime, advisory, recorded-only, or currently unsupported.
+- Keep role advice advisory; only human ratification and deterministic
+  reconciliation can change authority or readiness.
 
 ## Accessibility
 

@@ -34,6 +34,12 @@ program verifier.
 | Builder | modify the project in a recorded session and emit pointers | approve intent, set evidence, or set readiness |
 | Verifier | scan, reconcile, run scenarios, and report coverage | infer human intent or silently upgrade uncertainty |
 
+The Develop screen also offers responsibility lenses: Product, Frontend,
+Backend, Architecture, AI Behavior, and Verification. They all work on one
+recoverable draft and one final builder packet. A selected lens changes the
+assistant context and the evidence projection; it never creates a second
+specification or readiness decision.
+
 The assistant and builder are replaceable local command adapters. The generated
 project currently configures Codex CLI with model `gpt-5.6-luna` for both roles.
 There is no API-platform integration or silent repository upload.
@@ -97,6 +103,12 @@ Varai independently:
 An AI agent may perform a scoped black-box reviewer pass over the running app,
 but its report is advisory. It cannot override deterministic evidence or human
 approval.
+
+Before Build, Varai displays a verification plan derived from the approved
+Seed. It transfers complete scenario inputs, captures, references, and
+assertions plus required realization/runtime observability into the build
+packet. After Build, the same obligation IDs point to deterministic evidence;
+role lenses filter that ledger without recomputing verdicts.
 
 ## Build states
 
